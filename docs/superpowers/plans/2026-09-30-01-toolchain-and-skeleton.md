@@ -458,23 +458,31 @@ git commit -m "feat: plugin skeleton that builds on Linux and deploys to BepInEx
 Append to `Makefile`:
 
 ```makefile
-.PHONY: run log
 GAME_ARGS ?= -console -screen-fullscreen 0 -screen-width 1600 -screen-height 900
-# World and character the Debug build auto-joins (see InvisibilityPotion/Dev/AutoJoin.cs). Empty = normal menu.
+STEAM_APPID := 892970
+# World and character the Debug build auto-joins (see InvisibilityPotion/Dev/AutoJoin.cs). Empty world = normal menu.
+# Written to BepInEx/config/InvisibilityPotion.autojoin because env vars do not reach a game started through Steam.
 IP_DEV_WORLD ?= testing
 IP_DEV_CHARACTER ?=
+AUTOJOIN_FILE := $(VALHEIM_INSTALL)/BepInEx/config/InvisibilityPotion.autojoin
+BEPINEX_LOG := $(VALHEIM_INSTALL)/BepInEx/LogOutput.log
 
-run: build ## Build, then start Valheim with BepInEx, console enabled, windowed. Steam must be running.
+run: build ## Build, launch Valheim through Steam (needs launch option "./start_game_bepinex.sh %command%"), then follow the BepInEx log
 	@pgrep -x steam > /dev/null || { echo "Steam is not running. Start Steam first."; exit 1; }
-	cd "$(VALHEIM_INSTALL)" && IP_DEV_WORLD="$(IP_DEV_WORLD)" IP_DEV_CHARACTER="$(IP_DEV_CHARACTER)" ./start_game_bepinex.sh $(GAME_ARGS)
+	@mkdir -p "$(dir $(AUTOJOIN_FILE))"
+	@printf 'world=%s\ncharacter=%s\n' "$(IP_DEV_WORLD)" "$(IP_DEV_CHARACTER)" > "$(AUTOJOIN_FILE)"
+	@: > "$(BEPINEX_LOG)"
+	steam -applaunch $(STEAM_APPID) $(GAME_ARGS)
+	@echo "Game starting via Steam. Following $(BEPINEX_LOG) (Ctrl-C stops following, not the game)."
+	@tail -n +1 -f "$(BEPINEX_LOG)"
 
 log: ## Follow the BepInEx log
-	tail -n 50 -f "$(VALHEIM_INSTALL)/BepInEx/LogOutput.log"
+	tail -n 50 -f "$(BEPINEX_LOG)"
 ```
 
 - [ ] **Step 2: Launch and verify the load line**
 
-Ask the user to run `make run` in their own terminal (the game needs a display; running it from the agent's shell may hang the session). Expected in the terminal and in `make log`:
+Ask the user to set the Steam launch options for Valheim once to `./start_game_bepinex.sh %command%`, then run `make run` in their own terminal. Expected in the terminal and in `make log`:
 
 ```
 [Info   :InvisibilityPotion] InvisibilityPotion 0.1.0 loaded
