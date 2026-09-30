@@ -26,3 +26,6 @@ InvisibilityPotionUnity/*.sln
 # Packaging
 *.nupkg
 Package/*.zip
+
+# Subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
