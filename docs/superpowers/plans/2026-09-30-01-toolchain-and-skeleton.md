@@ -6,7 +6,7 @@
 
 **Architecture:** SDK-style `net48` C# project derived from JotunnModStub. Jötunn's NuGet package supplies the game/BepInEx references and a prebuild publicizer. A Makefile wraps `dotnet build`, game launch, log tailing, decompile and tests. Dev-only code (auto-join, console commands) is compiled only in Debug builds.
 
-**Tech Stack:** .NET SDK 8.0 (`dotnet`), JotunnLib 2.30.2, BepInEx 5.4.23.5, HarmonyX, ilspycmd 11.x, xunit, GNU make, Unity Hub + Unity 6000.0.75f1 (installed now, used in a later plan).
+**Tech Stack:** .NET SDK 8.0 (`dotnet`), JotunnLib 2.30.2, BepInEx 5.4.23.5, HarmonyX, ilspycmd 9.1, xunit, GNU make, Unity Hub + Unity 6000.0.75f1 (installed now, used in a later plan).
 
 **Spec:** `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` (sections 3, 4, 5.1, 5.10, 6, build steps 1 and 2)
 
@@ -73,9 +73,9 @@ Expected: one line starting with `8.0.` and `GNU Make 4.x`.
 
 - [ ] **Step 3: Install ilspycmd as a dotnet global tool**
 
-Run: `dotnet tool install --global ilspycmd --version 11.1.0.9782`
+Run: `dotnet tool install --global ilspycmd --version 9.1.0.7988`
 Then: `export PATH="$PATH:$HOME/.dotnet/tools" && ilspycmd --version`
-Expected: `ilspycmd: 11.1.0...`. Tell the user to add `export PATH="$PATH:$HOME/.dotnet/tools"` to their shell rc if it is not there yet (check with `grep -n dotnet/tools ~/.bashrc ~/.zshrc`).
+Expected: `ilspycmd: 9.1.0...`. Tell the user to add `export PATH="$PATH:$HOME/.dotnet/tools"` to their shell rc if it is not there yet (check with `grep -n dotnet/tools ~/.bashrc ~/.zshrc`).
 
 - [ ] **Step 4: Install Unity Editor 6000.0.75f1 through the Hub, headless**
 
