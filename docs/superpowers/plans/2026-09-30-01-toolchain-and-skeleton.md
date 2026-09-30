@@ -31,6 +31,7 @@
 | `Makefile` | `setup`, `build`, `run`, `log`, `test`, `decompile`, `package` targets |
 | `Environment.props.example` | template for the gitignored `Environment.props` (VALHEIM_INSTALL) |
 | `DoPrebuild.props` | `ExecutePrebuild=true` so Jötunn publicizes game DLLs |
+| `Directory.Build.props` | sets `$(SolutionDir)` before NuGet props so Jötunn's props load when the csproj is built directly |
 | `InvisibilityPotion.sln` | solution so `$(SolutionDir)` resolves for Jötunn's props |
 | `scripts/publish.sh` | copies DLL/pdb to BepInEx/plugins (Debug) or zips the package (Release); from JotunnModStub (MIT-0) |
 | `InvisibilityPotion/InvisibilityPotion.csproj` | project: net48, JotunnLib reference, post-build publish |
@@ -840,11 +841,18 @@ test: ## Run unit tests (pure logic, no game DLLs)
 	dotnet test InvisibilityPotion.Tests -nologo -v quiet
 ```
 
-Add `test` to `.PHONY`. Because the csproj is built directly, `$(SolutionDir)` is empty; Jötunn's `Paths.props` then imports `Environment.props` from two folders above the package, which is wrong. Fix by adding to the csproj's first `<PropertyGroup>`:
+Add `test` to `.PHONY`. Because the csproj is built directly, `$(SolutionDir)` is empty; Jötunn's `Paths.props` (evaluated from NuGet package props, before the csproj body) then finds neither `Environment.props` nor `DoPrebuild.props`, and the prebuild is silently skipped. A fallback inside the csproj is set too late. Fix by creating `Directory.Build.props` at the repo root (MSBuild imports it before NuGet package props):
 
 ```xml
-    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildProjectDirectory)/../</SolutionDir>
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)</SolutionDir>
+  </PropertyGroup>
+</Project>
 ```
+
+Verify: `make build` prints "Executing Jotunn Prebuild Task" (not "Skipping").
 
 - [ ] **Step 9: Build, test, and verify in-game**
 
@@ -855,7 +863,7 @@ Ask the user to `make run`, press F5 in-game, type `ip_state`. Expected console 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add InvisibilityPotion.Tests InvisibilityPotion/PatchHealth.Core.cs InvisibilityPotion/PatchHealth.cs InvisibilityPotion/Dev/DevCommands.cs InvisibilityPotion/Plugin.cs InvisibilityPotion.sln Makefile InvisibilityPotion/InvisibilityPotion.csproj
+git add InvisibilityPotion.Tests InvisibilityPotion/PatchHealth.Core.cs InvisibilityPotion/PatchHealth.cs InvisibilityPotion/Dev/DevCommands.cs InvisibilityPotion/Plugin.cs InvisibilityPotion.sln Makefile Directory.Build.props
 git commit -m "feat: patch health check with unit tests and ip_state dev command"
 ```
 
