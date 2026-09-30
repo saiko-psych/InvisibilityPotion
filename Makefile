@@ -5,7 +5,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile
+.PHONY: help decompile build package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -16,3 +16,9 @@ decompile: ## Decompile assembly_valheim.dll into tools/decompiled (rerun after 
 	$(ILSPY) -p -o $(DECOMPILE_DIR)/assembly_valheim --nested-directories $(MANAGED)/assembly_valheim.dll
 	@echo "Game version: $$(grep -oE 'l-[0-9]+\.[0-9]+\.[0-9]+' $(HOME)/.config/unity3d/IronGate/Valheim/Player.log | tail -1)" > $(DECOMPILE_DIR)/VERSION
 	@ls $(DECOMPILE_DIR)/assembly_valheim | wc -l | xargs echo "Decompiled files:"
+
+build: ## Build Debug and deploy the DLL into BepInEx/plugins (via scripts/publish.sh)
+	dotnet build InvisibilityPotion.sln -c Debug -nologo -v minimal
+
+package: ## Build Release and zip the Thunderstore package
+	dotnet build InvisibilityPotion.sln -c Release -nologo -v minimal
