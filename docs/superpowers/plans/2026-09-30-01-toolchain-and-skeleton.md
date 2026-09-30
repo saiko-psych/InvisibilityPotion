@@ -502,12 +502,11 @@ git commit -m "build: add run and log targets for the in-game test loop"
 ### Task 5: Dev auto-join into the test world (DEBUG only)
 
 **Files:**
-- Create: `InvisibilityPotion/Dev/AutoJoin.cs`
-- Modify: `InvisibilityPotion/Plugin.cs`
+- Create: `InvisibilityPotion/Dev/AutoJoin.cs`, `InvisibilityPotion/Dev/AutoJoinConfig.Core.cs`
 
 **Interfaces:**
-- Consumes: `FejdStartup` (menu controller), `PlayerProfile.GetAllPlayerProfiles()`, `SaveSystem.GetWorldList()`, `Game.SetProfile(...)`, `ZNet.SetServer(...)`, `ZNet.ResetServerHost()`, `FejdStartup.LoadMainScene()`. All exact signatures are read from the decompile in step 1.
-- Produces: env vars `IP_DEV_WORLD` and `IP_DEV_CHARACTER` (name of an existing local world/character). With `IP_DEV_WORLD` set, the game loads that world after the menu appears.
+- Consumes: `FejdStartup` (private `Start`, `m_profiles`, `m_profileIndex`, `m_startingWorld`, `TransitionToMainScene`), `SaveSystem.GetAllPlayerProfiles()`, `SaveSystem.GetWorldList()`, `Game.SetProfile(string, FileHelpers.FileSource)`, `ZNet.SetServer(bool, bool, bool, string, string, World)`, `ZNet.ResetServerHost()`. All confirmed in the decompile.
+- Produces: `InvisibilityPotion/Dev/AutoJoinConfig.Core.cs` (`AutoJoinConfig.Parse(fileContent, envWorld, envCharacter)` returning `(world, character)`, pure, unit-testable) and `AutoJoin` (patches `FejdStartup.Start`). Configuration is read from `BepInEx/config/InvisibilityPotion.autojoin` (`world=` / `character=` lines, written by `make run`); env vars `IP_DEV_WORLD` / `IP_DEV_CHARACTER` are only a fallback. With a world set, the game loads that local world after the menu appears; empty world means normal menu.
 
 - [ ] **Step 1: Read how vanilla starts a local world**
 
@@ -520,73 +519,27 @@ Then read `FejdStartup.OnWorldStart()` and `FejdStartup.OnStartGame()` (or whate
 Template (adjust parameter lists to what step 1 showed; keep the structure):
 
 ```csharp
-#if DEBUG
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using HarmonyLib;
-
-namespace InvisibilityPotion.Dev
+// InvisibilityPotion/Dev/AutoJoinConfig.Core.cs: see the file (pure key=value parser, env fallback).
+// InvisibilityPotion/Dev/AutoJoin.cs (abridged; the file is authoritative):
+[HarmonyPatch(typeof(FejdStartup), "Start")]   // Start is private, so patch by name
+internal static class AutoJoin
 {
-    /// <summary>
-    /// Debug-only: when IP_DEV_WORLD is set, skip the main menu and load that local world
-    /// with the character named by IP_DEV_CHARACTER (or the first character found).
-    /// </summary>
-    [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Start))]
-    internal static class AutoJoin
+    [HarmonyPostfix]
+    private static void Postfix(FejdStartup __instance)
     {
-        private static bool _done;
-
-        [HarmonyPostfix]
-        private static void Postfix(FejdStartup __instance)
-        {
-            if (_done) return;
-            var worldName = Environment.GetEnvironmentVariable("IP_DEV_WORLD");
-            if (string.IsNullOrEmpty(worldName)) return;
-            _done = true;
-            __instance.StartCoroutine(JoinNextFrame(__instance, worldName,
-                Environment.GetEnvironmentVariable("IP_DEV_CHARACTER")));
-        }
-
-        private static System.Collections.IEnumerator JoinNextFrame(FejdStartup startup, string worldName, string characterName)
-        {
-            // Give FejdStartup one frame to finish its own initialisation (profiles, world list).
-            yield return null;
-            try
-            {
-                var profiles = PlayerProfile.GetAllPlayerProfiles();
-                var profile = string.IsNullOrEmpty(characterName)
-                    ? profiles.FirstOrDefault()
-                    : profiles.FirstOrDefault(p => string.Equals(p.GetName(), characterName, StringComparison.OrdinalIgnoreCase));
-                if (profile == null)
-                {
-                    Plugin.Log.LogError($"AutoJoin: character '{characterName}' not found. Available: {string.Join(", ", profiles.Select(p => p.GetName()))}");
-                    yield break;
-                }
-
-                var worlds = SaveSystem.GetWorldList();
-                var world = worlds.FirstOrDefault(w => string.Equals(w.m_name, worldName, StringComparison.OrdinalIgnoreCase));
-                if (world == null)
-                {
-                    Plugin.Log.LogError($"AutoJoin: world '{worldName}' not found. Available: {string.Join(", ", worlds.Select(w => w.m_name))}");
-                    yield break;
-                }
-
-                Plugin.Log.LogInfo($"AutoJoin: loading world '{world.m_name}' as '{profile.GetName()}'");
-                // Mirror FejdStartup.OnWorldStart: select profile, configure a local (non-public) server, load main scene.
-                Game.SetProfile(profile.GetFilename(), profile.m_fileSource);
-                ZNet.SetServer(true, false, false, world.m_name, "", world);
-                ZNet.ResetServerHost();
-                startup.LoadMainScene();
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"AutoJoin failed: {e}");
-            }
-        }
+        // read Paths.ConfigPath/InvisibilityPotion.autojoin (null if missing) -> AutoJoinConfig.Parse(...)
+        // empty world: return; else StartCoroutine(JoinWhenMenuReady(...))
     }
+
+    // waits one frame + until CinematicsManager.IsStartedPlaying() is false (30 s cap), then Join(...)
+    // Join (try/catch, logs available names on error), mirroring FejdStartup.OnCharacterStart + OnWorldStart:
+    //   startup.m_profileIndex = index; PlatformPrefs.SetString("profile", filename); Game.SetProfile(filename, profile.m_fileSource);
+    //   Game.m_serverOptionsSummary = ""; PlatformPrefs.SetString("world", world.m_name);
+    //   ZNet.m_onlineBackend = OnlineBackendType.Steamworks; ZSteamMatchmaking.instance.StopServerListing();
+    //   startup.m_startingWorld = true;
+    //   ZNet.SetServer(server: true, openServer: false, publicServer: false, world.m_name, "", world);
+    //   ZNet.ResetServerHost(); startup.TransitionToMainScene();   // private methods are usable: game assembly is publicized
 }
-#endif
 ```
 
 The `try/catch` cannot wrap a `yield`; if the compiler complains, move the body into a separate `static void Join(...)` method called after `yield return null` and wrap that call in `try/catch`.
@@ -599,8 +552,8 @@ Ask the user to run `make run`. Expected: the game boots straight into the `test
 - [ ] **Step 4: Commit**
 
 ```bash
-git add InvisibilityPotion/Dev/AutoJoin.cs
-git commit -m "feat(dev): auto-join a local world from IP_DEV_WORLD in Debug builds"
+git add InvisibilityPotion/Dev
+git commit -m "feat(dev): auto-join a local world from the autojoin config file in Debug builds"
 ```
 
 ---
@@ -1066,7 +1019,7 @@ git commit -m "docs: add project conventions, testing checklist and dev section"
 
 ## Self-review
 
-**Spec coverage (plan 1 scope: build steps 1 and 2, spec §3, §4, §5.1, §5.10, §6):** toolchain (Task 1), decompile (Task 2), csproj/skeleton/`NetworkCompatibility`/publish (Task 3), `make run`/`log` (Task 4), auto-join env vars (Task 5), patch health check + unit test project + `ip_state` (Task 6), hook verification and spec marker cleanup (Task 7), CLAUDE.md/testing.md (Task 8). `ip_give` and `ip_spawn` from §5.10 need the status effect and belong to plan 2. `make deploy-server` belongs to plan 3. Unity Editor install is started in Task 1 but used in plan 4.
+**Spec coverage (plan 1 scope: build steps 1 and 2, spec §3, §4, §5.1, §5.10, §6):** toolchain (Task 1), decompile (Task 2), csproj/skeleton/`NetworkCompatibility`/publish (Task 3), `make run`/`log` (Task 4), auto-join via config file (Task 5), patch health check + unit test project + `ip_state` (Task 6), hook verification and spec marker cleanup (Task 7), CLAUDE.md/testing.md (Task 8). `ip_give` and `ip_spawn` from §5.10 need the status effect and belong to plan 2. `make deploy-server` belongs to plan 3. Unity Editor install is started in Task 1 but used in plan 4.
 
 **Placeholders:** none. The auto-join code is a template whose parameter lists are confirmed in Task 5 step 1, which is an explicit investigation step with commands.
 
