@@ -5,7 +5,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package run log
+.PHONY: help decompile build package test run log
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -18,10 +18,13 @@ decompile: ## Decompile assembly_valheim.dll into tools/decompiled (rerun after 
 	@ls $(DECOMPILE_DIR)/assembly_valheim | wc -l | xargs echo "Decompiled files:"
 
 build: ## Build Debug and deploy the DLL into BepInEx/plugins (via scripts/publish.sh)
-	dotnet build InvisibilityPotion.sln -c Debug -nologo -v minimal
+	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Debug -nologo -v minimal
 
 package: ## Build Release and zip the Thunderstore package
-	dotnet build InvisibilityPotion.sln -c Release -nologo -v minimal
+	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal
+
+test: ## Run unit tests (pure logic, no game DLLs)
+	dotnet test InvisibilityPotion.Tests -nologo -v quiet
 
 GAME_ARGS ?= -console -screen-fullscreen 0 -screen-width 1600 -screen-height 900
 STEAM_APPID := 892970

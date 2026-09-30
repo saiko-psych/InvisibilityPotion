@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <LangVersion>10</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Pure logic is compiled straight into the test assembly; the game project cannot be referenced from net8.0 -->
+    <Compile Include="../InvisibilityPotion/PatchHealth.Core.cs" Link="PatchHealth.Core.cs" />
+    <!-- Wrapped in #if DEBUG, so the tests must be built in Debug (the dotnet test default) -->
+    <Compile Include="../InvisibilityPotion/Dev/AutoJoinConfig.Core.cs" Link="AutoJoinConfig.Core.cs" />
+  </ItemGroup>
+</Project>
