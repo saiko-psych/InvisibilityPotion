@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copy to Environment.props (gitignored) and adjust paths. Consumed by JotunnLib's build/Paths.props. -->
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Valheim game folder that contains valheim.x86_64 and BepInEx/ -->
+    <VALHEIM_INSTALL>/home/USER/.local/share/Steam/steamapps/common/Valheim</VALHEIM_INSTALL>
+    <!-- Optional: where Debug builds are copied. Defaults to $(VALHEIM_INSTALL)/BepInEx/plugins -->
+    <!-- <MOD_DEPLOYPATH>/path/to/BepInEx/plugins</MOD_DEPLOYPATH> -->
+  </PropertyGroup>
+</Project>
