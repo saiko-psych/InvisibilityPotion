@@ -1,0 +1,28 @@
+# Local environment
+Environment.props
+.remember/
+*.zip
+
+# Build output
+bin/
+obj/
+*.user
+.vs/
+.idea/
+
+# Decompiled game code (regenerate with `make decompile`)
+tools/decompiled/
+
+# Unity
+InvisibilityPotionUnity/Library/
+InvisibilityPotionUnity/Temp/
+InvisibilityPotionUnity/Logs/
+InvisibilityPotionUnity/UserSettings/
+InvisibilityPotionUnity/obj/
+InvisibilityPotionUnity/Assets/Assemblies/
+InvisibilityPotionUnity/*.csproj
+InvisibilityPotionUnity/*.sln
+
+# Packaging
+*.nupkg
+Package/*.zip
