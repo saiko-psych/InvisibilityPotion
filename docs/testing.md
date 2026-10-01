@@ -105,6 +105,26 @@ What to compare:
 - [ ] After `Close`, game keys work at once (no stuck text focus), the camera captures the mouse again
 - [ ] `ip_fog t2 outeranchors Chest,Hips` and `ip_fog t1 trail off` still work and show up in the window
 
+## Plan 2 – Round G: tier I/II looks, outer disc, fog brightness, draggable sliders (task 10g)
+
+New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 2)`, lists every reset value and each obsolete key with its old value, e.g. `[Fog.Tier2] OuterRadiusMultiplier = 6 is obsolete … and removed`; tier III is untouched):
+- All tiers: `DynamicColor = false` (the 50 % blend with the environment fog colour made the fog dark in rain and at night). New key `Emission` (0..1, T1/T2 0.25, T3 0): the fog glows with its own colour × Emission, so it stays whitish in the dark. The fog material also fades less near the camera and near surfaces (`_CameraFadeDistance` 0.3–1 m instead of 1–5 m, `_ZFadeDistance` 0.25 instead of 1).
+- T1: body clearly visible and shimmering (`DistortionColor` alpha 0.5, Distortion 0.04). Fog on all 13 bones (`FogEmitterMode Bones`, rate 6, size 0.6, life 3.5 s, alpha 0.35, speed 0.03, drift 0.03, `Trail = true`, `MeshRate 0`). No outer layer. `Mesh` stays selectable.
+- T2: Distortion 0.1 (alpha 0.08). Inner fog on all 13 bones, rate 12, size 0.7, life 2.5 s, alpha 0.45, `SpreadY 0.4`, follows the body. Outer disc on `Hips`: `OuterRadius 1.4` m, `OuterAlpha 0.35`, `OuterRate 14`/s, `OuterSize 1.8` m, `OuterLifetime 3` s, `OuterSpreadY 0.15`, `OuterTrail = true`.
+- Outer keys are absolute now: `OuterRadius` (m), `OuterAlpha`, `OuterRate` (/s per outer anchor), `OuterSize` (m), `OuterLifetime` (s) replace `OuterRadiusMultiplier`/`OuterAlphaFactor`/`OuterRateFactor`/`OuterSizeFactor`/`OuterLifetimeFactor`. The outer layer spawns whenever `OuterEnabled` and `OuterRate > 0`, even with the inner `Rate` at 0. Console: `ip_fog t2 outerradius 1.4`, `outeralpha`, `outerrate`, `outersize`, `outerlife`, `emission 0.25`.
+- `ip_fogui`: the slider is a new control: press anywhere on the track and drag. Inner section has `Emission (glow)`; the outer section has absolute rows and a `Solo outer (inner off; not saved, all tiers)` toggle that hides the inner layer to isolate the disc. `Distortion alpha (body opacity)` now goes up to 1.
+
+What to compare:
+- [ ] Log: `Config migration (look defaults revision 2)` once (not on the second start), with the obsolete-key lines; `Config: removed N obsolete keys` lists them with their values
+- [ ] T1 standing: body clearly visible (shimmering, not ghost-like); whitish fog hugging the whole body
+- [ ] T1 walking/running: a strong whitish fog trail that fades within ~4 s
+- [ ] T2 standing: one fog cloud from head to feet (not single blobs at chest/hips/head/hands), whitish, also in rain and in the evening
+- [ ] T2 outer disc: a wide flat disc (~1.4 m around the hips) clearly visible from the side and from above (zoom the camera out, look down); with `Solo outer` on only the disc is left
+- [ ] T2 walking: the inner cloud moves with you, the disc leaves a lighter trail
+- [ ] `Emission`: in the dark or in rain set it 0 → fog turns grey/dark, 0.25 → whitish, 1 → bright; `DynamicColor` on → fog takes on the environment tint
+- [ ] Window sliders: press on the thumb and drag left/right → the value follows the mouse; press anywhere on the track → jumps there and keeps following while dragging; release outside the window → the slider lets go. Wheel, `-`/`+`, typed field and `R` work as before
+- [ ] T3 unchanged (Distortion 0.03, alpha 0.02, no fog)
+
 ## Plan 2 – gameplay core (tasks 2, 4-10)
 
 Format: given / do / expect. `[x]` = confirmed in-game (Round A 2026-10-01, Rounds B-E); unchecked = open.
