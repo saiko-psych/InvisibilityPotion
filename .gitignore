@@ -30,3 +30,4 @@ Package/*.zip
 # Subagent-driven-development scratch (ledger, briefs, review packages)
 .superpowers/
 InvisibilityPotion/Package/plugins/
+.worktrees/

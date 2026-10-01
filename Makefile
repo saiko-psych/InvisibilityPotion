@@ -6,7 +6,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package test run log
+.PHONY: help decompile build package test run play log
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -45,7 +45,10 @@ IP_DEV_CHARACTER ?=
 AUTOJOIN_FILE := $(VALHEIM_INSTALL)/BepInEx/config/InvisibilityPotion.autojoin
 BEPINEX_LOG := $(VALHEIM_INSTALL)/BepInEx/LogOutput.log
 
-run: build ## Build, launch Valheim through Steam (needs launch option "./start_game_bepinex.sh %command%"), then follow the BepInEx log
+run: build play ## Build, then `make play`
+
+# Launch without building: use this while the working tree is mid-edit so the deployed DLL stays the last finished build.
+play: ## Launch Valheim through Steam (needs launch option "./start_game_bepinex.sh %command%") with auto-join, then follow the BepInEx log
 	@pgrep -x steam > /dev/null || { echo "Steam is not running. Start Steam first."; exit 1; }
 	@mkdir -p "$(dir $(AUTOJOIN_FILE))"
 	@printf 'world=%s\ncharacter=%s\n' "$(IP_DEV_WORLD)" "$(IP_DEV_CHARACTER)" > "$(AUTOJOIN_FILE)"
