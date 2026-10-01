@@ -20,38 +20,73 @@ namespace InvisibilityPotion.Visuals
         }
         private readonly Dictionary<Player, Snapshot> _snapshots = new Dictionary<Player, Snapshot>();
 
+        private static readonly List<Material> MatBuf = new List<Material>();
+
         public void Apply(Player p, int tier, bool isLocal)
         {
             if (p == null) return;
-            if (_snapshots.TryGetValue(p, out var existing) && existing.Tier == tier) { ApplyCutoff(p, existing, tier, isLocal); return; }
+            if (_snapshots.TryGetValue(p, out var existing) && existing.Tier == tier)
+            {
+                if (existing.Fog == null) existing.Fog = SpawnFog(p);
+                ApplyCutoff(p, existing, tier, isLocal);
+                return;
+            }
             Remove(p);
             var snap = new Snapshot { Tier = tier };
             _snapshots[p] = snap;
+            snap.Fog = SpawnFog(p);
             ApplyCutoff(p, snap, tier, isLocal);
+        }
+
+        /// <summary>Purely local effect: the prefab comes from ZNetScene and has a ZNetView, so init is disabled while instantiating (as vanilla does in Player.cs) and leftover sync components are stripped.</summary>
+        private static GameObject SpawnFog(Player p)
+        {
             var prefab = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(FogPrefabName) : null;
-            if (prefab != null)
-            {
-                snap.Fog = Object.Instantiate(prefab, p.transform);
-                snap.Fog.transform.localPosition = new Vector3(0f, 1f, 0f);
-                var ps = snap.Fog.GetComponentInChildren<ParticleSystem>();
-                if (ps != null) { var main = ps.main; main.loop = true; }
-            }
+            if (prefab == null) return null;
+            GameObject fog;
+            ZNetView.m_forceDisableInit = true;
+            try { fog = Object.Instantiate(prefab, p.transform); }
+            finally { ZNetView.m_forceDisableInit = false; }
+            fog.transform.localPosition = new Vector3(0f, 1f, 0f);
+            foreach (var c in fog.GetComponentsInChildren<TimedDestruction>(true)) Object.DestroyImmediate(c);
+            foreach (var c in fog.GetComponentsInChildren<ZSyncTransform>(true)) Object.DestroyImmediate(c);
+            foreach (var c in fog.GetComponentsInChildren<ZNetView>(true)) Object.DestroyImmediate(c);
+            foreach (var ps in fog.GetComponentsInChildren<ParticleSystem>(true)) { var main = ps.main; main.loop = true; }
+            return fog;
         }
 
         private static void ApplyCutoff(Player p, Snapshot snap, int tier, bool isLocal)
         {
             var g = PluginConfig.Global;
             var cutoff = isLocal && g.ShowSelfFaintly ? g.FogCutoffSelf : (tier == 1 ? g.FogCutoffLight : g.FogCutoffDense);
+            var fogT = snap.Fog != null ? snap.Fog.transform : null;
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
             {
+                if (fogT != null && r.transform.IsChildOf(fogT)) continue;
                 // r.materials instantiates per-renderer copies (vanilla players share sharedMaterials).
                 // Remove restores the values but does not destroy the instances; acceptable for plan 2, plan 4 revisits with a proper shader.
-                foreach (var m in r.materials)
+                r.GetMaterials(MatBuf);
+                foreach (var m in MatBuf)
                 {
                     if (m == null || !m.HasProperty(CutoffId)) continue;
                     if (!snap.Cutoffs.ContainsKey(m)) snap.Cutoffs[m] = m.GetFloat(CutoffId);
                     m.SetFloat(CutoffId, cutoff);
                 }
+            }
+            MatBuf.Clear();
+        }
+
+        /// <summary>Drops snapshots of destroyed players (Unity-null keys); nothing to restore, only the fog may remain.</summary>
+        public void PruneDead()
+        {
+            List<Player> dead = null;
+            foreach (var kv in _snapshots)
+                if (kv.Key == null) (dead ?? (dead = new List<Player>())).Add(kv.Key);
+            if (dead == null) return;
+            foreach (var k in dead)
+            {
+                if (_snapshots.TryGetValue(k, out var snap) && snap.Fog != null) Object.Destroy(snap.Fog);
+                _snapshots.Remove(k);
             }
         }
 

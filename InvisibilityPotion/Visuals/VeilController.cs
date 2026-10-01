@@ -8,7 +8,8 @@ namespace InvisibilityPotion.Visuals
     public sealed class VeilController : MonoBehaviour
     {
         private static VeilController _instance;
-        private readonly IVeil _veil = new FogVeil();
+        private readonly FogVeil _veil = new FogVeil();
+        private readonly HashSet<Player> _seen = new HashSet<Player>();
         private readonly HashSet<Player> _veiled = new HashSet<Player>();
         private float _timer;
 
@@ -32,7 +33,8 @@ namespace InvisibilityPotion.Visuals
 
         private void Refresh()
         {
-            var seen = new HashSet<Player>();
+            var seen = _seen;
+            seen.Clear();
             foreach (var p in Player.GetAllPlayers())
             {
                 if (p == null) continue;
@@ -42,6 +44,7 @@ namespace InvisibilityPotion.Visuals
                 else if (_veiled.Remove(p)) _veil.Remove(p);
             }
             _veiled.RemoveWhere(p => { if (p == null || !seen.Contains(p)) { _veil.Remove(p); return true; } return false; });
+            _veil.PruneDead();
         }
     }
 }
