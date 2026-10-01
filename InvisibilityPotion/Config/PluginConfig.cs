@@ -77,7 +77,8 @@ namespace InvisibilityPotion.Config
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount"),
-                ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode, "How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. The Debug command ip_veil overrides it in memory"),
+                ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode, "How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. The Debug command ip_veil overrides it in memory",
+                                        ModeValues(bodyMode)),
                 ["FogEnabled"] = Bind(section, "FogEnabled", fogEnabled, "Body-anchored fog around the hidden player"),
                 ["FogDensity"] = Bind(section, "FogDensity", fogDensity, "Fog density 0..1; scales the fog rate and alpha"),
             };
@@ -90,8 +91,21 @@ namespace InvisibilityPotion.Config
         private static void BindLook<T>(string section, string key, T value, string description) =>
             _lookEntries[key] = _file.Bind(section, key, value, description);
 
-        private static ConfigEntry<T> Bind<T>(string section, string key, T value, string description) =>
-            _file.Bind(section, key, value, new ConfigDescription(description, null, new ConfigurationManagerAttributes { IsAdminOnly = true }));
+        private static ConfigEntry<T> Bind<T>(string section, string key, T value, string description, AcceptableValueBase acceptable = null) =>
+            _file.Bind(section, key, value, new ConfigDescription(description, acceptable, new ConfigurationManagerAttributes { IsAdminOnly = true }));
+
+        private static readonly string[] BodyVeilModes = { "Off", "Cutoff", "Hide", "Tint", "Ghost", "Distortion" };
+
+        /// <summary>The six mode names with the tier's default first: BepInEx clamps an unlisted value to the first entry, i.e. the default.</summary>
+        private static AcceptableValueList<string> ModeValues(string tierDefault)
+        {
+            var list = new List<string> { tierDefault };
+            foreach (var m in BodyVeilModes) if (m != tierDefault) list.Add(m);
+            return new AcceptableValueList<string>(list.ToArray());
+        }
+
+        /// <summary>The tier's default BodyVeilMode (fallback for a malformed value).</summary>
+        public static string DefaultBodyVeilMode(int tier) => GetDefault<string>(_tierEntries[tier], "BodyVeilMode");
 
         private static T Get<T>(Dictionary<string, ConfigEntryBase> entries, string key) => ((ConfigEntry<T>)entries[key]).Value;
 

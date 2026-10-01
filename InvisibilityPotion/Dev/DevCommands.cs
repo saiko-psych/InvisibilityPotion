@@ -32,8 +32,8 @@ namespace InvisibilityPotion.Dev
         {
             public override string Name => "ip_veil";
             public override string Help =>
-                "ip_veil: print modes | ip_veil <none|cutoff|hide|tint|ghost|distortion> [tier]: override the body mode of your current tier (none = mode Off) | " +
-                "ip_veil off [tier|all]: clear the override | ip_veil distortion <strength> [alpha] | ip_veil ghost <alpha> [emission] | ip_veil save";
+                "ip_veil: print modes | ip_veil <none|cutoff|hide|tint|ghost|distortion> [tier]: override the body mode of your current (or the given) tier, none = mode Off | " +
+                "ip_veil off [tier|all]: clear the override | ip_veil look distortion <strength 0..5> [alpha 0..1] | ip_veil look ghost <alpha 0..1> [emission 0..5] | ip_veil save";
 
             public override void Run(string[] args)
             {
@@ -45,22 +45,7 @@ namespace InvisibilityPotion.Dev
                     Say("veil look saved to [Veil] (DistortionStrength, DistortionColor, GhostColor, GhostEmission)");
                     return;
                 }
-                if (verb == "distortion" && args.Length >= 2)
-                {
-                    if (!Fog.FloatList.TryParseOne(args[1], out var strength)) { Say(Help); return; }
-                    FogVeil.DistortionStrength = strength;
-                    if (args.Length >= 3 && Fog.FloatList.TryParseOne(args[2], out var alpha)) { var c = FogVeil.DistortionColor; c.a = alpha; FogVeil.DistortionColor = c; }
-                    Changed($"distortion strength {strength}, color {FogVeil.FormatColor(FogVeil.DistortionColor)}");
-                    return;
-                }
-                if (verb == "ghost" && args.Length >= 2)
-                {
-                    if (!Fog.FloatList.TryParseOne(args[1], out var alpha)) { Say(Help); return; }
-                    var c = FogVeil.GhostColor; c.a = alpha; FogVeil.GhostColor = c;
-                    if (args.Length >= 3 && Fog.FloatList.TryParseOne(args[2], out var emission)) FogVeil.GhostEmission = Mathf.Max(0f, emission);
-                    Changed($"ghost color {FogVeil.FormatColor(FogVeil.GhostColor)}, emission x{FogVeil.GhostEmission}");
-                    return;
-                }
+                if (verb == "look") { Look(args); return; }
                 if (verb == "off")
                 {
                     if (args.Length >= 2 && args[1].ToLowerInvariant() == "all") { ClearAll(); return; }
@@ -76,6 +61,27 @@ namespace InvisibilityPotion.Dev
                 if (tier == 0) { Say("you are not under an invisibility effect; drink one (ip_give <1|2|3>) or pass a tier: ip_veil <mode> <1|2|3>"); return; }
                 FogVeil.ModeOverride[tier] = mode;
                 Changed($"T{tier} body mode overridden: {mode} (config: {FogVeil.ConfiguredMode(tier)})");
+            }
+
+            private void Look(string[] args)
+            {
+                var target = args.Length >= 2 ? args[1].ToLowerInvariant() : "";
+                if (args.Length < 3 || !Fog.FloatList.TryParseOne(args[2], out var first)) { Say(Help); return; }
+                var hasSecond = args.Length >= 4 && Fog.FloatList.TryParseOne(args[3], out _);
+                Fog.FloatList.TryParseOne(args.Length >= 4 ? args[3] : "", out var second);
+                if (target == "distortion")
+                {
+                    FogVeil.DistortionStrength = Mathf.Clamp(first, 0f, 5f);
+                    if (hasSecond) { var c = FogVeil.DistortionColor; c.a = Mathf.Clamp01(second); FogVeil.DistortionColor = c; }
+                    Changed($"distortion strength {FogVeil.DistortionStrength}, color {FogVeil.FormatColor(FogVeil.DistortionColor)}");
+                }
+                else if (target == "ghost")
+                {
+                    var c = FogVeil.GhostColor; c.a = Mathf.Clamp01(first); FogVeil.GhostColor = c;
+                    if (hasSecond) FogVeil.GhostEmission = Mathf.Clamp(second, 0f, 5f);
+                    Changed($"ghost color {FogVeil.FormatColor(FogVeil.GhostColor)}, emission x{FogVeil.GhostEmission}");
+                }
+                else Say(Help);
             }
 
             private static void ClearAll()
@@ -110,11 +116,12 @@ namespace InvisibilityPotion.Dev
                     var ov = FogVeil.ModeOverride[t];
                     Say($"T{t}: mode {FogVeil.ModeFor(t)} (config {cfg.BodyVeilMode}{(ov.HasValue ? $", override {ov.Value}" : "")}), fog {(cfg.FogEnabled ? "on" : "off")} density {cfg.FogDensity}");
                 }
-                Say($"distortion strength {FogVeil.DistortionStrength}, color {FogVeil.FormatColor(FogVeil.DistortionColor)}; ghost color {FogVeil.FormatColor(FogVeil.GhostColor)}, emission x{FogVeil.GhostEmission}");
+                Say($"look distortion: strength {FogVeil.DistortionStrength}, color {FogVeil.FormatColor(FogVeil.DistortionColor)} (ip_veil look distortion <strength> [alpha])");
+                Say($"look ghost: color {FogVeil.FormatColor(FogVeil.GhostColor)}, emission x{FogVeil.GhostEmission} (ip_veil look ghost <alpha> [emission])");
             }
 
             public override System.Collections.Generic.List<string> CommandOptionList() =>
-                new System.Collections.Generic.List<string> { "none", "cutoff", "hide", "tint", "ghost", "distortion", "off", "save" };
+                new System.Collections.Generic.List<string> { "none", "cutoff", "hide", "tint", "ghost", "distortion", "off", "look", "save" };
         }
 
         private class FogCommand : ConsoleCommand

@@ -63,7 +63,7 @@ namespace InvisibilityPotion.Visuals
             DistortionColor = ParseColor(g.DistortionColor, 4, new Color(1f, 1f, 1f, 0.15f), "DistortionColor");
             GhostColor = ParseColor(g.GhostColor, 4, new Color(0.75f, 0.8f, 0.9f, 1f), "GhostColor");
             GhostEmission = Mathf.Max(0f, g.GhostEmission);
-            _badModeWarned.Clear();
+            ParseConfiguredModes();
             Bump();
         }
 
@@ -83,16 +83,23 @@ namespace InvisibilityPotion.Visuals
             return false;
         }
 
-        private static readonly HashSet<int> _badModeWarned = new HashSet<int>();
+        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Off, BodyVeilMode.Ghost, BodyVeilMode.Distortion };
 
-        /// <summary>The tier's configured body mode (Off when malformed, warned once per tier).</summary>
-        public static BodyVeilMode ConfiguredMode(int tier)
+        /// <summary>The tier's configured body mode, parsed once per LoadFromConfig.</summary>
+        public static BodyVeilMode ConfiguredMode(int tier) => tier >= 1 && tier <= 3 ? _configuredModes[tier] : BodyVeilMode.Off;
+
+        /// <summary>Parses TierN.BodyVeilMode; a malformed value falls back to the tier's default with a warning.</summary>
+        private static void ParseConfiguredModes()
         {
-            var text = PluginConfig.Tier(tier).BodyVeilMode;
-            if (TryParseMode(text, out var mode)) return mode;
-            if (_badModeWarned.Add(tier))
-                Plugin.Log.LogWarning($"[Tier{tier}] BodyVeilMode '{text}' is not one of Off, Cutoff, Hide, Tint, Ghost, Distortion; using Off");
-            return BodyVeilMode.Off;
+            for (var t = 1; t <= 3; t++)
+            {
+                var text = PluginConfig.Tier(t).BodyVeilMode;
+                if (TryParseMode(text, out var mode)) { _configuredModes[t] = mode; continue; }
+                var fallback = PluginConfig.DefaultBodyVeilMode(t);
+                TryParseMode(fallback, out mode);
+                Plugin.Log.LogWarning($"[Tier{t}] BodyVeilMode '{text}' is not one of Off, Cutoff, Hide, Tint, Ghost, Distortion; using the default {mode}");
+                _configuredModes[t] = mode;
+            }
         }
 
         public static BodyVeilMode ModeFor(int tier) => tier >= 1 && tier <= 3 ? ModeOverride[tier] ?? ConfiguredMode(tier) : BodyVeilMode.Off;
