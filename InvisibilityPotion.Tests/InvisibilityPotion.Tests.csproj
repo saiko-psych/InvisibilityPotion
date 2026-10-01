@@ -17,5 +17,6 @@
     <!-- Wrapped in #if DEBUG; DEBUG is defined above so this compiles in any configuration -->
     <Compile Include="../InvisibilityPotion/Dev/AutoJoinConfig.Core.cs" Link="AutoJoinConfig.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/TierConfig.Core.cs" Link="TierConfig.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Effects/InvisibilityStateMachine.Core.cs" Link="InvisibilityStateMachine.Core.cs" />
   </ItemGroup>
 </Project>
