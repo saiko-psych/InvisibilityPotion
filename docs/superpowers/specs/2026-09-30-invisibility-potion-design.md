@@ -37,7 +37,7 @@ A Valheim mod (BepInEx + Jötunn) that adds three tiers of invisibility potions.
 | .NET SDK | 8.0 (builds `net48` through reference assemblies) | pacman `dotnet-sdk-8.0` |
 | Steam build id | 25527674 | `appmanifest_892970.acf` |
 
-Game-code names are verified against the decompiled `assembly_valheim.dll` before use. Names in this spec marked *(verify)* were found as strings in the assembly but their semantics were not yet read from source.
+Game-code names are verified against the decompiled `assembly_valheim.dll` before use. Names in this spec marked *(verify)* were found as strings in the assembly but their semantics were not yet read from source. All such markers have since been resolved against the 1.0.16 decompile; see [`docs/decompile-notes.md`](../../decompile-notes.md).
 
 ## 4. Repository layout
 
@@ -111,12 +111,12 @@ Lifecycle:
 
 | Event | Behaviour |
 |---|---|
-| `Setup` (drink) | If a higher or equal tier is active: refuse with HUD message, item not consumed *(verify: consume hook order)*. If a lower tier is active: remove it (its `Stop` runs cleanup), then apply. Set `m_ttl` from config. For tier I set `m_stealthModifier` / `m_noiseModifier` from config. Enter `Hidden`: write ZDO (`IP_Tier`, `IP_Hidden = true`), apply veil, request aggro drop. |
+| `Setup` (drink) | If a higher or equal tier is active: refuse with HUD message, item not consumed (differs: the refusal must be a postfix on `Player.CanConsumeItem`, see decompile-notes.md §Consume path). If a lower tier is active: remove it (its `Stop` runs cleanup), then apply. Set `m_ttl` from config. For tier I set `m_stealthModifier` / `m_noiseModifier` from config. Enter `Hidden`: write ZDO (`IP_Tier`, `IP_Hidden = true`), apply veil, request aggro drop. |
 | `OnReveal()` (attack trigger) | Apply/restart `SE_Revealed`. Tier I: `m_time = m_ttl` so the effect ends this frame. Tier II/III: if `Hidden`, enter `Revealed`: write `IP_Hidden = false`, remove veil. Restart `rehideTimer = RehideDelay`. |
 | `UpdateStatusEffect(dt)` | If `Revealed`: count down `rehideTimer`; at zero enter `Hidden` again (ZDO, veil, aggro drop). |
 | `Stop()` (duration expired, death, logout, replaced, removed) | The single cleanup path: `IP_Tier = 0`, `IP_Hidden = false`, veil removed, cached state cleared. Idempotent. |
 
-**`SE_Revealed : SE_Stats`** – stamina-regen debuff. Sets `m_staminaRegenMultiplier` *(verify field vs. `ModifyStaminaRegen` override)* from config, `m_ttl = DebuffDuration`. Re-applying restarts the timer (`ResetTime`).
+**`SE_Revealed : SE_Stats`** – stamina-regen debuff. Sets `m_staminaRegenMultiplier` (verified: the field alone multiplies regen for values ≤ 1, no override needed) from config, `m_ttl = DebuffDuration`. Re-applying restarts the timer (`ResetTime`).
 
 ### 5.4 Network state (`Net/HiddenState`)
 
@@ -124,9 +124,9 @@ Two ZDO keys on the player's ZDO: `IP_Tier` (int, 0 = none) and `IP_Hidden` (boo
 
 ### 5.5 Perception and aggro (`Patches/Perception`, `Patches/Aggro`)
 
-- Prefix `BaseAI.CanSenseTarget(Character target)` *(verify signature)*: if `target is Player` and `HiddenState.Get(target)` says hidden with `IgnoredByEnemies`, set `__result = false`, return `false`.
-- Aggro drop on entering `Hidden`: `Character.GetCharactersInRange(pos, range, list)`; for each `MonsterAI` with `GetTargetCreature() == player`, set `m_targetCreature = null`, `m_alerted = false` *(verify fields)*. Executed locally; because the zone owner's AI also stops sensing the player through the prefix, its own lose-target logic finishes the job.
-- Per-tier lose-target time: patch the method that compares `m_timeSinceSensedTargetCreature` against the vanilla threshold *(verify: likely `MonsterAI.UpdateTarget`)* and substitute `AggroLossTime` when the target is hidden. Vanilla then walks to the last known position and searches, which matches the decision for chasing enemies.
+- Prefix `BaseAI.CanSenseTarget(Character target)` (differs: see decompile-notes.md §Perception, hook the static `CanHearTarget`/`CanSeeTarget` and `FindEnemy` instead): if `target is Player` and `HiddenState.Get(target)` says hidden with `IgnoredByEnemies`, set `__result = false`, return `false`.
+- Aggro drop on entering `Hidden`: `Character.GetCharactersInRange(pos, range, list)`; for each `MonsterAI` with `GetTargetCreature() == player`, set `m_targetCreature = null`, `m_alerted = false` (differs: `m_targetCreature` is `MonsterAI`, `m_alerted` is `BaseAI` and must be set via `SetAlerted(false)`, owner only; see decompile-notes.md §Aggro loss). Executed locally; because the zone owner's AI also stops sensing the player through the prefix, its own lose-target logic finishes the job.
+- Per-tier lose-target time: patch the method that compares `m_timeSinceSensedTargetCreature` against the vanilla threshold (verified: `MonsterAI.UpdateTarget`, literal `30f`, see decompile-notes.md §Aggro loss) and substitute `AggroLossTime` when the target is hidden. Vanilla then walks to the last known position and searches, which matches the decision for chasing enemies.
 - Tier I is not patched here; its reduced perception comes from the vanilla stealth math via the effect's modifiers.
 
 ### 5.6 Reveal triggers (`Patches/Reveal`)
@@ -160,7 +160,7 @@ interface IVeil { void Apply(Player p, int tier); void Remove(Player p); }
 - `VeilController` picks `FogVeil` for tier I/II and `ShimmerVeil` for tier III (falls back to `FogVeil` dense mode if `ShimmerVeil.IsSupported` is false).
 - `FogVeil`: snapshot all renderers of the player (body, hair, beard, armour, cape, held items, via `GetComponentsInChildren<Renderer>`), raise `_Cutoff` on `Custom/Player` materials to thin them, attach a looping particle fog prefab from the asset bundle (light or dense). The local player keeps a faint version (`ShowSelfFaintly`).
 - `ShimmerVeil`: swap materials to `Custom/Distortion` on the same renderer set. Prototyped in build step 4; visual quality decides whether it ships.
-- Equipment changes while hidden: postfix on the visual-equipment update *(verify: `VisEquipment.UpdateEquipmentVisuals`)* re-applies the veil.
+- Equipment changes while hidden: postfix on the visual-equipment update (differs: `UpdateEquipmentVisuals` runs every frame, use `VisEquipment.UpdateLodgroup`; see decompile-notes.md §Visuals) re-applies the veil.
 - `Remove` restores the exact snapshot. Called only from `SE_Invisibility.Stop` and from the `Revealed` transition.
 - Remote players run the same controller from a per-frame check of `HiddenState` on visible players, so viewers render the veil without an RPC.
 
