@@ -30,6 +30,8 @@ namespace InvisibilityPotion.Items
                 try { RegisterTier(t); }
                 catch (System.Exception e) { Plugin.Log.LogError($"Registering tier {t} potions failed: {e}"); }
             }
+            try { CopyConsumeEffects(); }
+            catch (System.Exception e) { Plugin.Log.LogError($"Copying potion start/stop effects failed: {e}"); }
             // Icons: render the tinted bottles for the items and reuse them for the status effects.
             for (var t = 1; t <= 3; t++)
             {
@@ -111,6 +113,35 @@ namespace InvisibilityPotion.Items
                 ToItem = MeadName(t),
                 ProducedItems = 4,
             }));
+        }
+
+        private const string EffectSourceMead = "MeadHealthMinor";
+
+        /// <summary>
+        /// Vanilla meads get their drink sound and particles from the consume status effect: StatusEffect.m_startEffects is created in
+        /// Setup (TriggerStartEffects, StatusEffect.cs:128) and m_stopEffects in Stop (StatusEffect.cs:159). Ours start empty, so share the
+        /// EffectLists of MeadHealthMinor's effect (read-only use, no copy needed). Not applied to SE_Revealed.
+        /// </summary>
+        private static void CopyConsumeEffects()
+        {
+            var prefab = PrefabManager.Instance.GetPrefab(EffectSourceMead);
+            var source = prefab != null ? prefab.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_consumeStatusEffect : null;
+            if (source == null)
+            {
+                Plugin.Log.LogWarning($"{EffectSourceMead} or its consume status effect not found; potions keep silent start/stop");
+                return;
+            }
+            var copied = 0;
+            for (var t = 1; t <= 3; t++)
+            {
+                var se = Effects.StatusEffects.Prefab(t);
+                if (se == null) continue;
+                se.m_startEffects = source.m_startEffects;
+                se.m_stopEffects = source.m_stopEffects;
+                copied++;
+            }
+            Plugin.Log.LogInfo($"potion effects: copied start ({source.m_startEffects?.m_effectPrefabs?.Length ?? 0}) and stop ({source.m_stopEffects?.m_effectPrefabs?.Length ?? 0}) " +
+                               $"effects from {source.name} to {copied} tier effects");
         }
 
         private static void Tint(GameObject prefab, Color tint)
