@@ -65,6 +65,12 @@ namespace InvisibilityPotion.Visuals
     /// <summary>Where the fog particles spawn: around body bones (one emitter per anchor) or on the body mesh surface (one emitter).</summary>
     public enum FogEmitterMode { Bones, Mesh }
 
+    /// <summary>
+    /// Simulation space of a fog layer: Follow = local space (particles move with the body), Trail = world space (particles stay
+    /// where they were emitted, so moving leaves a trail). Config: Trail / OuterTrail (bool).
+    /// </summary>
+    public enum FogTrailMode { Follow, Trail }
+
     public enum FogValueKind { Float, Bool, Text }
 
     /// <summary>One config key of a per-tier fog section ([Fog.TierN]).</summary>
@@ -87,8 +93,8 @@ namespace InvisibilityPotion.Visuals
         public const int ParticleWarnThreshold = 200;
         /// <summary>Hard cap on particles per emitter, whatever rate × lifetime asks for.</summary>
         public const int ParticleHardCap = 300;
-        /// <summary>The outer layer only spawns on these anchors (the trunk), not on every limb.</summary>
-        public static readonly string[] OuterAnchorNames = { "Head", "Chest", "Hips" };
+        /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
+        public static readonly string[] DefaultOuterAnchors = { "Head", "Chest", "Hips" };
 
         public static readonly string[] AnchorNames =
         {
@@ -106,11 +112,21 @@ namespace InvisibilityPotion.Visuals
         public bool DynamicColor = true; // blend 50/50 with the environment fog colour
         public float SpreadX = 1f, SpreadY = 0.35f, SpreadZ = 1f;   // emitter shape scale: flattened, spreads sideways
         public float Drift = 0f;         // vertical drift, m/s (world space); 0 = no plume
+        /// <summary>Inner layer in world space: particles stay where they were emitted (trail behind a moving player).</summary>
+        public bool Trail;
+        /// <summary>Mesh emitter: particles per second on the body surface; 0 = Rate x enabled anchors.</summary>
+        public float MeshRate;
         public bool OuterEnabled;
         public float OuterRadiusMultiplier = 2.5f;
         public float OuterAlphaFactor = 0.35f;
         public float OuterRateFactor = 0.6f;
         public float OuterSizeFactor = 1.5f;
+        /// <summary>Outer layer vertical shape scale (sideways it uses SpreadX/SpreadZ); below 1 flattens the ring.</summary>
+        public float OuterSpreadY = 0.35f;
+        public float OuterLifetimeFactor = 1f;
+        public bool OuterTrail;
+        /// <summary>Bones the outer layer spawns on (one emitter each, anchor radius x OuterRadiusMultiplier), whatever the emitter mode.</summary>
+        public List<string> OuterAnchors = new List<string>(DefaultOuterAnchors);
         public float DistortionStrength = 0.1f;
         public float DR = 1f, DG = 1f, DB = 1f, DA = 0.08f;
         /// <summary>Ripple speed (_WaveVel) of the Distortion body mode; negative = keep the value borrowed from staff_shield_shard.</summary>
@@ -148,9 +164,23 @@ namespace InvisibilityPotion.Visuals
             foreach (var name in AnchorNames) s.Anchors.Add(DefaultAnchor(name));
             switch (tier)
             {
+                case 1:
+                    // Small wisps on the body surface that linger behind a moving player, plus a light shimmer (round F).
+                    s.EmitterMode = FogEmitterMode.Mesh; s.MeshRate = 18f; s.Rate = 2.5f;
+                    s.Size = 0.28f; s.Lifetime = 4f; s.Speed = 0.02f; s.Alpha = 0.3f;
+                    s.R = 0.88f; s.G = 0.9f; s.B = 0.93f;
+                    s.SpreadX = 1f; s.SpreadY = 0.5f; s.SpreadZ = 1f; s.Drift = 0.02f;
+                    s.Trail = true;
+                    s.DistortionStrength = 0.04f; s.DA = 0.03f;
+                    break;
                 case 2:
-                    s.Rate = 8f; s.Size = 0.8f; s.Lifetime = 2.5f; s.Alpha = 0.45f;
+                    // Dense thin inner layer that follows the body, wide flat outer ring that trails (round F).
+                    s.Rate = 10f; s.Size = 0.45f; s.Lifetime = 2f; s.Alpha = 0.4f;
                     s.OuterEnabled = true;
+                    s.OuterAnchors = new List<string> { "Chest", "Hips", "Head", "LeftHand", "RightHand" };
+                    s.OuterRadiusMultiplier = 6f; s.OuterSpreadY = 0.25f;
+                    s.OuterAlphaFactor = 0.75f; s.OuterSizeFactor = 3.5f; s.OuterRateFactor = 0.5f;
+                    s.OuterTrail = true; s.OuterLifetimeFactor = 1.5f;
                     s.DistortionStrength = 0.1f; s.DA = 0.08f;
                     break;
                 case 3:
@@ -183,6 +213,7 @@ namespace InvisibilityPotion.Visuals
             var copy = (FogSettings)MemberwiseClone();
             copy.Anchors = new List<FogAnchor>(Anchors.Count);
             foreach (var a in Anchors) copy.Anchors.Add(a.Clone());
+            copy.OuterAnchors = new List<string>(OuterAnchors);
             return copy;
         }
 
@@ -195,19 +226,61 @@ namespace InvisibilityPotion.Visuals
 
         public FogRgb Color => new FogRgb(R, G, B);
 
+        public FogTrailMode InnerTrailMode => Trail ? FogTrailMode.Trail : FogTrailMode.Follow;
+        public FogTrailMode OuterTrailMode => OuterTrail ? FogTrailMode.Trail : FogTrailMode.Follow;
+
+        /// <summary>Lifetime of the outer layer's particles.</summary>
+        public float OuterLifetime => Math.Max(0.05f, Lifetime * Math.Max(0f, OuterLifetimeFactor));
+
+        /// <summary>Rate of the single Mesh emitter for <paramref name="enabledAnchors"/> enabled anchors: MeshRate, or Rate x anchors when MeshRate is 0.</summary>
+        public float MeshEmitterRate(int enabledAnchors) => MeshRate > 0f ? MeshRate : Math.Max(0f, Rate) * Math.Max(0, enabledAnchors);
+
         /// <summary>Expected live particles of one inner emitter (rate × lifetime).</summary>
         public float LiveParticlesInner => Math.Max(0f, Rate) * Math.Max(0f, Lifetime);
 
-        /// <summary>Expected live particles of one outer emitter.</summary>
-        public float LiveParticlesOuter => OuterEnabled ? LiveParticlesInner * Math.Max(0f, OuterRateFactor) : 0f;
+        /// <summary>Expected live particles of one outer emitter (outer rate × outer lifetime).</summary>
+        public float LiveParticlesOuter => OuterEnabled ? Math.Max(0f, Rate) * Math.Max(0f, OuterRateFactor) * OuterLifetime : 0f;
 
-        public bool ExceedsParticleBudget => LiveParticlesInner > ParticleWarnThreshold || LiveParticlesOuter > ParticleWarnThreshold;
+        /// <summary>Expected live particles of the Mesh emitter (MeshRate or Rate × anchors, × lifetime).</summary>
+        public float LiveParticlesMesh
+        {
+            get
+            {
+                var n = 0;
+                foreach (var a in Anchors) if (a.Enabled) n++;
+                return MeshEmitterRate(n) * Math.Max(0f, Lifetime);
+            }
+        }
+
+        public bool ExceedsParticleBudget => (EmitterMode == FogEmitterMode.Mesh ? LiveParticlesMesh : LiveParticlesInner) > ParticleWarnThreshold
+                                             || LiveParticlesOuter > ParticleWarnThreshold;
+
+        /// <summary>maxParticles for an inner emitter that emits <paramref name="rate"/> per second (lifetime = Lifetime).</summary>
+        public int MaxParticles(float rate) => MaxParticles(rate, Lifetime);
 
         /// <summary>maxParticles for an emitter that emits <paramref name="rate"/> per second: headroom over rate × lifetime, hard-capped.</summary>
-        public int MaxParticles(float rate)
+        public static int MaxParticles(float rate, float lifetime)
         {
-            var expected = Math.Max(0f, rate) * Math.Max(0f, Lifetime) * 1.3f + 4f;
+            var expected = Math.Max(0f, rate) * Math.Max(0f, lifetime) * 1.3f + 4f;
             return (int)Math.Min(ParticleHardCap, Math.Max(8f, Math.Ceiling(expected)));
+        }
+
+        /// <summary>Canonical anchor names of a comma list ("chest, Hips"); empty text = no anchors. False on an unknown name.</summary>
+        public static bool TryParseAnchorList(string text, out List<string> names)
+        {
+            names = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            foreach (var part in text.Split(','))
+            {
+                var t = part.Trim();
+                if (t.Length == 0) continue;
+                string match = null;
+                foreach (var n in AnchorNames)
+                    if (string.Equals(n, t, StringComparison.OrdinalIgnoreCase)) { match = n; break; }
+                if (match == null) { names = null; return false; }
+                if (!names.Contains(match)) names.Add(match);
+            }
+            return true;
         }
 
         public static bool TryParseAlphaMode(string text, out FogAlphaMode mode) =>
@@ -236,11 +309,17 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("SpreadY", FogValueKind.Float, "Emitter shape scale vertically; below 1 flattens the fog"),
                 new FogKey("SpreadZ", FogValueKind.Float, "Emitter shape scale front/back"),
                 new FogKey("Drift", FogValueKind.Float, "Vertical drift of fog particles in m/s (world space); 0 = no plume"),
-                new FogKey("OuterEnabled", FogValueKind.Bool, "Second, wider and fainter fog layer around head, chest and hips"),
+                new FogKey("Trail", FogValueKind.Bool, "true = world space: fog particles stay where they were emitted, so moving leaves a trail; false = they follow the body"),
+                new FogKey("MeshRate", FogValueKind.Float, "Mesh emitter: particles per second on the body surface; 0 = Rate x enabled anchors"),
+                new FogKey("OuterEnabled", FogValueKind.Bool, "Second, wider fog layer on the OuterAnchors bones"),
+                new FogKey("OuterAnchors", FogValueKind.Text, "Bones of the outer layer as a comma list of anchor names (Head, Chest, Hips, LeftShoulder, RightShoulder, LeftHand, RightHand, LeftUpperLeg, RightUpperLeg, LeftLowerLeg, RightLowerLeg, LeftFoot, RightFoot); radius and offset come from the Anchor.* key"),
                 new FogKey("OuterRadiusMultiplier", FogValueKind.Float, "Outer layer radius as a multiple of the anchor radius"),
                 new FogKey("OuterAlphaFactor", FogValueKind.Float, "Outer layer alpha as a fraction of Alpha"),
                 new FogKey("OuterRateFactor", FogValueKind.Float, "Outer layer rate as a fraction of Rate"),
                 new FogKey("OuterSizeFactor", FogValueKind.Float, "Outer layer particle size as a multiple of Size"),
+                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer vertical shape scale (sideways it uses SpreadX/SpreadZ); below 1 flattens the ring"),
+                new FogKey("OuterLifetimeFactor", FogValueKind.Float, "Outer layer particle lifetime as a multiple of Lifetime"),
+                new FogKey("OuterTrail", FogValueKind.Bool, "Outer layer in world space (leaves a trail), like Trail for the inner layer"),
                 new FogKey("DistortionStrength", FogValueKind.Float, "Refraction strength when this tier's body mode is Distortion (shader property _RefractionIntensity)"),
                 new FogKey("DistortionColor", FogValueKind.Text, "Colour of the Distortion body mode as r,g,b,a (shader property _Color)"),
                 new FogKey("DistortionWave", FogValueKind.Float, "Ripple speed of the Distortion body mode (_WaveVel, normal map borrowed from staff_shield_shard); negative = the borrowed vanilla value"),
@@ -273,7 +352,13 @@ namespace InvisibilityPotion.Visuals
                 case "SpreadY": return FloatList.Format(SpreadY);
                 case "SpreadZ": return FloatList.Format(SpreadZ);
                 case "Drift": return FloatList.Format(Drift);
+                case "Trail": return Bool(Trail);
+                case "MeshRate": return FloatList.Format(MeshRate);
                 case "OuterEnabled": return Bool(OuterEnabled);
+                case "OuterAnchors": return string.Join(",", OuterAnchors);
+                case "OuterSpreadY": return FloatList.Format(OuterSpreadY);
+                case "OuterLifetimeFactor": return FloatList.Format(OuterLifetimeFactor);
+                case "OuterTrail": return Bool(OuterTrail);
                 case "OuterRadiusMultiplier": return FloatList.Format(OuterRadiusMultiplier);
                 case "OuterAlphaFactor": return FloatList.Format(OuterAlphaFactor);
                 case "OuterRateFactor": return FloatList.Format(OuterRateFactor);
@@ -306,6 +391,12 @@ namespace InvisibilityPotion.Visuals
                 case "Enabled": return SetBool(text, ref Enabled);
                 case "DynamicColor": return SetBool(text, ref DynamicColor);
                 case "OuterEnabled": return SetBool(text, ref OuterEnabled);
+                case "Trail": return SetBool(text, ref Trail);
+                case "OuterTrail": return SetBool(text, ref OuterTrail);
+                case "OuterAnchors":
+                    if (!TryParseAnchorList(text, out var outerAnchors)) return false;
+                    OuterAnchors = outerAnchors;
+                    return true;
                 case "Color":
                     if (!FloatList.TryParse(text, 3, out var rgb)) return false;
                     R = Clamp01(rgb[0]); G = Clamp01(rgb[1]); B = Clamp01(rgb[2]);
@@ -343,6 +434,9 @@ namespace InvisibilityPotion.Visuals
                 case "DistortionStrength": DistortionStrength = Math.Max(0f, v); return true;
                 case "DistortionWave": DistortionWave = v < 0f ? -1f : v; return true;
                 case "MeshOffset": MeshOffset = Math.Max(0f, v); return true;
+                case "MeshRate": MeshRate = Math.Max(0f, v); return true;
+                case "OuterSpreadY": OuterSpreadY = Math.Max(0.01f, v); return true;
+                case "OuterLifetimeFactor": OuterLifetimeFactor = Math.Max(0.05f, v); return true;
                 default: return false;
             }
         }

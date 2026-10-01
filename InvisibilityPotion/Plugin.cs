@@ -38,6 +38,8 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Humanoid", "StartAttack"),
             PatchHealth.TargetKey("Humanoid", "BlockAttack"),
             PatchHealth.TargetKey("VisEquipment", "UpdateLodgroup"),
+            PatchHealth.TargetKey("VisEquipment", "SetChestEquipped"),
+            PatchHealth.TargetKey("VisEquipment", "SetLegEquipped"),
             PatchHealth.TargetKey("Player", "CanConsumeItem"),
             PatchHealth.TargetKey("EnemyHud", "TestShow"),
             PatchHealth.TargetKey("ZNet", "UpdatePlayerList"),

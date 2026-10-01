@@ -115,20 +115,31 @@ namespace InvisibilityPotion.Items
             }));
         }
 
-        private const string EffectSourceMead = "MeadHealthMinor";
-
         /// <summary>
         /// Vanilla meads get their drink sound and particles from the consume status effect: StatusEffect.m_startEffects is created in
         /// Setup (TriggerStartEffects, StatusEffect.cs:128) and m_stopEffects in Stop (StatusEffect.cs:159). Ours start empty, so share the
-        /// EffectLists of MeadHealthMinor's effect (read-only use, no copy needed). Not applied to SE_Revealed.
+        /// EffectLists of a vanilla mead's effect (read-only use, no copy needed). The mead is [Veil] PotionVfxSource (default
+        /// MeadFrostResist, a bluish-white burst instead of the red health one), else MeadFrostResist, MeadTasty, MeadHealthMinor.
+        /// Not applied to SE_Revealed.
         /// </summary>
         private static void CopyConsumeEffects()
         {
-            var prefab = PrefabManager.Instance.GetPrefab(EffectSourceMead);
-            var source = prefab != null ? prefab.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_consumeStatusEffect : null;
+            StatusEffect source = null;
+            var configured = PluginConfig.PotionVfxSource;
+            foreach (var name in PotionVfx.Candidates(configured))
+            {
+                var prefab = PrefabManager.Instance.GetPrefab(name);
+                source = prefab != null ? prefab.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_consumeStatusEffect : null;
+                if (source != null)
+                {
+                    if (!string.Equals(name, configured?.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                        Plugin.Log.LogWarning($"potion effects: PotionVfxSource '{configured}' has no consume status effect; using {name}");
+                    break;
+                }
+            }
             if (source == null)
             {
-                Plugin.Log.LogWarning($"{EffectSourceMead} or its consume status effect not found; potions keep silent start/stop");
+                Plugin.Log.LogWarning($"potion effects: none of {string.Join(", ", PotionVfx.Candidates(configured))} has a consume status effect; potions keep silent start/stop");
                 return;
             }
             var copied = 0;

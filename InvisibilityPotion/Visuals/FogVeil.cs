@@ -11,8 +11,9 @@ namespace InvisibilityPotion.Visuals
     public enum BodyVeilMode { Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit }
 
     /// <summary>
-    /// Wraps a veiled player in flattened fog emitters that follow body bones (head, chest, hips, shoulders, hands, legs, feet;
-    /// optionally a second, wider and fainter layer on the trunk) and changes the body according to the tier's mode.
+    /// Wraps a veiled player in fog: an inner layer on body bones (head, chest, hips, shoulders, hands, legs, feet) or on the body
+    /// mesh surface, optionally a second, wide and flat outer layer on selected bones; each layer either follows the body (local
+    /// space) or leaves a trail (world space). Changes the body according to the tier's mode.
     /// Every change is recorded in a per-player snapshot; Remove restores it exactly, whichever mode applied it.
     /// Look values are static, per tier and live-tunable (Debug: ip_fog, ip_veil, ip_fogui); any change bumps
     /// <see cref="Version"/>, which makes the next Apply rebuild the veil. Apply is only called by VeilController.Refresh.
@@ -52,9 +53,10 @@ namespace InvisibilityPotion.Visuals
         public static Color ShadowColor = DefaultShadowColor;
         /// <summary>Spirit tint (rgb, alpha ignored); _TintColor = SpiritColor x SpiritStrength.</summary>
         public static Color SpiritColor = DefaultSpiritColor;
-        public static float SpiritStrength = 0.25f;
-        private static readonly Color DefaultShadowColor = new Color(0f, 0f, 0f, 0.12f);
-        private static readonly Color DefaultSpiritColor = new Color(0.6f, 0.7f, 0.8f, 1f);
+        public static float SpiritStrength = DefaultSpiritStrength;
+        public static readonly Color DefaultShadowColor = new Color(0f, 0f, 0f, 0.12f);
+        public static readonly Color DefaultSpiritColor = new Color(0.6f, 0.7f, 0.8f, 1f);
+        public const float DefaultSpiritStrength = 0.25f;
         /// <summary>Runtime body-mode override per tier (index 1..3), null = use the tier's config. Set by ip_veil.</summary>
         public static readonly BodyVeilMode?[] ModeOverride = new BodyVeilMode?[4];
         /// <summary>Bumped on every look change; a snapshot of another version is rebuilt on the next Apply.</summary>
@@ -106,7 +108,7 @@ namespace InvisibilityPotion.Visuals
             return false;
         }
 
-        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Off, BodyVeilMode.Distortion, BodyVeilMode.Distortion };
+        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Distortion, BodyVeilMode.Distortion, BodyVeilMode.Distortion };
 
         /// <summary>The tier's configured body mode, parsed once per LoadFromConfig.</summary>
         public static BodyVeilMode ConfiguredMode(int tier) => tier >= 1 && tier <= 3 ? _configuredModes[tier] : BodyVeilMode.Off;
@@ -188,7 +190,7 @@ namespace InvisibilityPotion.Visuals
             {
                 Tier = tier, IsLocal = isLocal, ForceHide = forceHide, Version = Version,
                 Requested = requested, Effective = Resolve(requested, isLocal, tier),
-                FogWanted = !forceHide && fog.Enabled && fog.Alpha > 0f && fog.Rate > 0f,
+                FogWanted = !forceHide && fog.Enabled && fog.Alpha > 0f,
             };
             _snapshots[p] = snap;
             if (snap.FogWanted) SpawnFog(p, snap);
@@ -373,10 +375,8 @@ namespace InvisibilityPotion.Visuals
             var inner = MakeFogMaterial(source, snap, color, s.Alpha, out var innerVertexAlpha);
             Material outer = null;
             var outerVertexAlpha = 0f;
-            if (s.OuterEnabled && s.OuterAlphaFactor > 0f && s.OuterRateFactor > 0f)
+            if (s.OuterEnabled && s.OuterAlphaFactor > 0f && s.OuterRateFactor > 0f && s.Rate > 0f && s.OuterAnchors.Count > 0)
                 outer = MakeFogMaterial(source, snap, color, Mathf.Clamp01(s.Alpha * s.OuterAlphaFactor), out outerVertexAlpha);
-
-            if (s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, inner, innerVertexAlpha, outer, outerVertexAlpha)) return;
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -384,27 +384,60 @@ namespace InvisibilityPotion.Visuals
                 _noAnimatorWarned = true;
                 Plugin.Log.LogWarning("veil fog: player has no animator; using one emitter at the player root");
             }
-            var anyEnabled = false;
-            foreach (var a in s.Anchors)
+
+            // Inner layer: the body surface (Mesh) or one emitter per enabled anchor (Bones, also the Mesh fallback).
+            var innerLayer = new FogLayer
             {
-                if (!a.Enabled) continue;
-                anyEnabled = true;
-                if (animator == null) break;
-                var bone = FindBone(animator, a.Name);
-                if (bone == null)
+                Rate = s.Rate, Size = s.Size, Lifetime = s.Lifetime, SpreadY = s.SpreadY, Trail = s.InnerTrailMode,
+                VertexAlpha = innerVertexAlpha, Material = inner,
+            };
+            if (!(s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, innerLayer)))
+            {
+                var anyEnabled = false;
+                foreach (var a in s.Anchors)
                 {
-                    if (_missingBoneWarned.Add(a.Name)) Plugin.Log.LogWarning($"veil fog: bone for anchor '{a.Name}' not found; anchor skipped");
-                    continue;
+                    if (!a.Enabled || s.Rate <= 0f) continue;
+                    anyEnabled = true;
+                    if (animator == null) break;
+                    var bone = BoneFor(animator, a.Name);
+                    if (bone == null) continue;
+                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, false, a.Radius, new Vector3(a.X, a.Y, a.Z), color, innerLayer, s, snap.MaterialHasColor));
                 }
-                var offset = new Vector3(a.X, a.Y, a.Z);
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, false, a.Radius, offset, s.Rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
-                if (outer != null && Array.IndexOf(FogSettings.OuterAnchorNames, a.Name) >= 0)
-                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, a.Radius * s.OuterRadiusMultiplier, offset, s.Rate * s.OuterRateFactor,
-                                              s.Size * s.OuterSizeFactor, color, outerVertexAlpha, outer, s, snap.MaterialHasColor));
+                // No animator at all: one emitter at chest height so the fog does not silently disappear.
+                if (animator == null && anyEnabled)
+                    snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", false, 0.4f, new Vector3(0f, 1f, 0f), color, innerLayer, s, snap.MaterialHasColor));
             }
-            // No animator at all: one emitter at chest height so the fog does not silently disappear.
-            if (animator == null && anyEnabled)
-                snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", false, 0.4f, new Vector3(0f, 1f, 0f), s.Rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
+
+            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter modes.
+            if (outer == null || animator == null) return;
+            var outerLayer = new FogLayer
+            {
+                Rate = s.Rate * s.OuterRateFactor, Size = s.Size * s.OuterSizeFactor, Lifetime = s.OuterLifetime, SpreadY = s.OuterSpreadY,
+                Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer,
+            };
+            foreach (var name in s.OuterAnchors)
+            {
+                var a = s.Anchor(name);
+                if (a == null) continue;
+                var bone = BoneFor(animator, a.Name);
+                if (bone == null) continue;
+                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, a.Radius * s.OuterRadiusMultiplier, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
+            }
+        }
+
+        private static Transform BoneFor(Animator animator, string anchor)
+        {
+            var bone = FindBone(animator, anchor);
+            if (bone == null && _missingBoneWarned.Add(anchor)) Plugin.Log.LogWarning($"veil fog: bone for anchor '{anchor}' not found; anchor skipped");
+            return bone;
+        }
+
+        /// <summary>Per-layer emission values shared by every emitter of one fog layer.</summary>
+        private sealed class FogLayer
+        {
+            public float Rate, Size, Lifetime, SpreadY, VertexAlpha;
+            public FogTrailMode Trail;
+            public Material Material;
         }
 
         /// <summary>Per-veil copy of the borrowed material with the layer's alpha split between material and particle colour.</summary>
@@ -460,8 +493,8 @@ namespace InvisibilityPotion.Visuals
             }
         }
 
-        private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, bool outerLayer, float radius, Vector3 offset, float rate, float size,
-                                               Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, bool outerLayer, float radius, Vector3 offset,
+                                               Color color, FogLayer layer, FogSettings s, bool materialHasColor)
         {
             var go = new GameObject(outerLayer ? OuterObjectName : FogObjectName);
             go.SetActive(false);   // configure before the system starts playing
@@ -472,27 +505,29 @@ namespace InvisibilityPotion.Visuals
             follower.Offset = offset;
             follower.Snap();
 
-            var ps = ConfigureSystem(go, rate, size, color, vertexAlpha, mat, s, materialHasColor);
+            var ps = ConfigureSystem(go, color, layer, s, materialHasColor);
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Sphere;
             shape.radius = Mathf.Max(0.001f, radius);
-            shape.scale = new Vector3(s.SpreadX, s.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
+            shape.scale = new Vector3(s.SpreadX, layer.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
 
+            // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
             ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = vertexAlpha };
+            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = layer.VertexAlpha };
         }
 
         private static readonly HashSet<string> _meshWarned = new HashSet<string>();
         private const string MeshAnchorName = "Mesh";
 
         /// <summary>
-        /// FogEmitterMode Mesh: one emitter per layer spawning on the body mesh surface (ShapeModule SkinnedMeshRenderer, like the
-        /// vanilla Ghost's black_smoke). Rate = Rate x enabled anchors, so the total matches the Bones mode. False (caller falls back
-        /// to Bones) when no readable body mesh exists: Unity cannot sample a mesh without Read/Write.
+        /// FogEmitterMode Mesh: one inner emitter spawning on the body mesh surface (ShapeModule SkinnedMeshRenderer, like the
+        /// vanilla Ghost's black_smoke). Rate = MeshRate, or Rate x enabled anchors when MeshRate is 0. The outer layer stays on
+        /// bones (SpawnFog). False (caller falls back to Bones) when no readable body mesh exists: Unity cannot sample a mesh
+        /// without Read/Write.
         /// </summary>
-        private static bool SpawnMeshFog(Player p, Snapshot snap, FogSettings s, Color color, Material inner, float innerVertexAlpha, Material outer, float outerVertexAlpha)
+        private static bool SpawnMeshFog(Player p, Snapshot snap, FogSettings s, Color color, FogLayer inner)
         {
             var smr = FindBodyRenderer(p);
             string problem = null;
@@ -506,12 +541,14 @@ namespace InvisibilityPotion.Visuals
             }
             var anchors = 0;
             foreach (var a in s.Anchors) if (a.Enabled) anchors++;
-            if (anchors == 0) return true;   // same as Bones with every anchor off: no fog
-            var rate = s.Rate * anchors;
-            snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, false, s.MeshOffset, rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
-            if (outer != null)
-                snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, true, Mathf.Max(0.05f, s.MeshOffset * s.OuterRadiusMultiplier), rate * s.OuterRateFactor,
-                                              s.Size * s.OuterSizeFactor, color, outerVertexAlpha, outer, s, snap.MaterialHasColor));
+            var rate = s.MeshEmitterRate(anchors);
+            if (rate <= 0f) return true;   // same as Bones with every anchor off: no inner fog
+            var layer = new FogLayer
+            {
+                Rate = rate, Size = inner.Size, Lifetime = inner.Lifetime, SpreadY = inner.SpreadY, Trail = inner.Trail,
+                VertexAlpha = inner.VertexAlpha, Material = inner.Material,
+            };
+            snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, s.MeshOffset, color, layer, s, snap.MaterialHasColor));
             if (_meshWarned.Add("ok:" + smr.name)) Plugin.Log.LogInfo($"veil fog: Mesh emitter on '{smr.name}' (mesh '{smr.sharedMesh.name}')");
             return true;
         }
@@ -531,13 +568,14 @@ namespace InvisibilityPotion.Visuals
             return ve != null && ve.m_bodyModel != null ? ve.m_bodyModel : first;
         }
 
-        private static FogEmitter SpawnMeshEmitter(Transform root, SkinnedMeshRenderer smr, bool outerLayer, float normalOffset, float rate, float size,
-                                                   Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        private static FogEmitter SpawnMeshEmitter(Transform root, SkinnedMeshRenderer smr, float normalOffset, Color color, FogLayer layer, FogSettings s, bool materialHasColor)
         {
-            var go = new GameObject(outerLayer ? OuterObjectName : FogObjectName);
+            var go = new GameObject(FogObjectName);
             go.SetActive(false);
-            go.transform.SetParent(root, false);   // identity under the player root; Local space keeps the particles with the player
-            var ps = ConfigureSystem(go, rate, size, color, vertexAlpha, mat, s, materialHasColor);
+            // Identity under the player root: new particles always spawn on the current body surface; Follow (local space) keeps
+            // them with the player, Trail (world space) leaves them where they were emitted.
+            go.transform.SetParent(root, false);
+            var ps = ConfigureSystem(go, color, layer, s, materialHasColor);
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.SkinnedMeshRenderer;
@@ -548,26 +586,34 @@ namespace InvisibilityPotion.Visuals
 
             go.SetActive(true);
             ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = MeshAnchorName, Outer = outerLayer, VertexAlpha = vertexAlpha };
+            return new FogEmitter { Go = go, Ps = ps, Anchor = MeshAnchorName, Outer = false, VertexAlpha = layer.VertexAlpha };
         }
 
-        /// <summary>Adds and configures the ParticleSystem shared by both emitter kinds (everything except the shape).</summary>
-        private static ParticleSystem ConfigureSystem(GameObject go, float rate, float size, Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        /// <summary>
+        /// Adds and configures the ParticleSystem shared by both emitter kinds (everything except the shape). Called while the
+        /// GameObject is still inactive, so the simulation space is set before the system ever plays.
+        /// </summary>
+        private static ParticleSystem ConfigureSystem(GameObject go, Color color, FogLayer layer, FogSettings s, bool materialHasColor)
         {
+            var rate = layer.Rate;
+            var size = layer.Size;
+            var vertexAlpha = layer.VertexAlpha;
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
             main.playOnAwake = true;
-            main.simulationSpace = ParticleSystemSimulationSpace.Local;   // particles stay with the bone
+            // Follow: local space, particles move with the emitter (bone / body). Trail: world space, the emitter (still parented to the
+            // bone or the body) spawns new particles at the body, existing ones stay where they are, so moving leaves a trail.
+            main.simulationSpace = layer.Trail == FogTrailMode.Trail ? ParticleSystemSimulationSpace.World : ParticleSystemSimulationSpace.Local;
             main.scalingMode = ParticleSystemScalingMode.Local;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(s.Lifetime * 0.8f, s.Lifetime * 1.2f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(layer.Lifetime * 0.8f, layer.Lifetime * 1.2f);
             main.startSpeed = s.Speed;
             main.startSize = new ParticleSystem.MinMaxCurve(size * 0.6f, size * 1.25f);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
             // With a material colour the tint lives there (it can follow the environment); else in the particle colour.
             main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
             main.gravityModifier = 0f;
-            main.maxParticles = s.MaxParticles(rate);
+            main.maxParticles = FogSettings.MaxParticles(rate, layer.Lifetime);
 
             var emission = ps.emission;
             emission.enabled = true;
@@ -589,7 +635,7 @@ namespace InvisibilityPotion.Visuals
             col.color = new ParticleSystem.MinMaxGradient(gradient);
 
             var psr = go.GetComponent<ParticleSystemRenderer>();
-            psr.sharedMaterial = mat;
+            psr.sharedMaterial = layer.Material;
             psr.renderMode = ParticleSystemRenderMode.Billboard;
             psr.shadowCastingMode = ShadowCastingMode.Off;
             psr.receiveShadows = false;
@@ -1019,8 +1065,11 @@ namespace InvisibilityPotion.Visuals
                 var body = p.m_visEquipment != null ? p.m_visEquipment.m_bodyModel : null;
                 foreach (var kv in snap.SharedMaterials)
                 {
-                    if (kv.Key == null) continue;
+                    if (kv.Key == null) continue;   // destroyed (old armour piece): nothing to restore
                     if (kv.Key == body && snap.Effective == BodyVeilMode.Spirit) CarryBodyChanges(kv.Key, kv.Value, snap);
+                    // Vanilla replaced the materials since the swap (they no longer hold one of ours): keep vanilla's, restoring
+                    // the snapshot would bring back stale ones.
+                    if (!HoldsOurMaterial(kv.Key)) continue;
                     kv.Key.sharedMaterials = kv.Value;
                 }
                 foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
@@ -1033,6 +1082,38 @@ namespace InvisibilityPotion.Visuals
             {
                 DestroyFog(snap);
             }
+        }
+
+        /// <summary>True when one of the renderer's materials is a veil material (ip_ghost, ip_shadow, ip_distortion_tN, ip_spirit) or a clone of one.</summary>
+        private static bool HoldsOurMaterial(Renderer r)
+        {
+            foreach (var m in r.sharedMaterials)
+                if (m != null && m.name.StartsWith("ip_", StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Armour change during a swap mode (task 10f): VisEquipment.SetChestEquipped/SetLegEquipped write the armour textures
+        /// through m_bodyModel.material (VisEquipment.cs:1025-1044, 1106-1125). With our material in the slot that write lands on
+        /// a clone of the veil material (Custom/Distortion and Standard have no _ChestTex, so it is lost) and the restore on
+        /// Remove would bring back the pre-change body. Called by a prefix right before such a write: puts the body's original
+        /// materials back and forgets them, so vanilla writes into the real body material. <see cref="ResumeBody"/> (postfix,
+        /// same frame, before rendering) snapshots the updated materials and swaps again. False when the body is not swapped.
+        /// </summary>
+        public bool SuspendBody(Player p, Renderer body)
+        {
+            if (p == null || body == null || !_snapshots.TryGetValue(p, out var snap) || !snap.SharedMaterials.TryGetValue(body, out var originals)) return false;
+            if (snap.Effective == BodyVeilMode.Spirit) CarryBodyChanges(body, originals, snap);
+            if (HoldsOurMaterial(body)) body.sharedMaterials = originals;
+            snap.SharedMaterials.Remove(body);
+            return true;
+        }
+
+        /// <summary>Re-applies the body mode after <see cref="SuspendBody"/>: the body (and new armour renderers) are snapshotted and swapped again.</summary>
+        public void ResumeBody(Player p)
+        {
+            if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
+            ApplyBody(p, snap);
         }
 
         /// <summary>

@@ -54,17 +54,110 @@ public class FogSettingsTests
         var t1 = FogSettings.Defaults(1);
         Assert.True(t1.Enabled);
         Assert.False(t1.OuterEnabled);
-        Assert.Equal(0f, t1.Drift);
-        Assert.Equal(0.35f, t1.SpreadY, 5);
+        Assert.Equal(FogEmitterMode.Mesh, t1.EmitterMode);
+        Assert.Equal(18f, t1.MeshRate, 5);
+        Assert.Equal(2.5f, t1.Rate, 5);
+        Assert.Equal(0.28f, t1.Size, 5);
+        Assert.Equal(0.02f, t1.Drift, 5);
+        Assert.Equal(0.5f, t1.SpreadY, 5);
+        Assert.True(t1.Trail);
+        Assert.Equal(FogTrailMode.Trail, t1.InnerTrailMode);
+        Assert.Equal(0.04f, t1.DistortionStrength, 5);
+        Assert.Equal(0.03f, t1.DA, 5);
         var t2 = FogSettings.Defaults(2);
         Assert.True(t2.Enabled);
+        Assert.False(t2.Trail);
+        Assert.Equal(FogEmitterMode.Bones, t2.EmitterMode);
+        Assert.Equal(0.4f, t2.Alpha, 5);
         Assert.True(t2.OuterEnabled);
-        Assert.Equal(0.45f, t2.Alpha, 5);
+        Assert.True(t2.OuterTrail);
+        Assert.Equal(FogTrailMode.Trail, t2.OuterTrailMode);
+        Assert.Equal(new[] { "Chest", "Hips", "Head", "LeftHand", "RightHand" }, t2.OuterAnchors);
+        Assert.Equal(6f, t2.OuterRadiusMultiplier, 5);
+        Assert.Equal(0.25f, t2.OuterSpreadY, 5);
+        Assert.Equal(0.75f, t2.OuterAlphaFactor, 5);
+        Assert.Equal(3.5f, t2.OuterSizeFactor, 5);
+        Assert.Equal(0.5f, t2.OuterRateFactor, 5);
+        Assert.Equal(3f, t2.OuterLifetime, 5);   // 2 s x 1.5
         Assert.Equal(0.1f, t2.DistortionStrength, 5);
         var t3 = FogSettings.Defaults(3);
         Assert.False(t3.Enabled);
         Assert.Equal(0.03f, t3.DistortionStrength, 5);
         Assert.Equal(0.02f, t3.DA, 5);
+        Assert.Equal(FogSettings.DefaultOuterAnchors, t3.OuterAnchors);
+    }
+
+    [Fact]
+    public void NewKeys_RoundTripAndParse()
+    {
+        var s = FogSettings.Defaults(3);
+        s.Trail = true; s.OuterTrail = true; s.MeshRate = 12.5f; s.OuterSpreadY = 0.2f; s.OuterLifetimeFactor = 2f;
+        s.OuterAnchors = new List<string> { "LeftFoot", "Head" };
+        var text = new Dictionary<string, string>();
+        foreach (var k in FogSettings.Keys) text[k.Name] = s.Get(k.Name);
+        Assert.Equal("LeftFoot,Head", text["OuterAnchors"]);
+        Assert.Equal("true", text["Trail"]);
+
+        var warnings = new List<string>();
+        var parsed = FogSettings.Parse(3, k => text.TryGetValue(k, out var v) ? v : null, warnings);
+
+        Assert.Empty(warnings);
+        Assert.True(parsed.Trail);
+        Assert.True(parsed.OuterTrail);
+        Assert.Equal(12.5f, parsed.MeshRate, 5);
+        Assert.Equal(0.2f, parsed.OuterSpreadY, 5);
+        Assert.Equal(2f, parsed.OuterLifetimeFactor, 5);
+        Assert.Equal(new[] { "LeftFoot", "Head" }, parsed.OuterAnchors);
+    }
+
+    [Fact]
+    public void OuterAnchors_CanonicalCaseUnknownRejectedEmptyAllowed()
+    {
+        var s = FogSettings.Defaults(2);
+        Assert.True(s.TrySet("OuterAnchors", " chest , HIPS,chest"));
+        Assert.Equal(new[] { "Chest", "Hips" }, s.OuterAnchors);
+        Assert.False(s.TrySet("OuterAnchors", "Chest,Tail"));
+        Assert.Equal(new[] { "Chest", "Hips" }, s.OuterAnchors);
+        Assert.True(s.TrySet("OuterAnchors", ""));
+        Assert.Empty(s.OuterAnchors);
+        Assert.Equal("", s.Get("OuterAnchors"));
+    }
+
+    [Fact]
+    public void NewKeys_ClampAndCloneIsDeep()
+    {
+        var s = FogSettings.Defaults(2);
+        Assert.True(s.TrySet("MeshRate", "-3"));
+        Assert.Equal(0f, s.MeshRate);
+        Assert.True(s.TrySet("OuterSpreadY", "0"));
+        Assert.Equal(0.01f, s.OuterSpreadY, 5);
+        Assert.True(s.TrySet("OuterLifetimeFactor", "0"));
+        Assert.Equal(0.05f, s.OuterLifetimeFactor, 5);
+        Assert.False(s.TrySet("OuterTrail", "maybe"));
+        var copy = s.Clone();
+        copy.OuterAnchors.Add("LeftFoot");
+        Assert.DoesNotContain("LeftFoot", s.OuterAnchors);
+    }
+
+    [Fact]
+    public void MeshRate_ZeroMeansRateTimesAnchors()
+    {
+        var s = FogSettings.Defaults(2);
+        s.Rate = 2f;
+        Assert.Equal(26f, s.MeshEmitterRate(13), 5);
+        s.MeshRate = 18f;
+        Assert.Equal(18f, s.MeshEmitterRate(13), 5);
+        Assert.Equal(18f * s.Lifetime, s.LiveParticlesMesh, 3);
+    }
+
+    [Fact]
+    public void OuterParticleBudget_UsesOuterLifetime()
+    {
+        var s = FogSettings.Defaults(2);   // rate 10, life 2, outer rate x0.5, life x1.5
+        Assert.Equal(15f, s.LiveParticlesOuter, 3);
+        Assert.Equal(FogSettings.MaxParticles(5f, 3f), (int)System.Math.Ceiling(5f * 3f * 1.3f + 4f));
+        s.OuterEnabled = false;
+        Assert.Equal(0f, s.LiveParticlesOuter);
     }
 
     [Theory]
@@ -124,14 +217,19 @@ public class FogSettingsTests
     [Fact]
     public void ParticleBudget_WarnsAndCaps()
     {
-        var s = FogSettings.Defaults(1);
+        var s = FogSettings.Defaults(2);   // Bones: per-emitter budget is Rate x Lifetime
         s.Rate = 4f; s.Lifetime = 5f;
         Assert.False(s.ExceedsParticleBudget);
         s.Rate = 30f; s.Lifetime = 8f;
         Assert.True(s.ExceedsParticleBudget);
         Assert.Equal(FogSettings.ParticleHardCap, s.MaxParticles(s.Rate));
         Assert.True(s.MaxParticles(0f) >= 8);
+        var mesh = FogSettings.Defaults(1);   // Mesh: MeshRate x Lifetime
+        Assert.False(mesh.ExceedsParticleBudget);
+        mesh.MeshRate = 60f;
+        Assert.True(mesh.ExceedsParticleBudget);
     }
+
     [Fact]
     public void NewLookKeys_DefaultsAndRoundTrip()
     {
@@ -176,7 +274,7 @@ public class FogSettingsTests
     public void Parse_MalformedFogMaterialKeepsDefaultAndWarns()
     {
         var warnings = new List<string>();
-        var parsed = FogSettings.Parse(1, k => k == "FogMaterial" ? "nope" : k == "FogEmitterMode" ? "x" : null, warnings);
+        var parsed = FogSettings.Parse(2, k => k == "FogMaterial" ? "nope" : k == "FogEmitterMode" ? "x" : null, warnings);
         Assert.Equal(2, warnings.Count);
         Assert.Equal(FogSettings.DefaultFogMaterial, parsed.FogMaterial);
         Assert.Equal(FogEmitterMode.Bones, parsed.EmitterMode);

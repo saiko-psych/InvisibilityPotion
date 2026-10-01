@@ -50,6 +50,14 @@ namespace InvisibilityPotion.Visuals
             Refresh();
         }
 
+        /// <summary>
+        /// Rebuilds one player's veil (UpdateLodgroup postfix after an equipment change). Order audit (task 10f): vanilla calls
+        /// UpdateLodgroup only after every Set*Equipped of the update has run (VisEquipment.cs:812-831), so the new item renderers
+        /// already carry their vanilla materials. Remove restores the old renderers (destroyed ones are skipped, renderers vanilla
+        /// re-materialised are left alone), then Refresh → Apply snapshots the new renderers' current, vanilla materials. No delay
+        /// is needed. The body renderer is not recreated; its armour textures are kept correct by SuspendBody/ResumeBody around
+        /// SetChestEquipped/SetLegEquipped (Patches/VisualPatches.cs).
+        /// </summary>
         public static void ForceRefresh(Player p)
         {
             if (_instance == null || p == null) return;
@@ -72,6 +80,22 @@ namespace InvisibilityPotion.Visuals
         {
             FogVeil.Bump();
             ForceRefreshAll();
+        }
+
+        /// <summary>Prefix of an armour write into the body material: hands the original body materials back (see FogVeil.SuspendBody).</summary>
+        public static bool SuspendBody(VisEquipment ve)
+        {
+            if (_instance == null || ve == null || ve.m_bodyModel == null) return false;
+            var p = ve.GetComponent<Player>();
+            return p != null && _instance._veil.SuspendBody(p, ve.m_bodyModel);
+        }
+
+        /// <summary>Postfix of <see cref="SuspendBody"/>: snapshots the updated body materials and swaps again.</summary>
+        public static void ResumeBody(VisEquipment ve)
+        {
+            if (_instance == null || ve == null) return;
+            var p = ve.GetComponent<Player>();
+            if (p != null) _instance._veil.ResumeBody(p);
         }
 
         /// <summary>Live particle count per emitter of a player's veil (Debug tuning window).</summary>

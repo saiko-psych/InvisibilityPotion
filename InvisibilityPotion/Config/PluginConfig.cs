@@ -26,6 +26,9 @@ namespace InvisibilityPotion.Config
         public static FogAlphaMode FogAlphaMode { get; private set; } = FogAlphaMode.Both;
         public static event Action Changed;
 
+        /// <summary>[Veil] PotionVfxSource: vanilla mead prefab whose start/stop effects the potions use (read at item registration).</summary>
+        public static string PotionVfxSource => _lookEntries.TryGetValue("PotionVfxSource", out var e) ? ((ConfigEntry<string>)e).Value : Items.PotionVfx.DefaultSource;
+
         /// <summary>The tier's fog/look settings from [Fog.TierN]. A fresh object per Refresh; FogVeil clones it for live tuning.</summary>
         public static FogSettings Fog(int tier)
         {
@@ -42,7 +45,7 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", "Off");
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", "Distortion");
             BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", "Distortion");
             BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", "Distortion");
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
@@ -60,6 +63,12 @@ namespace InvisibilityPotion.Config
             BindLook(VeilSection, "ShadowColor", "0,0,0,0.12", "Colour of the Shadow body mode as r,g,b,a (_Color of a copy of the vanilla ShadowPerson material, transparent; alpha = opacity)");
             BindLook(VeilSection, "SpiritColor", "0.6,0.7,0.8", "Tint of the Spirit body mode as r,g,b (Custom/Fallen Warrior _TintColor, multiplied by SpiritStrength)");
             BindLook(VeilSection, "SpiritStrength", 0.25f, "Intensity of the Spirit body mode (HDR multiplier on SpiritColor); 0 = invisible, vanilla Fallen Warrior is about 6");
+            BindLook(VeilSection, "PotionVfxSource", Items.PotionVfx.DefaultSource,
+                     "Vanilla mead whose drink and expire effects (sound, particle burst) the potions borrow, e.g. MeadFrostResist (bluish-white), MeadTasty, MeadHealthMinor (red). Read once at startup; falls back to MeadFrostResist, MeadTasty, MeadHealthMinor");
+#if DEBUG
+            Dev.FogTuningWindow.BindConfig(file);   // before MigrateAndDropOrphans, or the stored window values would be dropped as orphans
+#endif
+            MigrateLookDefaults();
             MigrateAndDropOrphans();
             Refresh();
         }
@@ -144,6 +153,40 @@ namespace InvisibilityPotion.Config
             orphans.Clear();
             _file.Save();
             Plugin.Log?.LogInfo($"Config: removed {names.Count} obsolete keys: {string.Join(", ", names)}");
+        }
+
+        /// <summary>Revision of the per-tier look defaults; bump when a default the user asked for must reach existing config files.</summary>
+        private const int LookDefaultsRevision = 1;
+
+        /// <summary>
+        /// Round F (task 10f) changed the tier I and II looks on the user's request (tier I: light distortion plus surface wisps that
+        /// trail; tier II: wide flat outer ring). Existing files keep their old values, so once per file ([Fog] LookDefaultsRevision
+        /// below the current revision) [Fog.Tier1] and [Fog.Tier2] are reset to the new defaults and a [Tier1] BodyVeilMode still on the
+        /// old default Off becomes Distortion. Tier III is untouched (approved as is). The log lists what happened.
+        /// </summary>
+        private static void MigrateLookDefaults()
+        {
+            var rev = _file.Bind(FogSection, "LookDefaultsRevision", 0,
+                "Internal: revision of the look defaults applied to this file. Below the plugin's revision, the tiers whose defaults changed are reset once");
+            if (rev.Value >= LookDefaultsRevision) return;
+            var saveOnSet = _file.SaveOnConfigSet;
+            _file.SaveOnConfigSet = false;
+            try
+            {
+                foreach (var t in new[] { 1, 2 })
+                    foreach (var kv in _fogEntries[t]) kv.Value.BoxedValue = kv.Value.DefaultValue;
+                var t1Mode = (ConfigEntry<string>)_tierEntries[1]["BodyVeilMode"];
+                var modeChanged = t1Mode.Value == "Off";
+                if (modeChanged) t1Mode.Value = "Distortion";
+                rev.Value = LookDefaultsRevision;
+                Plugin.Log?.LogInfo($"Config migration (look defaults revision {LookDefaultsRevision}): [Fog.Tier1] and [Fog.Tier2] reset to the new defaults" +
+                                    (modeChanged ? "; [Tier1] BodyVeilMode Off -> Distortion" : ""));
+            }
+            finally
+            {
+                _file.SaveOnConfigSet = saveOnSet;
+            }
+            _file.Save();
         }
 
         private static void BindGlobal<T>(string key, T value, string description) =>

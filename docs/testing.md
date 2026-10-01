@@ -80,3 +80,27 @@ Defaults are unchanged (T1 Off + fog, T2 Distortion + fog, T3 Distortion, no fog
 - [ ] Emitter `Mesh`: fog clings to the body surface, follows the animation; the readout shows `Mesh` counts. If the log says `Mesh emitter not possible (… not readable)`, the fog stays on Bones (report the line)
 - [ ] After every mode/material switch and when the effect ends: the body is restored exactly (armour textures, hair, skin colour), no leftover fog; change armour while veiled in Spirit mode, then let the effect end and check the new armour shows correctly
 - [ ] `Save`, restart: `[Veil] ShadowColor/SpiritColor/SpiritStrength` and `[Fog.TierN] FogMaterial/FogEmitterMode/MeshOffset/DistortionWave` come back
+
+## Plan 2 – Round F: trails, outer ring, potion burst, tuning window v2 (task 10f)
+
+New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once to them and switches a `[Tier1] BodyVeilMode` still on `Off` to `Distortion`; the log says `Config migration (look defaults revision 1)`; tier III is untouched):
+- T1: Distortion 0.04 (alpha 0.03) plus small wisps on the body surface (`FogEmitterMode Mesh`, `MeshRate 18`; Bones fallback 2.5 per bone), size 0.28, life 4 s, alpha 0.3, `Trail = true`: the wisps stay behind when you move. No outer layer.
+- T2: Distortion 0.1 (alpha 0.08), dense thin inner layer on the bones (rate 10, size 0.45, life 2 s, alpha 0.4, follows the body) plus a wide flat outer ring on Chest, Hips, Head, LeftHand, RightHand (`OuterRadiusMultiplier 6` ≈ 1.5 m around the chest, `OuterSpreadY 0.25`, alpha ×0.75, size ×3.5 ≈ 1.5 m puffs, rate ×0.5, life ×1.5, `OuterTrail = true`).
+- T3 unchanged (Distortion 0.03, alpha 0.02, no fog).
+- New `[Fog.TierN]` keys: `Trail`, `MeshRate` (0 = Rate × enabled anchors), `OuterAnchors` (comma list), `OuterSpreadY`, `OuterLifetimeFactor`, `OuterTrail`. Console: `ip_fog [tN] trail on|off`, `outertrail on|off`, `outeranchors Chest,Hips,Head`, `outerspready <v>`, `outerlife <v>`, `meshrate <v>`.
+- Potions borrow the drink/expire effects of `[Veil] PotionVfxSource` (default `MeadFrostResist`, needs a restart).
+- `ip_fogui` v2: scaled window (`[Dev] TuningWindowScale`, 0 = screen height / 1080, Scale -/+ in the header), drag by the title, resize with the grip bottom right (size and position are remembered in `[Dev] TuningWindowRect`). Every value is one row: label, big slider (mouse wheel steps), `-`, typed field (Enter or clicking elsewhere applies), `+`, `R` (default). Shift = fine (step/10), Ctrl = coarse (step×10) on `-`/`+` and the wheel. Labels turn yellow with `*` when the value differs from the saved file. Foldouts: Fog inner, Fog outer (with outer anchor checkboxes), Anchors (compact radius/x/y/z fields), Look. Footer: `Save`, `Reset` (re-read file), `Defaults Tn`, `Undo` (one level, after Reset/Defaults/Copy), `Give Tn`, `Close`, `Copy Tn to T…`, `Preview follows tab`. Status line shows `Pending…` or `Applied hh:mm:ss`.
+
+What to compare:
+- [ ] Log: `Config migration (look defaults revision 1)` once (not on the second start); `potion effects: copied … effects from <name>` names `MeadFrostResist`'s effect (or a warning naming the fallback); `Patch health: … 0 missing` (now includes `VisEquipment.SetChestEquipped` and `VisEquipment.SetLegEquipped`)
+- [ ] T1 standing: faint shimmer of the body plus small wisps on the body surface that keep its shape (no blob). If the log says `Mesh emitter not possible`, the wisps sit on the 13 bones instead (report the line)
+- [ ] T1 walking/running: a clear wisp trail behind you that fades within ~4 s; standing still, the wisps gather on the body again
+- [ ] T2 standing: dense thin fog close to the body plus a clearly visible wide, flat ring (about 1.5 m around the chest/hips, at head and hand height); report if the ring is still invisible or a solid wall
+- [ ] T2 walking: the inner fog moves with you, the outer ring leaves a shorter trail than T1
+- [ ] Drinking any tier: whitish/bluish burst instead of the red health burst; the expire effect matches
+- [ ] Armour swap: in T2 (Distortion) take off / change chest and legs armour, let the effect expire: the body shows exactly the armour you now wear (no old chest/leg textures, no blue glass). Repeat once with Spirit and once with Shadow via `ip_veil`
+- [ ] Window: scale fits the screen (text readable at 1440p/4K), `Scale +/-` changes it; drag and resize, close, reopen, restart: the window comes back at the same place and size
+- [ ] Window rows: dragging the slider, wheel over the slider, `-`/`+` with and without Shift/Ctrl, typing a value plus Enter, typing then clicking elsewhere, `R` → each changes the fog after ~0.2 s; the label turns yellow; after `Save` the yellow marks disappear
+- [ ] `Copy T2 to T1`, then `Undo` → T1 is back; `Defaults T1` then `Save` writes the defaults; `Preview follows tab` on → switching tabs gives that tier after ~0.6 s
+- [ ] After `Close`, game keys work at once (no stuck text focus), the camera captures the mouse again
+- [ ] `ip_fog t2 outeranchors Chest,Hips` and `ip_fog t1 trail off` still work and show up in the window

@@ -162,8 +162,9 @@ namespace InvisibilityPotion.Dev
             public override string Name => "ip_fog";
             public override string Help =>
                 "ip_fog [t1|t2|t3] ...: tier defaults to your current one (else 1) | ip_fog [tN]: print | ip_fog [tN] <key> <value>, keys: enabled, rate, size, life, speed, alpha, " +
-                "dynamic, spreadx, spready, spreadz, drift, outer (on|off), outerradius, outeralpha, outerrate, outersize, material (swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
-                "emitter (bones|mesh), meshoffset, wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
+                "dynamic, spreadx, spready, spreadz, drift, trail (on|off), outer (on|off), outerradius, outeralpha, outerrate, outersize, outerspready, outerlife, outertrail (on|off), " +
+                "outeranchors (comma list, e.g. Chest,Hips,Head), material (swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
+                "emitter (bones|mesh), meshoffset, meshrate (0 = rate x anchors), wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
                 "ip_fog alphamode <both|material|vertex> | ip_fog [tN] anchor <name> on|off | radius <v> | offset x y z | ip_fog [tN] save | ip_fog reset | ip_fogui: tuning window";
 
             private static readonly System.Collections.Generic.Dictionary<string, string> Aliases = new System.Collections.Generic.Dictionary<string, string>
@@ -171,6 +172,7 @@ namespace InvisibilityPotion.Dev
                 ["life"] = "Lifetime", ["dynamic"] = "DynamicColor", ["outer"] = "OuterEnabled", ["outerradius"] = "OuterRadiusMultiplier",
                 ["outeralpha"] = "OuterAlphaFactor", ["outerrate"] = "OuterRateFactor", ["outersize"] = "OuterSizeFactor",
                 ["material"] = "FogMaterial", ["emitter"] = "FogEmitterMode", ["wave"] = "DistortionWave",
+                ["outerlife"] = "OuterLifetimeFactor", ["outerspready"] = "OuterSpreadY", ["outertrail"] = "OuterTrail", ["outeranchors"] = "OuterAnchors",
             };
 
             public override void Run(string[] args)
@@ -242,15 +244,17 @@ namespace InvisibilityPotion.Dev
                 var s = FogVeil.Fog[tier];
                 Say($"T{tier} fog {(s.Enabled ? "on" : "off")}: rate {s.Rate}/s per emitter, size {s.Size} m, life {s.Lifetime} s, speed {s.Speed}, alpha {s.Alpha}, " +
                     $"color {s.Get("Color")} (dynamic {s.DynamicColor}), spread {s.SpreadX}/{s.SpreadY}/{s.SpreadZ}, drift {s.Drift}, alphamode {FogVeil.AlphaMode}, " +
-                    $"material {s.FogMaterial}, emitter {s.EmitterMode} (mesh offset {s.MeshOffset})");
-                Say($"  outer {(s.OuterEnabled ? "on" : "off")}: radius x{s.OuterRadiusMultiplier}, alpha x{s.OuterAlphaFactor}, rate x{s.OuterRateFactor}, size x{s.OuterSizeFactor}; " +
+                    $"material {s.FogMaterial}, emitter {s.EmitterMode} (mesh offset {s.MeshOffset}, mesh rate {s.MeshRate}), {s.InnerTrailMode}");
+                Say($"  outer {(s.OuterEnabled ? "on" : "off")} on {s.Get("OuterAnchors")}: radius x{s.OuterRadiusMultiplier}, alpha x{s.OuterAlphaFactor}, rate x{s.OuterRateFactor}, " +
+                    $"size x{s.OuterSizeFactor}, life x{s.OuterLifetimeFactor}, spread y {s.OuterSpreadY}, {s.OuterTrailMode}; " +
                     $"~{s.LiveParticlesInner:0} live particles per inner emitter{(s.ExceedsParticleBudget ? $" (over {Fog.FogSettings.ParticleWarnThreshold})" : "")}");
                 foreach (var a in s.Anchors) Say($"  anchor {a.Name}: {a.Format()}  (on|off,radius,x,y,z)");
             }
 
             public override System.Collections.Generic.List<string> CommandOptionList() =>
                 new System.Collections.Generic.List<string> { "t1", "t2", "t3", "enabled", "rate", "size", "life", "speed", "alpha", "color", "dynamic", "spreadx", "spready", "spreadz",
-                    "drift", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "material", "emitter", "meshoffset", "wave", "alphamode", "anchor", "save", "reset" };
+                    "drift", "trail", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "outerspready", "outerlife", "outertrail", "outeranchors",
+                    "material", "emitter", "meshoffset", "meshrate", "wave", "alphamode", "anchor", "save", "reset" };
         }
 
         private class FogUiCommand : ConsoleCommand

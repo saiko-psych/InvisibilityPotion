@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using BepInEx.Configuration;
 using HarmonyLib;
 using InvisibilityPotion.Visuals;
 using UnityEngine;
@@ -10,39 +11,79 @@ using Cfg = InvisibilityPotion.Config;
 namespace InvisibilityPotion.Dev
 {
     /// <summary>
-    /// Debug-only IMGUI window for live veil tuning (ip_fogui). Edits FogVeil's per-tier look in memory and re-applies it
-    /// through VeilController.LookChanged (debounced while a slider is dragged); Save writes [Fog.TierN]/[Veil] (and the
-    /// body mode of a tier with an override), Reset re-reads the file. While the window owns the mouse, the game camera
-    /// releases the cursor and player input is blocked (patch below); F7 hands the mouse back to the game and returns it.
+    /// Debug-only IMGUI window for live veil tuning (ip_fogui), layout per docs/ideas/2026-10-02-imgui-tuning-ux.md. Edits
+    /// FogVeil's per-tier look in memory and re-applies it through VeilController.LookChanged (debounced 0.2 s); Save writes
+    /// [Fog.TierN]/[Veil] (and the body mode of a tier with an override), Reset re-reads the file. The whole window is scaled
+    /// with GUI.matrix ([Dev] TuningWindowScale, 0 = screen height / 1080, at least 1); position and size are remembered in
+    /// [Dev] TuningWindowRect. Every numeric value is one Row: label (yellow with * when it differs from the saved file), big
+    /// slider (mouse wheel steps), -, typed field (Enter or focus loss applies), +, R (default). Shift = step/10, Ctrl = step×10.
+    /// While the window owns the mouse, the game camera releases the cursor and player input is blocked (patch below); F7 hands
+    /// the mouse back to the game and returns it.
     /// </summary>
     internal sealed class FogTuningWindow : MonoBehaviour
     {
         private const int WindowId = 0x1F06;
-        private const float Width = 420f;
         private const float ApplyDelay = 0.2f;
+        private const float PreviewDelay = 0.6f;
         private const KeyCode MouseToggleKey = KeyCode.F7;
+        private const float LabelWidth = 150f;
+        private const float FieldWidth = 64f;
+        private const float SmallFieldWidth = 52f;
+        private const float ButtonWidth = 28f;
+        private const float RowHeight = 26f;
+        private const float MinWidth = 520f;
+        private const float MinHeight = 320f;
+        private const float DefaultWidth = 620f;
+        private const float HeaderHeight = 104f;   // title bar, tabs, info and status lines
+        private const float FooterHeight = 74f;    // two button rows
+        private const float GripSize = 18f;
+        private const float MaxScale = 2.5f;
         private static readonly string[] Tabs = { "Tier 1", "Tier 2", "Tier 3" };
         private static readonly BodyVeilMode[] Modes = (BodyVeilMode[])Enum.GetValues(typeof(BodyVeilMode));
+        private static readonly Color ChangedColor = new Color(1f, 0.85f, 0.35f);
+        private static readonly FogSettings[] Defaults = { null, FogSettings.Defaults(1), FogSettings.Defaults(2), FogSettings.Defaults(3) };
 
         private static FogTuningWindow _instance;
+        private static ConfigEntry<float> _scaleEntry;
+        private static ConfigEntry<string> _rectEntry;
 
         private bool _open;
         private bool _mouseToWindow = true;
         private bool _savedCapture = true;
-        private Rect _rect = new Rect(40f, 40f, Width, 200f);
+        private Rect _rect;
+        private bool _rectLoaded;
+        private float _scale = 1f;
         private int _tab;
         private Vector2 _scroll;
-        private bool _showAnchors = true;
+        private bool _foldInner = true, _foldOuter = true, _foldAnchors, _foldLook = true;
         private bool _dirty;
         private float _dirtySince;
+        private string _appliedAt = "-";
         private string _status = "";
         private float _countsTimer;
         private readonly List<KeyValuePair<string, int>> _counts = new List<KeyValuePair<string, int>>();
-        private GUIStyle _warn;
-        private static GUIStyle _bold;
+        private bool _previewFollowsTab;
+        private float _previewAt = -1f;
+        private bool _resizing;
+        private Vector2 _resizeMouse, _resizeSize;
+        private LookState _undo;
+        // Typed fields: text while a field has focus, keyed by control name; committed on Enter or when focus leaves it.
+        private readonly Dictionary<string, string> _buf = new Dictionary<string, string>();
+        private string _prevFocus = "";
+        private string _commitId;
+        private GUIStyle _bold, _warn, _wrap, _fold, _slider, _thumb, _status1, _grip;
 
         /// <summary>True while the window is open and owns the mouse: player input is blocked.</summary>
         public static bool BlocksGameInput => _instance != null && _instance._open && _instance._mouseToWindow;
+
+        /// <summary>Binds [Dev] TuningWindowScale / TuningWindowRect. Called from PluginConfig.Bind before orphans are dropped.</summary>
+        public static void BindConfig(ConfigFile file)
+        {
+            _scaleEntry = file.Bind("Dev", "TuningWindowScale", 0f,
+                "Scale of the ip_fogui window (Debug builds); 0 = automatic (screen height / 1080, at least 1). Clamped to 1..2.5");
+            _rectEntry = file.Bind("Dev", "TuningWindowRect", "",
+                "Position and size of the ip_fogui window as x,y,width,height in unscaled window units (Debug builds); empty = default");
+        }
 
         public static bool Toggle()
         {
@@ -75,6 +116,11 @@ namespace InvisibilityPotion.Dev
             else
             {
                 if (_dirty) ApplyNow();
+                _resizing = false;
+                _buf.Clear();
+                _commitId = null;
+                GUIUtility.keyboardControl = 0;   // a focused text field must not keep swallowing game keys
+                SaveRect();
                 if (cam != null) cam.m_mouseCapture = _savedCapture;   // the camera locks the cursor again on its next update
             }
         }
@@ -91,6 +137,12 @@ namespace InvisibilityPotion.Dev
                 if (!_mouseToWindow && cam != null) cam.m_mouseCapture = _savedCapture;
             }
             if (_dirty && Time.unscaledTime - _dirtySince >= ApplyDelay) ApplyNow();
+            if (_previewAt >= 0f && Time.unscaledTime >= _previewAt)
+            {
+                _previewAt = -1f;
+                var tier = _tab + 1;
+                if (DevCommands.CurrentTier() != tier) Give(tier);
+            }
             _countsTimer -= Time.unscaledDeltaTime;
             if (_countsTimer <= 0f)
             {
@@ -123,86 +175,234 @@ namespace InvisibilityPotion.Dev
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
-            if (_bold == null) _bold = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-            if (_warn == null) _warn = new GUIStyle(GUI.skin.label) { normal = { textColor = new Color(1f, 0.55f, 0.35f) }, wordWrap = true };
-            _rect = GUILayout.Window(WindowId, _rect, DrawWindow, "Veil tuning (ip_fogui)", GUILayout.Width(Width));
+            EnsureStyles();
+            _scale = CurrentScale();
+            if (!_rectLoaded) LoadRect();
+            var matrix = GUI.matrix;
+            GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(_scale, _scale, 1f));   // mouse events are transformed too
+            try
+            {
+                HandleResize();
+                _rect = GUI.Window(WindowId, _rect, DrawWindow, "Veil tuning (ip_fogui)");
+                ClampRect();
+            }
+            finally
+            {
+                GUI.matrix = matrix;
+            }
+        }
+
+        // ---------- window geometry ----------
+
+        private static float CurrentScale()
+        {
+            var v = _scaleEntry != null ? _scaleEntry.Value : 0f;
+            if (v <= 0f) v = Screen.height / 1080f;
+            return Mathf.Clamp(v, 1f, MaxScale);
+        }
+
+        private void ChangeScale(float delta)
+        {
+            var v = Mathf.Clamp(Mathf.Round((CurrentScale() + delta) * 10f) / 10f, 1f, MaxScale);
+            if (_scaleEntry != null) _scaleEntry.Value = v;
+            _scale = v;
+        }
+
+        private void LoadRect()
+        {
+            _rectLoaded = true;
+            var screenH = Screen.height / _scale;
+            _rect = new Rect(40f, 40f, DefaultWidth, Mathf.Min(900f, screenH - 80f));
+            if (_rectEntry != null && FloatList.TryParse(_rectEntry.Value, 4, out var v))
+                _rect = new Rect(v[0], v[1], Mathf.Max(MinWidth, v[2]), Mathf.Max(MinHeight, v[3]));
+            ClampRect();
+        }
+
+        private void SaveRect()
+        {
+            if (_rectEntry == null || !_rectLoaded) return;
+            var text = FloatList.Format(Mathf.Round(_rect.x), Mathf.Round(_rect.y), Mathf.Round(_rect.width), Mathf.Round(_rect.height));
+            if (_rectEntry.Value != text) _rectEntry.Value = text;   // SaveOnConfigSet writes the file
+        }
+
+        /// <summary>Keeps the window on screen (screen size in scaled window units).</summary>
+        private void ClampRect()
+        {
+            var w = Screen.width / _scale;
+            var h = Screen.height / _scale;
+            _rect.width = Mathf.Clamp(_rect.width, MinWidth, Mathf.Max(MinWidth, w));
+            _rect.height = Mathf.Clamp(_rect.height, MinHeight, Mathf.Max(MinHeight, h));
+            _rect.x = Mathf.Clamp(_rect.x, 0f, Mathf.Max(0f, w - _rect.width));
+            _rect.y = Mathf.Clamp(_rect.y, 0f, Mathf.Max(0f, h - _rect.height));
+        }
+
+        /// <summary>Resize drag, started by the grip inside the window; handled outside it so it keeps working when the mouse leaves the window.</summary>
+        private void HandleResize()
+        {
+            if (!_resizing) return;
+            var e = Event.current;
+            if (e.rawType == EventType.MouseUp)
+            {
+                _resizing = false;
+                SaveRect();
+                return;
+            }
+            if (e.rawType != EventType.MouseDrag) return;
+            var d = e.mousePosition - _resizeMouse;
+            _rect.width = Mathf.Max(MinWidth, _resizeSize.x + d.x);
+            _rect.height = Mathf.Max(MinHeight, _resizeSize.y + d.y);
+        }
+
+        private void DrawGrip()
+        {
+            var grip = new Rect(_rect.width - GripSize - 2f, _rect.height - GripSize - 2f, GripSize, GripSize);
+            GUI.Box(grip, GUIContent.none, _grip);
+            var e = Event.current;
+            if (e.type == EventType.MouseDown && e.button == 0 && grip.Contains(e.mousePosition))
+            {
+                _resizing = true;
+                _resizeMouse = e.mousePosition + _rect.position;   // window-local → window units
+                _resizeSize = _rect.size;
+                e.Use();
+            }
         }
 
         // ---------- window ----------
 
         private void DrawWindow(int id)
         {
+            TrackFocus();
             var current = DevCommands.CurrentTier();
-            _tab = GUILayout.Toolbar(_tab, Tabs);
-            var tier = _tab + 1;
-            var s = FogVeil.Fog[tier];
-            GUILayout.Label($"Active effect: {(current == 0 ? "none" : "T" + current)}   |   {MouseToggleKey}: mouse to {(_mouseToWindow ? "game" : "window")}");
-
-            var height = Mathf.Clamp(Screen.height - 220f, 200f, 640f);
-            _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(height));
-
-            Header("Fog");
-            s.Enabled = Toggle("Enabled", s.Enabled);
-            s.DynamicColor = Toggle("Dynamic colour (50% environment fog)", s.DynamicColor);
-            s.Rate = Slider("Rate /s", s.Rate, 0f, 30f);
-            s.Size = Slider("Size m", s.Size, 0.1f, 3f);
-            s.Lifetime = Slider("Lifetime s", s.Lifetime, 0.2f, 8f);
-            s.Speed = Slider("Speed m/s", s.Speed, 0f, 1f);
-            s.Alpha = Slider("Alpha", s.Alpha, 0f, 1f);
-            s.R = Slider("Colour R", s.R, 0f, 1f);
-            s.G = Slider("Colour G", s.G, 0f, 1f);
-            s.B = Slider("Colour B", s.B, 0f, 1f);
-            s.SpreadX = Slider("Spread X", s.SpreadX, 0.1f, 3f);
-            s.SpreadY = Slider("Spread Y", s.SpreadY, 0.1f, 3f);
-            s.SpreadZ = Slider("Spread Z", s.SpreadZ, 0.1f, 3f);
-            s.Drift = Slider("Drift m/s", s.Drift, -0.5f, 0.5f);
-            DrawFogMaterial(s);
-            DrawEmitterMode(s, tier == current);
-            GUILayout.Label($"~{s.LiveParticlesInner:0} live particles per emitter (rate x lifetime){(s.OuterEnabled ? $", outer ~{s.LiveParticlesOuter:0}" : "")}");
-            if (s.ExceedsParticleBudget)
-                GUILayout.Label($"Over {FogSettings.ParticleWarnThreshold} particles per emitter: heavy and capped at {FogSettings.ParticleHardCap}. Lower rate or lifetime.", _warn);
-
-            Header("Outer layer (head, chest, hips)");
-            s.OuterEnabled = Toggle("Outer layer", s.OuterEnabled);
-            s.OuterRadiusMultiplier = Slider("Radius x", s.OuterRadiusMultiplier, 1f, 5f);
-            s.OuterAlphaFactor = Slider("Alpha x", s.OuterAlphaFactor, 0f, 1f);
-            s.OuterRateFactor = Slider("Rate x", s.OuterRateFactor, 0f, 2f);
-            s.OuterSizeFactor = Slider("Size x", s.OuterSizeFactor, 0.5f, 3f);
-
-            Header("Look");
-            DrawModes(tier);
-            s.DistortionStrength = Slider("Distortion", s.DistortionStrength, 0f, 0.5f);
-            s.DA = Slider("Distortion alpha", s.DA, 0f, 0.5f);
-            DrawWave(s);
-            Header("Shadow / Spirit (all tiers)");
-            var shadow = FogVeil.ShadowColor;
-            var shadowAlpha = Slider("Shadow alpha", shadow.a, 0f, 0.6f);
-            if (!Mathf.Approximately(shadowAlpha, shadow.a)) { shadow.a = shadowAlpha; FogVeil.ShadowColor = shadow; }
-            FogVeil.SpiritStrength = Slider("Spirit strength", FogVeil.SpiritStrength, 0f, 3f);
-            var spirit = FogVeil.SpiritColor;
-            var sr = Slider("Spirit R", spirit.r, 0f, 1f);
-            var sg = Slider("Spirit G", spirit.g, 0f, 1f);
-            var sb = Slider("Spirit B", spirit.b, 0f, 1f);
-            if (sr != spirit.r || sg != spirit.g || sb != spirit.b) FogVeil.SpiritColor = new Color(sr, sg, sb, 1f);
 
             GUILayout.BeginHorizontal();
-            Header("Anchors");
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button(_showAnchors ? "hide" : "show", GUILayout.Width(60f))) _showAnchors = !_showAnchors;
+            var tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Height(RowHeight));
+            GUILayout.Space(8f);
+            GUILayout.Label($"Scale {_scale.ToString("0.0", CultureInfo.InvariantCulture)}", GUILayout.Width(64f));
+            if (GUILayout.Button("-", GUILayout.Width(ButtonWidth), GUILayout.Height(RowHeight))) ChangeScale(-0.1f);
+            if (GUILayout.Button("+", GUILayout.Width(ButtonWidth), GUILayout.Height(RowHeight))) ChangeScale(0.1f);
             GUILayout.EndHorizontal();
-            if (_showAnchors) DrawAnchors(s, tier == current);
+            if (tab != _tab) { _tab = tab; OnTabChanged(); }
+            var tier = _tab + 1;
+            var s = FogVeil.Fog[tier];
+            var saved = Cfg.PluginConfig.Fog(tier);
+            var def = Defaults[tier];
 
+            GUILayout.Label($"Active: {(current == 0 ? "none" : "T" + current)}  |  {MouseToggleKey}: mouse to {(_mouseToWindow ? "game" : "window")}  |  Shift fine, Ctrl coarse");
+            GUILayout.Label((_dirty ? "Pending…" : $"Applied {_appliedAt}") + (_status.Length > 0 ? "   " + _status : ""), _status1);
+
+            var bodyHeight = Mathf.Max(80f, _rect.height - HeaderHeight - FooterHeight);
+            _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(bodyHeight));
+            _foldInner = Foldout(_foldInner, "Fog inner layer");
+            if (_foldInner) DrawInner(s, saved, def, tier == current);
+            _foldOuter = Foldout(_foldOuter, "Fog outer layer (wide, flat)");
+            if (_foldOuter) DrawOuter(s, saved, def);
+            _foldAnchors = Foldout(_foldAnchors, "Anchors (inner bones: radius, offset x y z)");
+            if (_foldAnchors) DrawAnchors(s, saved, tier == current);
+            _foldLook = Foldout(_foldLook, "Look (body mode, distortion, shadow, spirit)");
+            if (_foldLook) DrawLook(s, saved, def, tier);
             GUILayout.EndScrollView();
-            DrawButtons(tier);
-            if (_status.Length > 0) GUILayout.Label(_status);
-            GUI.DragWindow(new Rect(0f, 0f, 10000f, 22f));
+
+            DrawFooter(tier);
+            _commitId = null;   // a commit whose row was not drawn (folded, other tab) is dropped
+            DrawGrip();
+            GUI.DragWindow(new Rect(0f, 0f, 10000f, 20f));
+        }
+
+        private void DrawInner(FogSettings s, FogSettings saved, FogSettings def, bool live)
+        {
+            ToggleRow("Enabled", ref s.Enabled, def.Enabled, saved.Enabled);
+            ToggleRow("Trail (world space: particles stay behind)", ref s.Trail, def.Trail, saved.Trail);
+            ToggleRow("Dynamic colour (50% environment fog)", ref s.DynamicColor, def.DynamicColor, saved.DynamicColor);
+            DrawEmitterMode(s, live);
+            if (s.EmitterMode == FogEmitterMode.Mesh)
+            {
+                Row("Mesh rate /s (0 = auto)", ref s.MeshRate, 0f, 100f, 1f, def.MeshRate, saved.MeshRate);
+                Row("Mesh offset m", ref s.MeshOffset, 0f, 0.3f, 0.01f, def.MeshOffset, saved.MeshOffset);
+            }
+            Row(s.EmitterMode == FogEmitterMode.Mesh ? "Rate /s per bone" : "Rate /s", ref s.Rate, 0f, 30f, 0.5f, def.Rate, saved.Rate);
+            Row("Size m", ref s.Size, 0.05f, 3f, 0.05f, def.Size, saved.Size);
+            Row("Lifetime s", ref s.Lifetime, 0.2f, 10f, 0.25f, def.Lifetime, saved.Lifetime);
+            Row("Speed m/s", ref s.Speed, 0f, 1f, 0.01f, def.Speed, saved.Speed);
+            Row("Alpha", ref s.Alpha, 0f, 1f, 0.05f, def.Alpha, saved.Alpha);
+            Row("Colour R", ref s.R, 0f, 1f, 0.05f, def.R, saved.R);
+            Row("Colour G", ref s.G, 0f, 1f, 0.05f, def.G, saved.G);
+            Row("Colour B", ref s.B, 0f, 1f, 0.05f, def.B, saved.B);
+            Row("Spread X", ref s.SpreadX, 0.05f, 3f, 0.05f, def.SpreadX, saved.SpreadX);
+            Row("Spread Y", ref s.SpreadY, 0.05f, 3f, 0.05f, def.SpreadY, saved.SpreadY);
+            Row("Spread Z", ref s.SpreadZ, 0.05f, 3f, 0.05f, def.SpreadZ, saved.SpreadZ);
+            Row("Drift m/s", ref s.Drift, -0.5f, 0.5f, 0.01f, def.Drift, saved.Drift);
+            DrawFogMaterial(s);
+            var inner = s.EmitterMode == FogEmitterMode.Mesh ? $"mesh ~{s.LiveParticlesMesh:0}" : $"~{s.LiveParticlesInner:0} per bone emitter";
+            GUILayout.Label($"Live particles (rate x lifetime): {inner}{(s.OuterEnabled ? $", outer ~{s.LiveParticlesOuter:0} per emitter" : "")}", _wrap);
+            if (s.ExceedsParticleBudget)
+                GUILayout.Label($"Over {FogSettings.ParticleWarnThreshold} particles per emitter: heavy and capped at {FogSettings.ParticleHardCap}. Lower rate or lifetime.", _warn);
+        }
+
+        private void DrawOuter(FogSettings s, FogSettings saved, FogSettings def)
+        {
+            ToggleRow("Outer layer", ref s.OuterEnabled, def.OuterEnabled, saved.OuterEnabled);
+            ToggleRow("Outer trail (world space)", ref s.OuterTrail, def.OuterTrail, saved.OuterTrail);
+            Row("Radius x anchor", ref s.OuterRadiusMultiplier, 0.5f, 12f, 0.5f, def.OuterRadiusMultiplier, saved.OuterRadiusMultiplier);
+            Row("Spread Y (flat < 1)", ref s.OuterSpreadY, 0.05f, 2f, 0.05f, def.OuterSpreadY, saved.OuterSpreadY);
+            Row("Alpha x", ref s.OuterAlphaFactor, 0f, 2f, 0.05f, def.OuterAlphaFactor, saved.OuterAlphaFactor);
+            Row("Rate x", ref s.OuterRateFactor, 0f, 2f, 0.05f, def.OuterRateFactor, saved.OuterRateFactor);
+            Row("Size x", ref s.OuterSizeFactor, 0.5f, 8f, 0.25f, def.OuterSizeFactor, saved.OuterSizeFactor);
+            Row("Lifetime x", ref s.OuterLifetimeFactor, 0.2f, 4f, 0.1f, def.OuterLifetimeFactor, saved.OuterLifetimeFactor);
+            var anchorsChanged = s.Get("OuterAnchors") != saved.Get("OuterAnchors");
+            var c = GUI.color;
+            if (anchorsChanged) GUI.color = ChangedColor;
+            GUILayout.Label((anchorsChanged ? "* " : "") + "Outer anchors (radius from the anchor, x multiplier above):", _wrap);
+            GUI.color = c;
+            var names = FogSettings.AnchorNames;
+            const int perRow = 3;
+            for (var i = 0; i < names.Length; i += perRow)
+            {
+                GUILayout.BeginHorizontal();
+                for (var j = i; j < Mathf.Min(i + perRow, names.Length); j++)
+                {
+                    var on = s.OuterAnchors.Contains(names[j]);
+                    var v = GUILayout.Toggle(on, names[j], GUILayout.Width(150f));
+                    if (v == on) continue;
+                    if (v) s.OuterAnchors.Add(names[j]);
+                    else s.OuterAnchors.Remove(names[j]);
+                    MarkDirty();
+                }
+                GUILayout.EndHorizontal();
+            }
+        }
+
+        private void DrawLook(FogSettings s, FogSettings saved, FogSettings def, int tier)
+        {
+            DrawModes(tier);
+            Row("Distortion", ref s.DistortionStrength, 0f, 0.5f, 0.01f, def.DistortionStrength, saved.DistortionStrength);
+            Row("Distortion alpha", ref s.DA, 0f, 0.5f, 0.01f, def.DA, saved.DA);
+            DrawWave(s, saved);
+
+            GUILayout.Label("Shadow / Spirit (all tiers)", _bold);
+            var g = Cfg.PluginConfig.Global;
+            var shadow = FogVeil.ShadowColor;
+            var shadowAlpha = shadow.a;
+            var savedShadow = FloatList.TryParse(g.ShadowColor, 4, out var sc) ? sc[3] : FogVeil.DefaultShadowColor.a;
+            if (Row("Shadow alpha", ref shadowAlpha, 0f, 0.6f, 0.02f, FogVeil.DefaultShadowColor.a, savedShadow)) { shadow.a = shadowAlpha; FogVeil.ShadowColor = shadow; }
+            var strength = FogVeil.SpiritStrength;
+            if (Row("Spirit strength", ref strength, 0f, 3f, 0.05f, FogVeil.DefaultSpiritStrength, g.SpiritStrength)) FogVeil.SpiritStrength = strength;
+            var spirit = FogVeil.SpiritColor;
+            var savedSpirit = FloatList.TryParse(g.SpiritColor, 3, out var sp) ? new Color(sp[0], sp[1], sp[2]) : FogVeil.DefaultSpiritColor;
+            float r = spirit.r, gg = spirit.g, b = spirit.b;
+            var changed = Row("Spirit R", ref r, 0f, 1f, 0.05f, FogVeil.DefaultSpiritColor.r, savedSpirit.r);
+            changed |= Row("Spirit G", ref gg, 0f, 1f, 0.05f, FogVeil.DefaultSpiritColor.g, savedSpirit.g);
+            changed |= Row("Spirit B", ref b, 0f, 1f, 0.05f, FogVeil.DefaultSpiritColor.b, savedSpirit.b);
+            if (changed) FogVeil.SpiritColor = new Color(r, gg, b, 1f);
         }
 
         private void DrawModes(int tier)
         {
             var active = FogVeil.ModeFor(tier);
             var ov = FogVeil.ModeOverride[tier];
+            var c = GUI.color;
+            if (active != FogVeil.ConfiguredMode(tier)) GUI.color = ChangedColor;
             GUILayout.Label($"Body mode: {active} ({(ov.HasValue ? "override" : "config")}; config {FogVeil.ConfiguredMode(tier)})");
+            GUI.color = c;
             const int perRow = 4;
             for (var i = 0; i < Modes.Length; i += perRow)
             {
@@ -210,13 +410,11 @@ namespace InvisibilityPotion.Dev
                 for (var j = i; j < Mathf.Min(i + perRow, Modes.Length); j++)
                 {
                     var m = Modes[j];
-                    var label = m == active ? $"[{m}]" : m.ToString();
-                    if (GUILayout.Button(label)) { FogVeil.ModeOverride[tier] = m; MarkDirty(); }
+                    if (GUILayout.Button(m == active ? $"[{m}]" : m.ToString(), GUILayout.Height(RowHeight))) { FogVeil.ModeOverride[tier] = m; MarkDirty(); }
                 }
                 GUILayout.EndHorizontal();
             }
-            // Defaults stay unchanged until the user decides; these are the research's candidates for "nearly invisible".
-            if (tier == 3) GUILayout.Label("T3 candidates to compare: Spirit (faint light shell, keeps armour) and Shadow (dark see-through silhouette).");
+            if (tier == 3) GUILayout.Label("T3 candidates to compare: Spirit (faint light shell, keeps armour) and Shadow (dark see-through silhouette).", _wrap);
             if (ov.HasValue && GUILayout.Button("Use config mode")) { FogVeil.ModeOverride[tier] = null; MarkDirty(); }
         }
 
@@ -224,13 +422,13 @@ namespace InvisibilityPotion.Dev
         {
             GUILayout.Label($"Fog material: {s.FogMaterial}");
             var names = FogSettings.FogMaterialNames;
-            for (var i = 0; i < names.Length; i += 2)   // two per row: the names are long for the 420 px window
+            for (var i = 0; i < names.Length; i += 2)
             {
                 GUILayout.BeginHorizontal();
                 for (var j = i; j < Mathf.Min(i + 2, names.Length); j++)
                 {
                     var label = names[j] == s.FogMaterial ? $"[{names[j]}]" : names[j];
-                    if (GUILayout.Button(label) && names[j] != s.FogMaterial) { s.FogMaterial = names[j]; MarkDirty(); }
+                    if (GUILayout.Button(label, GUILayout.Height(RowHeight)) && names[j] != s.FogMaterial) { s.FogMaterial = names[j]; MarkDirty(); }
                 }
                 GUILayout.EndHorizontal();
             }
@@ -239,50 +437,53 @@ namespace InvisibilityPotion.Dev
         private void DrawEmitterMode(FogSettings s, bool live)
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Emitter", GUILayout.Width(110f));
+            GUILayout.Label("Emitter", GUILayout.Width(LabelWidth));
             foreach (FogEmitterMode m in Enum.GetValues(typeof(FogEmitterMode)))
             {
                 var label = m == s.EmitterMode ? $"[{m}]" : m.ToString();
-                if (GUILayout.Button(label) && m != s.EmitterMode) { s.EmitterMode = m; MarkDirty(); }
+                if (GUILayout.Button(label, GUILayout.Height(RowHeight)) && m != s.EmitterMode) { s.EmitterMode = m; MarkDirty(); }
             }
             GUILayout.EndHorizontal();
-            if (s.EmitterMode != FogEmitterMode.Mesh) return;
-            s.MeshOffset = Slider("Mesh offset m", s.MeshOffset, 0f, 0.3f);
-            GUILayout.Label($"Mesh: one emitter on the body surface, rate = Rate x enabled anchors{(live ? $"; live {Count("Mesh")}" : "")}. " +
-                            "Falls back to Bones when the body mesh is not readable (see log).");
+            if (s.EmitterMode == FogEmitterMode.Mesh)
+                GUILayout.Label($"Mesh: one emitter on the body surface{(live ? $", live {Count("Mesh")}" : "")}; falls back to Bones when the body mesh is not readable (see log).", _wrap);
         }
 
-        private void DrawWave(FogSettings s)
+        private void DrawWave(FogSettings s, FogSettings saved)
         {
             var borrowed = FogVeil.BorrowedDistortionWave;
-            var text = s.DistortionWave >= 0f ? s.DistortionWave.ToString("0.##", CultureInfo.InvariantCulture)
-                     : float.IsNaN(borrowed) ? "borrowed" : $"borrowed {borrowed.ToString("0.##", CultureInfo.InvariantCulture)}";
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"Distortion wave: {text}", GUILayout.Width(200f));
-            if (s.DistortionWave >= 0f && GUILayout.Button("use borrowed")) { s.DistortionWave = -1f; MarkDirty(); }
-            GUILayout.EndHorizontal();
-            var start = s.DistortionWave >= 0f ? s.DistortionWave : float.IsNaN(borrowed) ? 5f : borrowed;
-            var v = Slider("   wave", start, 0f, 10f);
-            if (v != start) s.DistortionWave = v;
+            var fallback = float.IsNaN(borrowed) ? 5f : borrowed;
+            var wave = s.DistortionWave >= 0f ? s.DistortionWave : fallback;
+            var savedWave = saved.DistortionWave >= 0f ? saved.DistortionWave : fallback;
+            if (Row(s.DistortionWave >= 0f ? "Distortion wave" : "Distortion wave (borrowed)", ref wave, 0f, 10f, 0.5f, fallback, savedWave)) s.DistortionWave = wave;
+            if (s.DistortionWave >= 0f && GUILayout.Button("Use the borrowed vanilla wave")) { s.DistortionWave = -1f; MarkDirty(); }
         }
 
-        private void DrawAnchors(FogSettings s, bool live)
+        private void DrawAnchors(FogSettings s, FogSettings saved, bool live)
         {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("", GUILayout.Width(140f));
+            GUILayout.Label("live", GUILayout.Width(60f));
+            foreach (var h in new[] { "radius", "x", "y", "z" }) GUILayout.Label(h, GUILayout.Width(SmallFieldWidth + 4f));
+            GUILayout.EndHorizontal();
             foreach (var a in s.Anchors)
             {
+                var sa = saved.Anchor(a.Name);
+                var changed = sa == null || sa.Format() != a.Format();
                 GUILayout.BeginHorizontal();
-                GUI.changed = false;
-                var on = GUILayout.Toggle(a.Enabled, a.Name, GUILayout.Width(120f));
-                if (GUI.changed) { a.Enabled = on; MarkDirty(); }
-                GUILayout.Label(live ? Count(a.Name) : "", GUILayout.Width(80f));
+                var c = GUI.color;
+                if (changed) GUI.color = ChangedColor;
+                var on = GUILayout.Toggle(a.Enabled, (changed ? "* " : "") + a.Name, GUILayout.Width(140f));
+                GUI.color = c;
+                if (on != a.Enabled) { a.Enabled = on; MarkDirty(); }
+                GUILayout.Label(live ? Count(a.Name) : "", GUILayout.Width(60f));
+                var key = $"a{_tab}.{a.Name}.";
+                if (Field(key + "r", ref a.Radius, 0f, 2f, 0.01f, SmallFieldWidth)) MarkDirty();
+                if (Field(key + "x", ref a.X, -1f, 1f, 0.01f, SmallFieldWidth)) MarkDirty();
+                if (Field(key + "y", ref a.Y, -1f, 1f, 0.01f, SmallFieldWidth)) MarkDirty();
+                if (Field(key + "z", ref a.Z, -1f, 1f, 0.01f, SmallFieldWidth)) MarkDirty();
                 GUILayout.EndHorizontal();
-                if (!a.Enabled) continue;
-                a.Radius = Slider("   radius", a.Radius, 0f, 0.6f);
-                a.X = Slider("   offset x", a.X, -0.5f, 0.5f);
-                a.Y = Slider("   offset y", a.Y, -0.5f, 0.5f);
-                a.Z = Slider("   offset z", a.Z, -0.5f, 0.5f);
             }
-            if (!live) GUILayout.Label("Particle counts show for the tier of your active effect.");
+            GUILayout.Label(live ? "Mouse wheel over a field steps it (Shift fine, Ctrl coarse)." : "Particle counts show for the tier of your active effect.", _wrap);
         }
 
         private string Count(string anchor)
@@ -293,19 +494,44 @@ namespace InvisibilityPotion.Dev
                 if (kv.Key == anchor) inner = kv.Value;
                 else if (kv.Key == anchor + " (outer)") outer = kv.Value;
             }
-            if (inner < 0) return "-";
-            return outer < 0 ? $"{inner} p" : $"{inner}+{outer} p";
+            if (inner < 0 && outer < 0) return "-";
+            if (outer < 0) return $"{inner} p";
+            return inner < 0 ? $"0+{outer} p" : $"{inner}+{outer} p";
         }
 
-        private void DrawButtons(int tier)
+        private void DrawFooter(int tier)
         {
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Apply now")) ApplyNow();
-            if (GUILayout.Button("Save")) Save();
-            if (GUILayout.Button("Reset")) Reset();
-            if (GUILayout.Button($"Give T{tier}")) Give(tier);
-            if (GUILayout.Button("Close")) SetOpen(false);
+            if (GUILayout.Button("Save", GUILayout.Height(RowHeight))) Save();
+            if (GUILayout.Button("Reset", GUILayout.Height(RowHeight))) Reset();
+            if (GUILayout.Button($"Defaults T{tier}", GUILayout.Height(RowHeight))) ApplyDefaults(tier);
+            var en = GUI.enabled;
+            GUI.enabled = _undo != null;
+            if (GUILayout.Button("Undo", GUILayout.Height(RowHeight))) Undo();
+            GUI.enabled = en;
+            if (GUILayout.Button($"Give T{tier}", GUILayout.Height(RowHeight))) Give(tier);
+            if (GUILayout.Button("Close", GUILayout.Height(RowHeight))) SetOpen(false);
             GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Copy T{tier} to", GUILayout.Width(80f));
+            for (var t = 1; t <= 3; t++)
+                if (t != tier && GUILayout.Button($"T{t}", GUILayout.Width(48f), GUILayout.Height(RowHeight))) Copy(tier, t);
+            GUILayout.FlexibleSpace();
+            var follow = GUILayout.Toggle(_previewFollowsTab, "Preview follows tab (gives the tab's tier)");
+            if (follow != _previewFollowsTab)
+            {
+                _previewFollowsTab = follow;
+                if (follow) _previewAt = Time.unscaledTime + PreviewDelay;
+            }
+            GUILayout.Space(GripSize);
+            GUILayout.EndHorizontal();
+        }
+
+        private void OnTabChanged()
+        {
+            GUIUtility.keyboardControl = 0;
+            if (_previewFollowsTab) _previewAt = Time.unscaledTime + PreviewDelay;   // debounced: rapid tab clicks give one effect
         }
 
         // ---------- actions ----------
@@ -320,10 +546,12 @@ namespace InvisibilityPotion.Dev
         {
             _dirty = false;
             VeilController.LookChanged();
+            _appliedAt = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         }
 
         private void Save()
         {
+            if (_dirty) ApplyNow();
             for (var t = 1; t <= 3; t++)
             {
                 Cfg.PluginConfig.SaveFog(t, FogVeil.Fog[t], FogVeil.AlphaMode);
@@ -331,15 +559,53 @@ namespace InvisibilityPotion.Dev
                 if (ov.HasValue) Cfg.PluginConfig.SaveBodyVeilMode(t, ov.Value.ToString());
             }
             FogVeil.SaveGlobalLook();
+            Cfg.PluginConfig.Refresh();   // saved values (yellow marks) and configured modes follow the file; raises Changed, which re-applies
+            for (var t = 1; t <= 3; t++)
+                if (FogVeil.ModeOverride[t] == FogVeil.ConfiguredMode(t)) FogVeil.ModeOverride[t] = null;
             Say("saved [Fog.Tier1..3], [Veil] (ghost, shadow, spirit) and overridden body modes to the config file");
         }
 
         private void Reset()
         {
+            PushUndo();
             for (var t = 1; t <= 3; t++) FogVeil.ModeOverride[t] = null;
             _dirty = false;
+            _buf.Clear();
             Cfg.PluginConfig.Reload();   // raises Changed: VeilController reloads the look and re-applies it
-            Say("reloaded the config file; body mode overrides cleared");
+            Say("reloaded the config file; body mode overrides cleared (Undo brings the edits back)");
+        }
+
+        private void ApplyDefaults(int tier)
+        {
+            PushUndo();
+            FogVeil.Fog[tier] = FogSettings.Defaults(tier);
+            FogVeil.TryParseMode(Cfg.PluginConfig.DefaultBodyVeilMode(tier), out var mode);
+            FogVeil.ModeOverride[tier] = mode == FogVeil.ConfiguredMode(tier) ? (BodyVeilMode?)null : mode;
+            _buf.Clear();
+            MarkDirty();
+            Say($"T{tier} set to the plugin defaults (body mode {mode}); Save to keep, Undo to go back");
+        }
+
+        private void Copy(int from, int to)
+        {
+            PushUndo();
+            FogVeil.Fog[to] = FogVeil.Fog[from].Clone();
+            var mode = FogVeil.ModeFor(from);
+            FogVeil.ModeOverride[to] = mode == FogVeil.ConfiguredMode(to) ? (BodyVeilMode?)null : mode;
+            MarkDirty();
+            Say($"copied the T{from} look (fog, distortion, body mode {mode}) to T{to}; Undo to go back");
+        }
+
+        private void PushUndo() => _undo = LookState.Capture();
+
+        private void Undo()
+        {
+            if (_undo == null) return;
+            _undo.Restore();
+            _undo = null;
+            _buf.Clear();
+            ApplyNow();
+            Say("undone");
         }
 
         private void Give(int tier)
@@ -357,31 +623,184 @@ namespace InvisibilityPotion.Dev
             Plugin.Log.LogInfo($"[ip_fogui] {line}");
         }
 
-        // ---------- controls ----------
-
-        private static void Header(string text) => GUILayout.Label(text, _bold);
-
-        private float Slider(string label, float value, float min, float max)
+        /// <summary>One level of undo: every value the window edits.</summary>
+        private sealed class LookState
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(label, GUILayout.Width(110f));
-            GUI.changed = false;
-            var v = GUILayout.HorizontalSlider(value, min, max);
-            var changed = GUI.changed;   // only a user drag counts; an out-of-range config value is not clamped silently
-            GUILayout.Label(value.ToString("0.###", CultureInfo.InvariantCulture), GUILayout.Width(44f));
-            GUILayout.EndHorizontal();
-            if (!changed || Mathf.Abs(v - value) < 1e-6f) return value;
-            MarkDirty();
-            return v;
+            private readonly FogSettings[] _fog = new FogSettings[4];
+            private readonly BodyVeilMode?[] _modes = new BodyVeilMode?[4];
+            private Color _shadow, _spirit;
+            private float _spiritStrength;
+
+            public static LookState Capture()
+            {
+                var s = new LookState { _shadow = FogVeil.ShadowColor, _spirit = FogVeil.SpiritColor, _spiritStrength = FogVeil.SpiritStrength };
+                for (var t = 1; t <= 3; t++) { s._fog[t] = FogVeil.Fog[t].Clone(); s._modes[t] = FogVeil.ModeOverride[t]; }
+                return s;
+            }
+
+            public void Restore()
+            {
+                for (var t = 1; t <= 3; t++) { FogVeil.Fog[t] = _fog[t].Clone(); FogVeil.ModeOverride[t] = _modes[t]; }
+                FogVeil.ShadowColor = _shadow;
+                FogVeil.SpiritColor = _spirit;
+                FogVeil.SpiritStrength = _spiritStrength;
+            }
         }
 
-        private bool Toggle(string label, bool value)
+        // ---------- controls ----------
+
+        private void EnsureStyles()
         {
+            if (_slider != null) return;
+            _bold = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
+            _warn = new GUIStyle(GUI.skin.label) { normal = { textColor = new Color(1f, 0.55f, 0.35f) }, wordWrap = true };
+            _wrap = new GUIStyle(GUI.skin.label) { wordWrap = true };
+            _status1 = new GUIStyle(GUI.skin.label) { normal = { textColor = new Color(0.6f, 0.9f, 0.6f) } };
+            _fold = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft, fixedHeight = RowHeight };
+            // Tall slider area (easy to hit) with a thin dark track drawn in its middle, and a big bright thumb.
+            _slider = new GUIStyle(GUI.skin.horizontalSlider)
+            {
+                fixedHeight = 22f, margin = new RectOffset(4, 4, 2, 2), padding = new RectOffset(0, 0, 0, 0), border = new RectOffset(0, 0, 0, 0),
+            };
+            var track = Tex(4, 22, (x, y) => y >= 8 && y <= 13 ? new Color(0.12f, 0.12f, 0.14f, 1f) : new Color(0f, 0f, 0f, 0f));
+            _slider.normal.background = _slider.hover.background = _slider.active.background = _slider.focused.background = track;
+            _thumb = new GUIStyle(GUI.skin.horizontalSliderThumb)
+            {
+                fixedWidth = 16f, fixedHeight = 22f, margin = new RectOffset(0, 0, 0, 0), padding = new RectOffset(0, 0, 0, 0),
+                border = new RectOffset(0, 0, 0, 0), overflow = new RectOffset(0, 0, 0, 0),
+            };
+            _thumb.normal.background = Tex(1, 1, (x, y) => new Color(0.78f, 0.8f, 0.86f, 1f));
+            _thumb.hover.background = Tex(1, 1, (x, y) => new Color(0.92f, 0.94f, 1f, 1f));
+            _thumb.active.background = _thumb.focused.background = Tex(1, 1, (x, y) => new Color(1f, 0.85f, 0.35f, 1f));
+            _grip = new GUIStyle(GUI.skin.box) { normal = { background = Tex(1, 1, (x, y) => new Color(0.6f, 0.62f, 0.7f, 0.8f)) } };
+        }
+
+        private static Texture2D Tex(int w, int h, Func<int, int, Color> pixel)
+        {
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+                t.SetPixel(x, y, pixel(x, y));
+            t.Apply();
+            return t;
+        }
+
+        private bool Foldout(bool open, string title) => GUILayout.Toggle(open, (open ? "[-]  " : "[+]  ") + title, _fold);
+
+        /// <summary>Focus moved away from a typed field since the last pass: that field commits its text (in its own Row/Field call).</summary>
+        private void TrackFocus()
+        {
+            var focus = GUI.GetNameOfFocusedControl() ?? "";
+            if (focus == _prevFocus) return;
+            if (_prevFocus.Length > 0 && _buf.ContainsKey(_prevFocus)) _commitId = _prevFocus;
+            _buf.Remove(focus);   // a newly focused field starts from the current value
+            _prevFocus = focus;
+        }
+
+        private static float StepModifier(Event e) => e.shift ? 0.1f : e.control ? 10f : 1f;
+
+        private static float Snap(float v, float grid) => grid > 0f ? Mathf.Round(v / grid) * grid : v;
+
+        private static string Fmt(float v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+
+        private static bool Same(float a, float b) => Mathf.Abs(a - b) < 1e-5f;
+
+        /// <summary>
+        /// [label][slider][-][field][+][R]. The label turns yellow with * when the value differs from the saved file; R returns to
+        /// the default. Slider drag, wheel and +/- snap to step/10; typed values are taken as typed (clamped to min..max).
+        /// A value outside min..max (from the config or the console) is never clamped unless the user edits it. True when changed.
+        /// </summary>
+        private bool Row(string label, ref float v, float min, float max, float step, float def, float saved)
+        {
+            var e = Event.current;
+            var old = v;
+            var mod = StepModifier(e);
+            var grid = step * 0.1f;
+            GUILayout.BeginHorizontal();
+            var changedFromSaved = !Same(v, saved);
+            var c = GUI.color;
+            if (changedFromSaved) GUI.color = ChangedColor;
+            GUILayout.Label(new GUIContent((changedFromSaved ? "* " : "") + label, $"saved {Fmt(saved)}, default {Fmt(def)}"),
+                            GUILayout.Width(LabelWidth), GUILayout.Height(RowHeight));
+            GUI.color = c;
+
             GUI.changed = false;
-            var v = GUILayout.Toggle(value, label);
-            if (!GUI.changed || v == value) return value;
+            var slid = GUILayout.HorizontalSlider(Mathf.Clamp(v, min, max), min, max, _slider, _thumb, GUILayout.MinWidth(90f), GUILayout.ExpandWidth(true));
+            if (GUI.changed) v = Snap(slid, grid);
+            if (e.type == EventType.ScrollWheel && GUILayoutUtility.GetLastRect().Contains(e.mousePosition))
+            {
+                v = Mathf.Clamp(Snap(v - Mathf.Sign(e.delta.y) * step * mod, grid * Mathf.Min(1f, mod)), min, max);
+                e.Use();   // the scroll view must not scroll as well
+            }
+
+            if (GUILayout.Button("-", GUILayout.Width(ButtonWidth), GUILayout.Height(RowHeight))) v = Mathf.Clamp(Snap(v - step * mod, grid * Mathf.Min(1f, mod)), min, max);
+            TypedField("r" + _tab + "." + label, ref v, min, max, FieldWidth);
+            if (GUILayout.Button("+", GUILayout.Width(ButtonWidth), GUILayout.Height(RowHeight))) v = Mathf.Clamp(Snap(v + step * mod, grid * Mathf.Min(1f, mod)), min, max);
+            var en = GUI.enabled;
+            GUI.enabled = en && !Same(v, def);
+            if (GUILayout.Button(new GUIContent("R", $"default {Fmt(def)}"), GUILayout.Width(ButtonWidth), GUILayout.Height(RowHeight))) v = def;
+            GUI.enabled = en;
+            GUILayout.EndHorizontal();
+
+            if (Same(v, old)) { v = old; return false; }
             MarkDirty();
-            return v;
+            return true;
+        }
+
+        /// <summary>Compact typed field (anchor grid): wheel over it steps by step (Shift/Ctrl modifiers). True when changed.</summary>
+        private bool Field(string id, ref float v, float min, float max, float step, float width)
+        {
+            var e = Event.current;
+            var old = v;
+            TypedField(id, ref v, min, max, width);
+            if (e.type == EventType.ScrollWheel && GUILayoutUtility.GetLastRect().Contains(e.mousePosition))
+            {
+                var mod = StepModifier(e);
+                v = Mathf.Clamp(Snap(v - Mathf.Sign(e.delta.y) * step * mod, step * 0.1f * Mathf.Min(1f, mod)), min, max);
+                e.Use();
+            }
+            return !Same(v, old);
+        }
+
+        /// <summary>Text field that shows the value and applies typed text only on Enter or when it loses focus (never per keystroke).</summary>
+        private void TypedField(string id, ref float v, float min, float max, float width)
+        {
+            var e = Event.current;
+            var focused = GUI.GetNameOfFocusedControl() == id;
+            var commit = _commitId == id;
+            if (focused && e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter))
+            {
+                commit = true;
+                e.Use();
+                GUIUtility.keyboardControl = 0;
+            }
+            var shown = focused && _buf.TryGetValue(id, out var b) ? b : Fmt(v);
+            GUI.SetNextControlName(id);
+            var text = GUILayout.TextField(shown, GUILayout.Width(width), GUILayout.Height(RowHeight));
+            if (focused && !commit) _buf[id] = text;
+            if (!commit) return;
+            if (_commitId == id) _commitId = null;
+            if (_buf.TryGetValue(id, out var typed) && FloatList.TryParseOne(typed, out var parsed)) v = Mathf.Clamp(parsed, min, max);
+            _buf.Remove(id);
+        }
+
+        private bool ToggleRow(string label, ref bool v, bool def, bool saved)
+        {
+            GUILayout.BeginHorizontal();
+            var c = GUI.color;
+            if (v != saved) GUI.color = ChangedColor;
+            var nv = GUILayout.Toggle(v, (v != saved ? "* " : "") + label, GUILayout.Height(22f));
+            GUI.color = c;
+            GUILayout.FlexibleSpace();
+            var en = GUI.enabled;
+            GUI.enabled = en && nv != def;
+            if (GUILayout.Button(new GUIContent("R", $"default {(def ? "on" : "off")}"), GUILayout.Width(ButtonWidth), GUILayout.Height(22f))) nv = def;
+            GUI.enabled = en;
+            GUILayout.EndHorizontal();
+            if (nv == v) return false;
+            v = nv;
+            MarkDirty();
+            return true;
         }
     }
 
