@@ -1,6 +1,6 @@
 # Invisibility Potion (Valheim mod)
 
-Status: plugin skeleton loads in-game with dev auto-join and patch health check; no gameplay yet. Licence: MIT.
+Status: tiers I–III work in singleplayer with placeholder meads; multiplayer and custom bottles pending. Licence: MIT.
 
 Three potions that hide the player from enemies. Attacking reveals the player and slows stamina regeneration. Higher tiers re-hide after a short time and also hide the player from other players.
 

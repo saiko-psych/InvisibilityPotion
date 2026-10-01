@@ -104,3 +104,47 @@ What to compare:
 - [ ] `Copy T2 to T1`, then `Undo` → T1 is back; `Defaults T1` then `Save` writes the defaults; `Preview follows tab` on → switching tabs gives that tier after ~0.6 s
 - [ ] After `Close`, game keys work at once (no stuck text focus), the camera captures the mouse again
 - [ ] `ip_fog t2 outeranchors Chest,Hips` and `ip_fog t1 trail off` still work and show up in the window
+
+## Plan 2 – gameplay core (tasks 2, 4-10)
+
+Format: given / do / expect. `[x]` = confirmed in-game (Round A 2026-10-01, Rounds B-E); unchecked = open.
+
+Config and dev commands (Task 2):
+- [x] Given a running world, do edit `[Tier1] Duration` in the config file and run `ip_reload_config`, expect the new value in the log and in `ip_state`
+- [x] Given the game started, do read the log, expect `Patch health: N targets patched, 0 missing` (patch list complete)
+
+Status effect and hiding (Tasks 4, 5):
+- [x] Given a fresh world, do `ip_give 2`, expect `ip_state` shows `zdo=2` (hidden) and the effect icon
+- [x] Given tier II active, do wait for expiry, expect state cleared and the body/fog restored
+- [x] Given tier III active, do die (`suicide` after `devcommands`), expect state and veil cleaned up and nothing left after respawn
+- [x] Given tier I active, do hit an enemy, expect the effect ends on the own hit (tier I has no re-hide)
+
+Enemy perception and aggro (Tasks 6, 7):
+- [x] Given tier II active and a Greydwarf chasing, do stay hidden, expect it drops the target after the loss time (re-hide path)
+- [ ] Given a sleeping monster (Troll/Boar camp), do walk past with tier I/II, expect it stays asleep. NOT confirmed: not tested yet
+- [ ] Given tier I active, do crouch and then stand up, expect visibility ramps down over about 3 s (known behaviour, Task 7 finding)
+- Note: `AggroLossTime` values above 30 cannot extend vanilla behaviour (Task 6 finding); the config description says so.
+
+Reveal triggers (Task 8):
+- [x] Given tier II active, do hit an enemy, expect `Revealed` (DamageDealt) in the log, and the veil off, back after `RehideDelay`
+- [x] Given tier II active, do draw a bow, expect a BowDraw reveal
+- [x] Given tier II active, do take damage, expect a DamageTaken reveal
+- [x] Given tier II active, do block, expect a Block reveal
+
+Visuals (Task 9, rounds C-F):
+- [x] T3 look (Distortion 0.03 / alpha 0.02, no fog) approved by the user
+- [ ] Round F looks (T1 wisps with trail, T2 outer ring, potion burst, tuning window v2): pending round F, see the Round F section above
+- Note: Ghost/Distortion/Shadow/Spirit body modes also hide the player's own torch and weapon particles (Task 10d finding).
+
+Cleanup stress list (Task 9; every exit must go through `SE_Invisibility.Stop()`):
+- [ ] Given tier II active, do change armour, expect the veil persists and the armour shows correctly after expiry (pending round F)
+- [ ] Given tier III active, do die, expect no leftover fog or distortion after respawn
+- [ ] Given tier II active, do log out to the menu and back in, expect no veil on the next login and the log shows `cleaned up`
+- [ ] Given tier I active, do `ip_give 3`, expect a clean upgrade (no leftover tier I fog)
+- [ ] Given a veil, do wait for expiry, expect no `ip_fog*` child left on the player
+
+Potions and recipes (Task 10):
+- [x] Given the Mead Ketill (`piece_MeadCauldron`), do open it, expect the three recipes visible
+- [x] Given a crafted mead, do drink, expect it drinks, plays the drink sound and particles
+- [x] Given a higher tier active, do drink a lower tier, expect it is refused
+- Note: the networked mead start vfx reveals a drinker's spot once at drink time (ruling from Task 10c, intended).

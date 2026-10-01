@@ -15,7 +15,7 @@ namespace InvisibilityPotion
     {
         public const string PluginGuid = "saikopsych.InvisibilityPotion";
         public const string PluginName = "InvisibilityPotion";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
 
         public static ManualLogSource Log { get; private set; }
         public static Harmony HarmonyInstance { get; private set; }

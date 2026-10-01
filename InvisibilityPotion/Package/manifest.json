@@ -1,7 +1,7 @@
 {
   "name": "InvisibilityPotion",
   "description": "Three tiers of invisibility potions. Enemies lose you, attacking reveals you.",
-  "version_number": "0.1.0",
+  "version_number": "0.2.0",
   "website_url": "",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2350",

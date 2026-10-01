@@ -1963,3 +1963,25 @@ Add `PatchHealth.TargetKey("EnemyHud", "TestShow")`, `("ZNet", "UpdatePlayerList
 - [ ] **Step 7: Build, test, commit**
 
 `make build` (0/0), `make test`; commit `feat(patches): tier III hidden from other players (nameplate, map pin, position spoof)`.
+
+---
+
+### Task 13: Reloadable patch assembly (execute after the merge as its own bounded change)
+
+Added after ADR 0005 (`docs/decisions/0005-hot-reload.md`) showed that ScriptEngine hot reload works.
+
+**Files:**
+- Create: `InvisibilityPotion.Patches/InvisibilityPotion.Patches.csproj` (net48, `<DebugType>embedded</DebugType>`, references the main assembly and the game DLLs)
+- Move: `InvisibilityPotion/Patches/*` into the new project (namespaces unchanged)
+- Modify: `InvisibilityPotion/Plugin.cs` (expose `HiddenState`, `PluginConfig`, `StatusEffects`, `Log` as public API for the patches assembly; keep `ExpectedPatchTargets` working across both assemblies), `Makefile` / `scripts/publish.sh` (`make run` deploys both DLLs; the patches DLL goes to `BepInEx/scripts/`), `docs/testing.md`, `CLAUDE.md`
+
+**Interfaces:**
+- Consumes: the public surface of `InvisibilityPotion.dll`.
+- Produces: `InvisibilityPotion.Patches.dll` with its own Harmony id, loaded by ScriptEngine from `BepInEx/scripts`.
+
+- [ ] **Step 1: Split the project.** Move the patch classes, make the types they use public, keep one `[BepInPlugin]` in the main assembly and a second small plugin in the patches assembly that patches on Awake and unpatches by Harmony id on OnDestroy.
+- [ ] **Step 2: Patch health.** The patches plugin reports its own `Patch health` line; `ip_state` lists targets of both Harmony ids.
+- [ ] **Step 3: Deploy.** `make build` deploys the main DLL to `BepInEx/plugins/InvisibilityPotion/` and the patches DLL (with embedded symbols) to `BepInEx/scripts/`. The build guard against a running game stays for the main DLL; the patches DLL may be redeployed while the game runs (ScriptEngine reloads it).
+- [ ] **Step 4: ScriptEngine settings.** Document `LoadOnStart = true`, `EnableFileSystemWatcher = true`, `AutoReloadDelay = 3` in `docs/testing.md`.
+- [ ] **Step 5: Verify.** Change a log marker in a patch, rebuild, expect the new marker in the log without a restart and no doubled patch output. Release package contains both DLLs.
+- [ ] **Step 6: Commit** `refactor: move Harmony patches into a hot-reloadable assembly`

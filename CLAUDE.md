@@ -6,6 +6,7 @@ Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in fi
 - `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`). `build`, `package` and `run` refuse while Valheim runs (overwriting the DLL crashes the game); `FORCE=1` overrides
 - `make run` – build, launch Valheim through Steam (windowed, console), auto-join world `$IP_DEV_WORLD` (default `testing`, character `$IP_DEV_CHARACTER`, empty = first), then tail the BepInEx log
 - `make log` – follow `BepInEx/LogOutput.log`
+- Dev console commands (Debug only, all log through `Plugin.Log`): `ip_state`, `ip_give <1|2|3>`, `ip_spawn <prefab> [count] [level]`, `ip_reload_config`, `ip_prefabs <substring>`, `ip_veil`, `ip_fog`, `ip_fogui` (`Dev/DevCommands.cs` has the exact syntax in each `Help`)
 - `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0)
 - `make decompile` – regenerate `tools/decompiled/` from the installed game; rerun after game updates
 - `make package` – Release build + Thunderstore zip (`InvisibilityPotion/InvisibilityPotion.zip`)
@@ -13,6 +14,10 @@ Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in fi
 ## Rules
 - Verify every game member in `tools/decompiled/` and record it in `docs/decompile-notes.md` before use. That file is the authority for game hooks and holds the findings that affect the design (read "Findings that affect the design" first).
 - Every Harmony patch target is listed in `Plugin.ExpectedPatchTargets`; startup logs `Patch health: N targets patched, M missing`.
+- Reveal hooks only call `MarkRevealed`; status effects are added only from `UpdateStatusEffect`.
+- Visuals are driven by `VeilController` from ZDO state, never from the status effect.
+- Never build while `valheim.x86_64` runs: a deploy under a running game crashes it (pdb mismatch). `make build`/`package`/`run` refuse; `FORCE=1` overrides.
+- Patch health keys are `Type.Method`; the `CanHearTarget`/`CanSeeTarget` keys cover the static overloads only because those are the only ones patched.
 - Dev-only code lives in `InvisibilityPotion/Dev/` behind `#if DEBUG`; Release builds must not contain it.
 - Pure logic goes into `*.Core.cs` files without game types; they are linked into `InvisibilityPotion.Tests`.
 - Game stdout goes to Steam, so the BepInEx log is the only readable output. The in-game F5 console cannot be copied from: dev console commands must also write their output to `Plugin.Log`.

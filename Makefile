@@ -1,6 +1,7 @@
 # InvisibilityPotion – developer commands. Run `make help`.
 SHELL := /bin/bash
-VALHEIM_INSTALL ?= $(HOME)/.local/share/Steam/steamapps/common/Valheim
+VALHEIM_INSTALL ?= $(shell sed -n 's|.*<VALHEIM_INSTALL>\(.*\)</VALHEIM_INSTALL>.*|\1|p' Environment.props 2>/dev/null || true)
+VALHEIM_INSTALL := $(if $(VALHEIM_INSTALL),$(VALHEIM_INSTALL),$(HOME)/.local/share/Steam/steamapps/common/Valheim)
 MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
