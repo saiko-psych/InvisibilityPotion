@@ -37,6 +37,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Humanoid", "StartAttack"),
             PatchHealth.TargetKey("Humanoid", "BlockAttack"),
             PatchHealth.TargetKey("VisEquipment", "UpdateLodgroup"),
+            PatchHealth.TargetKey("Player", "CanConsumeItem"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();
@@ -55,6 +56,14 @@ namespace InvisibilityPotion
             }
             try
             {
+                Items.Localization.Register();
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Localization registration failed: {e}");
+            }
+            try
+            {
                 Effects.StatusEffects.Register();
             }
             catch (Exception e)
@@ -63,6 +72,7 @@ namespace InvisibilityPotion
             }
             // Server-synced values arrive after join; rebuild the snapshots so they take effect.
             Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) => Cfg.PluginConfig.Refresh();
+            Jotunn.Managers.PrefabManager.OnVanillaPrefabsAvailable += RegisterItemsOnce;
             HarmonyInstance = new Harmony(PluginGuid);
             // Per-class patching: one unresolvable target must not abort Awake before the health check runs.
             foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Plugin).Assembly))
@@ -89,6 +99,19 @@ namespace InvisibilityPotion
             Dev.DevCommands.Register();
 #endif
             Log.LogInfo($"{PluginName} {PluginVersion} loaded");
+        }
+
+        private void RegisterItemsOnce()
+        {
+            Jotunn.Managers.PrefabManager.OnVanillaPrefabsAvailable -= RegisterItemsOnce;
+            try
+            {
+                Items.PotionItems.Register();
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Item registration failed: {e}");
+            }
         }
 
         private void OnDestroy()

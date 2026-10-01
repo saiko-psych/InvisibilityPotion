@@ -32,6 +32,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Items\English.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Package\**" />
   </ItemGroup>
 

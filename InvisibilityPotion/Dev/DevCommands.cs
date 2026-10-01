@@ -15,12 +15,39 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new ReloadConfigCommand());
             CommandManager.Instance.AddConsoleCommand(new GiveCommand());
             CommandManager.Instance.AddConsoleCommand(new PrefabsCommand());
+            CommandManager.Instance.AddConsoleCommand(new SpawnCommand());
         }
 
         internal static void Say(string line)
         {
             Console.instance.Print(line);
             Plugin.Log.LogInfo(line);
+        }
+
+        private class SpawnCommand : ConsoleCommand
+        {
+            public override string Name => "ip_spawn";
+            public override string Help => "ip_spawn <prefab> [count] [level]: spawn creatures 5 m in front of you";
+
+            public override void Run(string[] args)
+            {
+                var p = Player.m_localPlayer;
+                if (p == null || args.Length < 1) { Say(Help); return; }
+                var prefab = ZNetScene.instance.GetPrefab(args[0]);
+                if (prefab == null) { Say($"unknown prefab {args[0]}"); return; }
+                var count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1;
+                var level = args.Length > 2 && int.TryParse(args[2], out var l) ? l : 1;
+                for (var i = 0; i < count; i++)
+                {
+                    var pos = p.transform.position + p.transform.forward * 5f + Vector3.right * i;
+                    var go = Object.Instantiate(prefab, pos, Quaternion.identity);
+                    var ch = go.GetComponent<Character>();
+                    if (ch != null && level > 1) ch.SetLevel(level);
+                }
+                Say($"spawned {count} x {args[0]} (level {level})");
+            }
+
+            public override System.Collections.Generic.List<string> CommandOptionList() => ZNetScene.instance?.GetPrefabNames() ?? new System.Collections.Generic.List<string>();
         }
 
         private class ReloadConfigCommand : ConsoleCommand
