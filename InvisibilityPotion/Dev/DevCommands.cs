@@ -1,6 +1,7 @@
 #if DEBUG
 using Jotunn.Entities;
 using Jotunn.Managers;
+using UnityEngine;
 using Cfg = InvisibilityPotion.Config;
 
 namespace InvisibilityPotion.Dev
@@ -12,6 +13,7 @@ namespace InvisibilityPotion.Dev
         {
             CommandManager.Instance.AddConsoleCommand(new StateCommand());
             CommandManager.Instance.AddConsoleCommand(new ReloadConfigCommand());
+            CommandManager.Instance.AddConsoleCommand(new GiveCommand());
         }
 
         internal static void Say(string line)
@@ -40,6 +42,21 @@ namespace InvisibilityPotion.Dev
             }
         }
 
+        private class GiveCommand : ConsoleCommand
+        {
+            public override string Name => "ip_give";
+            public override string Help => "ip_give <1|2|3>: apply the invisibility tier effect to yourself";
+
+            public override void Run(string[] args)
+            {
+                var p = Player.m_localPlayer;
+                if (p == null) { Say("no local player"); return; }
+                if (args.Length < 1 || !int.TryParse(args[0], out var tier) || tier < 1 || tier > 3) { Say(Help); return; }
+                var se = p.GetSEMan().AddStatusEffect(Effects.StatusEffects.NameHash(tier), resetTime: true);
+                Say(se != null ? $"applied T{tier}" : $"T{tier} not applied (already active or not registered)");
+            }
+        }
+
         private class StateCommand : ConsoleCommand
         {
             public override string Name => "ip_state";
@@ -51,6 +68,26 @@ namespace InvisibilityPotion.Dev
                 Say($"{Plugin.PluginName} {Plugin.PluginVersion}");
                 Say($"patched: {string.Join(", ", patched)}");
                 Say($"missing: {(Plugin.MissingPatches.Count == 0 ? "none" : string.Join(", ", Plugin.MissingPatches))}");
+                var p = Player.m_localPlayer;
+                if (p != null)
+                {
+                    var inv = Effects.SE_Invisibility.ActiveOn(p);
+                    var (tier, hidden) = Net.HiddenState.Get(p);
+                    Say(inv == null
+                        ? $"self: no effect; zdo tier={tier} hidden={hidden}"
+                        : $"self: T{inv.Tier} phase={inv.Machine.Phase} elapsed={inv.Machine.Elapsed:F1}s rehide={inv.Machine.RehideTimer:F1}s pending={inv.Machine.PendingReveal}; zdo tier={tier} hidden={hidden}");
+                    var mine = ZDOMan.GetSessionID();
+                    foreach (var c in Character.GetAllCharacters())
+                    {
+                        if (c == null || c.IsPlayer()) continue;
+                        if (Vector3.Distance(c.transform.position, p.transform.position) > 30f) continue;
+                        var ai = c.GetComponent<MonsterAI>();
+                        if (ai == null) continue;
+                        var owner = c.m_nview?.GetZDO()?.GetOwner() ?? 0;
+                        var target = ai.GetTargetCreature();
+                        Say($"  {c.name.Replace("(Clone)", "")}: target={(target == null ? "-" : target.GetHoverName())} unsensed={ai.m_timeSinceSensedTargetCreature:F1}s alerted={ai.IsAlerted()} owner={(owner == mine ? "local" : owner.ToString())}");
+                    }
+                }
             }
         }
     }
