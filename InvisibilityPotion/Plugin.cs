@@ -26,6 +26,9 @@ namespace InvisibilityPotion
 #if DEBUG
             PatchHealth.TargetKey("FejdStartup", "Start"),
 #endif
+            PatchHealth.TargetKey("BaseAI", "CanHearTarget"),
+            PatchHealth.TargetKey("BaseAI", "CanSeeTarget"),
+            PatchHealth.TargetKey("BaseAI", "FindEnemy"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();
