@@ -1,6 +1,6 @@
 # Invisibility Potion (Valheim mod)
 
-Status: designed, no code yet. Licence: MIT.
+Status: plugin skeleton loads in-game with dev auto-join and patch health check; no gameplay yet. Licence: MIT.
 
 Three potions that hide the player from enemies. Attacking reveals the player and slows stamina regeneration. Higher tiers re-hide after a short time and also hide the player from other players.
 
@@ -14,3 +14,7 @@ Three potions that hide the player from enemies. Attacking reveals the player an
 ## Targets
 
 Valheim 1.0.16 · Unity 6000.0.75f1 · BepInEx 5.4.23.5 · Jötunn 2.30.2
+
+## Development
+
+Linux, CLI only. Install `dotnet-sdk-8.0`, then `make help`. `make run` starts the game through Steam, which needs a one-time launch option on Valheim: `./start_game_bepinex.sh %command%`. See `CLAUDE.md` for the workflow and `docs/testing.md` for the in-game checklist.
