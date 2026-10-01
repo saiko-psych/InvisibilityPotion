@@ -11,7 +11,7 @@ public class InvisibilityStateMachineTests
     public void StartsHidden()
     {
         var sm = new InvisibilityStateMachine(Tier2());
-        Assert.Equal(InvisibilityStateMachine.Phase.Hidden, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Hidden, sm.Phase);
         Assert.False(sm.PendingReveal);
     }
 
@@ -30,7 +30,7 @@ public class InvisibilityStateMachineTests
         var sm = new InvisibilityStateMachine(Tier2());
         sm.MarkRevealed();
         Assert.True(sm.PendingReveal);
-        Assert.Equal(InvisibilityStateMachine.Phase.Hidden, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Hidden, sm.Phase);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class InvisibilityStateMachineTests
         var r = sm.Tick(0.02f);
         Assert.True(r.ApplyDebuff);
         Assert.True(r.End);
-        Assert.Equal(InvisibilityStateMachine.Phase.Ended, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Ended, sm.Phase);
         Assert.False(sm.PendingReveal);
     }
 
@@ -54,7 +54,7 @@ public class InvisibilityStateMachineTests
         Assert.True(r.ApplyDebuff);
         Assert.True(r.EnterRevealed);
         Assert.False(r.End);
-        Assert.Equal(InvisibilityStateMachine.Phase.Revealed, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Revealed, sm.Phase);
         Assert.Equal(12f, sm.RehideTimer, 3);
     }
 
@@ -68,7 +68,7 @@ public class InvisibilityStateMachineTests
         Assert.False(r1.EnterHidden);
         var r2 = sm.Tick(0.2f);
         Assert.True(r2.EnterHidden);
-        Assert.Equal(InvisibilityStateMachine.Phase.Hidden, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Hidden, sm.Phase);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class InvisibilityStateMachineTests
         sm.Tick(0.02f);
         var r = sm.Tick(119.99f);
         Assert.True(r.End);
-        Assert.Equal(InvisibilityStateMachine.Phase.Ended, sm.Phase);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Ended, sm.Phase);
     }
 
     [Fact]
