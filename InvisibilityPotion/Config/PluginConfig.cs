@@ -34,6 +34,9 @@ namespace InvisibilityPotion.Config
             BindGlobal("FogCutoffLight", 0.5f, "Alpha cutoff applied to the player's materials for the light veil (tier I)");
             BindGlobal("FogCutoffDense", 0.8f, "Alpha cutoff for the dense veil (tier II/III)");
             BindGlobal("FogCutoffSelf", 0.3f, "Alpha cutoff the hidden player sees on themselves");
+            BindGlobal("FogRateLight", 20f, "Fog particles emitted per second around a player under the light veil (tier I)");
+            BindGlobal("FogRateDense", 45f, "Fog particles emitted per second around a player under the dense veil (tier II/III)");
+            BindGlobal("BodyVeilMode", "Hide", "How a veiled player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. Read at startup; the Debug command ip_veil overrides it in memory");
             Refresh();
         }
 
@@ -113,6 +116,9 @@ namespace InvisibilityPotion.Config
                 FogCutoffLight = Get<float>(_globalEntries, "FogCutoffLight"),
                 FogCutoffDense = Get<float>(_globalEntries, "FogCutoffDense"),
                 FogCutoffSelf = Get<float>(_globalEntries, "FogCutoffSelf"),
+                FogRateLight = Get<float>(_globalEntries, "FogRateLight"),
+                FogRateDense = Get<float>(_globalEntries, "FogRateDense"),
+                BodyVeilMode = Get<string>(_globalEntries, "BodyVeilMode"),
             };
             for (var t = 1; t <= 3; t++) _tiers[t] = tiers[t];
             Global = global;

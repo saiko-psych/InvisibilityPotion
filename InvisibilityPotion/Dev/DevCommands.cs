@@ -16,12 +16,31 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new GiveCommand());
             CommandManager.Instance.AddConsoleCommand(new PrefabsCommand());
             CommandManager.Instance.AddConsoleCommand(new SpawnCommand());
+            CommandManager.Instance.AddConsoleCommand(new VeilCommand());
         }
 
         internal static void Say(string line)
         {
             Console.instance.Print(line);
             Plugin.Log.LogInfo(line);
+        }
+
+        private class VeilCommand : ConsoleCommand
+        {
+            public override string Name => "ip_veil";
+            public override string Help => "ip_veil [off|cutoff|hide|tint|ghost|distortion]: switch the body look of veiled players (in memory); no argument prints the current mode";
+
+            public override void Run(string[] args)
+            {
+                if (args.Length < 1) { Say($"veil body mode: {Visuals.FogVeil.CurrentMode}"); return; }
+                if (!Visuals.FogVeil.TryParseMode(args[0], out var mode)) { Say(Help); return; }
+                Visuals.FogVeil.CurrentMode = mode;
+                Visuals.VeilController.ForceRefreshAll();
+                Say($"veil body mode set to {mode}; re-applied to all veiled players");
+            }
+
+            public override System.Collections.Generic.List<string> CommandOptionList() =>
+                new System.Collections.Generic.List<string> { "off", "cutoff", "hide", "tint", "ghost", "distortion" };
         }
 
         private class SpawnCommand : ConsoleCommand

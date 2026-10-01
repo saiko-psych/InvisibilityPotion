@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using InvisibilityPotion.Config;
 using InvisibilityPotion.Net;
 using UnityEngine;
 
@@ -13,7 +14,14 @@ namespace InvisibilityPotion.Visuals
         private readonly HashSet<Player> _veiled = new HashSet<Player>();
         private float _timer;
 
-        private void Awake() { _instance = this; }
+        private void Awake()
+        {
+            _instance = this;
+            var configured = PluginConfig.Global.BodyVeilMode;
+            if (!FogVeil.TryParseMode(configured, out var mode))
+                Plugin.Log.LogWarning($"BodyVeilMode '{configured}' is not one of Off, Cutoff, Hide, Tint, Ghost, Distortion; using Hide");
+            FogVeil.CurrentMode = mode;
+        }
 
         private void Update()
         {
@@ -28,6 +36,15 @@ namespace InvisibilityPotion.Visuals
             if (_instance == null || p == null) return;
             _instance._veil.Remove(p);
             _instance._veiled.Remove(p);
+            _instance.Refresh();
+        }
+
+        /// <summary>Restores and re-applies the veil on every veiled player (after a body-mode switch).</summary>
+        public static void ForceRefreshAll()
+        {
+            if (_instance == null) return;
+            foreach (var p in _instance._veiled) _instance._veil.Remove(p);
+            _instance._veiled.Clear();
             _instance.Refresh();
         }
 

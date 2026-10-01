@@ -38,6 +38,9 @@ namespace InvisibilityPotion.Config
         public float FogCutoffLight = 0.5f;
         public float FogCutoffDense = 0.8f;
         public float FogCutoffSelf = 0.3f;
+        public float FogRateLight = 20f;
+        public float FogRateDense = 45f;
+        public string BodyVeilMode = "Hide";
     }
 
     public static class ModifierMath
