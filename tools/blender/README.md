@@ -1,14 +1,17 @@
-# Procedural mead flask spike (v3)
+# Procedural veil-mead flasks spike (v4)
 
-Run: `blender -b --python make_bottle.py` (about 2 s). Outputs `bottle_t1/t2/t3.fbx` (Y-up, 1 unit = 1 m,
-pivot at base; each FBX holds the flask plus its `liquid_*` child), `preview.png` (1280x720, Eevee) and
-`bottles.blend` (open in the Blender GUI).
+Run: `blender -b --python make_bottle.py` (about 3 s warm, about 11 s first run). Outputs `bottle_t1/t2/t3.fbx`
+(Y-up, 1 unit = 1 m, pivot at base), `preview.png` (1280x720, Eevee with volumetrics), `bottles.blend`.
+Each FBX holds the flask, a `mist_tN` inner mesh and an empty `MistAnchor` at the mist centre (for a Unity particle system).
+Principled Volume does not export to FBX; in Unity the mist mesh needs its own material or particles.
 
-Flask: 0.22 m tall, 0.13 m belly at 35% height, neck 25% and 0.035 m wide, lip 0.045 m, cork +1 cm, 3 rope rings.
-
-Triangle counts (flask + liquid): t1 = 390, t2 = 440 (with wax seal), t3 = 440 (with wax seal).
+| Tier | Name | Height | Look | Tris (incl. mist mesh) |
+|---|---|---|---|---|
+| 1 | Faint Veil | 0.16 m | squat moss-green flask, tan cork, 2 twine rings | 370 |
+| 2 | Deep Veil | 0.22 m | steel-blue, iron neck band + rune ring, iron-capped cork | 420 |
+| 3 | Shadow Veil | 0.26 m | 8-sided violet decanter, silver cup + 2 bands + stopper + dark crystal | 472 |
 
 Knobs at the top of `make_bottle.py`:
-1. `profile_points` (plus `cork_profile`, `liquid_profile`, `rope_heights`): (radius, height) in metres; `SEGMENTS`, `JITTER`, `SEED` for faceting and hand-blown irregularity.
-2. `GLASS_ALPHA` / `GLASS_ROUGH` / `LIQUID_BRIGHTNESS` / `LIQUID_ALPHA` / `BASE_DARKEN` (see-through, matte sheen, liquid tint, dark glass bottom).
-3. `TIERS` (glass colours), `CORK_COLOR`, `ROPE_COLOR`, `WAX_COLOR`; `BEVEL_WIDTH` (costs tris).
+1. `TIERS[...]["profile_points"]` and `["parts"]` (cork, bands, stopper...): (radius, height) lists in metres; `segs`, `jitter`, `SEED`.
+2. Mist: `MIST_FILL`, `MIST_INSET`, `MIST_DENSITY`, `MIST_ANISOTROPY`, per-tier `mist_emit`.
+3. Colours: per-tier `glass`, the `MATS` table (cork, twine, iron, silver, crystal), `GLASS_ALPHA`, `GLASS_ROUGH`, `BASE_DARKEN`.
