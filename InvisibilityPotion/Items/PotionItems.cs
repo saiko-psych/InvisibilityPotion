@@ -46,7 +46,8 @@ namespace InvisibilityPotion.Items
                     if (sprite != null)
                     {
                         prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { sprite };
-                        var se = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
+                        // Same instance Jotunn puts into the ObjectDB and the mead's m_consumeStatusEffect.
+                        var se = Effects.StatusEffects.Prefab(t);
                         if (se != null) se.m_icon = sprite;
                     }
                     var baseSprite = RenderManager.Instance.Render(basePrefab, RenderManager.IsometricRotation);
@@ -77,7 +78,7 @@ namespace InvisibilityPotion.Items
             {
                 Name = $"$item_meadbaseinvisibility_t{t}",
                 Description = $"$item_meadbaseinvisibility_t{t}_description",
-                CraftingStation = "piece_cauldron",
+                CraftingStation = CraftingStations.MeadKetill,   // "piece_MeadCauldron", the Mead Ketill (piece_cauldron is the cooking cauldron)
                 MinStationLevel = 1,
                 Requirements = requirements.ToArray(),
             });
@@ -92,9 +93,11 @@ namespace InvisibilityPotion.Items
             });
             var shared = mead.ItemDrop.m_itemData.m_shared;
             shared.m_itemType = ItemDrop.ItemData.ItemType.Consumable;
-            var effect = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
+            shared.m_isDrink = true;   // only selects "$item_drink" over "$item_eat" in ItemDrop.GetHoverText (ItemDrop.cs:1496)
+            // The registered prefab instance itself: at OnVanillaPrefabsAvailable the ObjectDB does not contain custom status effects yet.
+            var effect = Effects.StatusEffects.Prefab(t);
             if (effect == null)
-                Plugin.Log.LogError($"status effect SE_Invisibility_T{t} not found in ObjectDB; mead registered without consume effect");
+                Plugin.Log.LogError($"status effect SE_Invisibility_T{t} was not registered; mead registered without consume effect");
             shared.m_consumeStatusEffect = effect;
             shared.m_food = 0f;
             shared.m_foodStamina = 0f;
