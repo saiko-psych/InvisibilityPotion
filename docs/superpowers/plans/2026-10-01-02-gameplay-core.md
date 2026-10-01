@@ -1878,3 +1878,88 @@ git commit -m "docs: plan 2 checklist, conventions, version 0.2.0"
 **Type consistency:** `HiddenState.Get/HiddenTier/IsIgnoredByEnemies/Write` used identically in Tasks 4–9; `SE_Invisibility.ActiveOn/MarkRevealed/Tier/Machine` in Tasks 4, 8, 10; `StatusEffects.NameHash/RevealedHash` in Tasks 4, 10; `PluginConfig.Tier/Global/Reload/Refresh` in Tasks 2, 4, 6, 7, 8, 9; `InvisibilityStateMachine.Tick/MarkRevealed/StepResult` in Tasks 3, 4; `VeilController.ForceRefresh` in Task 9; `Say` shared on `DevCommands` from Task 2.
 
 **Review Focus:** 1 → Task 6 (reads `HiddenState` only, in-game "owner=local" check through `ip_state`); 2 → Task 3 test `MarkRevealed_OnlySetsFlag_UntilNextTick` and Task 4 `OnDamaged`; 3 → Task 10 step 5; 4 → Task 2 `ModifierMathTests`; 5 → Task 4 `OnDestroy` + Task 9 stress test.
+
+---
+
+### Task 12: Tier III hidden from other players (added 2026-10-01 at the user's request)
+
+**Files:**
+- Create: `InvisibilityPotion/Patches/PlayerHidePatches.cs`
+- Modify: `InvisibilityPotion/Plugin.cs` (`ExpectedPatchTargets`), `InvisibilityPotion/Config/PluginConfig.cs` (`AllowPvpInvisibility`, per-tier `HiddenFromPlayers`), `InvisibilityPotion/Config/TierConfig.Core.cs`, `InvisibilityPotion/Net/HiddenState.cs` (`IsHiddenFromPlayers`), `InvisibilityPotion/Dev/DevCommands.cs` (`ip_state` prints hidden-from-players), `docs/testing.md`
+
+**Interfaces:**
+- Consumes: `HiddenState.Get(Character)` / ZDO keys; `PluginConfig.Tier(int)`; `PluginConfig.Global`.
+- Produces: `HiddenState.IsHiddenFromPlayers(Character c)` (hidden and `Tier(t).HiddenFromPlayers` and `Global.AllowPvpInvisibility`), `HiddenState.IsHiddenFromPlayers(ZDO zdo)` (server-side lookup by ZDO without a Character instance).
+
+Spec: main spec §5.7 and amendment decision table ("Tier III also hides the player from other players"). Facts: `docs/decompile-notes.md` §Network and §Visuals (`EnemyHud.TestShow` EnemyHud.cs:101; `ZNet.UpdatePlayerList` ZNet.cs:2454 with `m_publicPosition` at :2469/:2500; `ZDOMan.SendZDOs(ZDOPeer peer, bool flush)` ZDOMan.cs:1074 with the header write `zPackage.Write(item2.GetPosition())` at :1126; `ZDOPeer` is a private nested class with `public ZNetPeer m_peer`; `ZNetPeer.m_uid`, `m_characterID`; the hidden player's own client sends the real position to the server, the server forwards to other clients; zone ownership uses `m_refPos`, not the ZDO position).
+
+- [ ] **Step 1: Config**
+
+`TierConfig` gains `public bool HiddenFromPlayers;` (defaults T1 false, T2 false, T3 true, section key `HiddenFromPlayers`, description "Other players cannot see this player's position, model or nameplate"). `GlobalConfig` gains `public bool AllowPvpInvisibility = true;` (key `AllowPvpInvisibility`, "Server switch for hiding players from other players (tier III)"). Bind, Refresh and `Validate` unchanged otherwise. Add a unit test that `TierConfig` default `HiddenFromPlayers` is false.
+
+- [ ] **Step 2: HiddenState**
+
+```csharp
+public static bool IsHiddenFromPlayers(Character c)
+{
+    var tier = HiddenTier(c);
+    return tier > 0 && PluginConfig.Global.AllowPvpInvisibility && PluginConfig.Tier(tier).HiddenFromPlayers;
+}
+
+/// <summary>Server-side check by ZDO (no Character instance needed). Reads the two keys directly; no cache.</summary>
+public static bool IsHiddenFromPlayers(ZDO zdo)
+{
+    if (zdo == null || !PluginConfig.Global.AllowPvpInvisibility) return false;
+    var tier = zdo.GetInt(HashTier, 0);
+    if (tier < 1 || tier > 3 || !zdo.GetBool(HashHidden, false)) return false;
+    return PluginConfig.Tier(tier).HiddenFromPlayers;
+}
+```
+
+- [ ] **Step 3: Nameplate (viewer side)**
+
+```csharp
+[HarmonyPatch(typeof(EnemyHud), "TestShow")]
+internal static class EnemyHudTestShowPatch
+{
+    [HarmonyPostfix]
+    private static void Postfix(Character c, ref bool __result)
+    {
+        if (!__result || c == null || !c.IsPlayer() || c == Player.m_localPlayer) return;
+        if (HiddenState.IsHiddenFromPlayers(c)) __result = false;
+    }
+}
+```
+
+`TestShow(Character c, bool isVisible)` is private (EnemyHud.cs:101); parameter name `c` must match the decompile (verify with `sed -n '101p'`).
+
+- [ ] **Step 4: Map pin and player list (server/host side)**
+
+Postfix on `ZNet.UpdatePlayerList()` (private, ZNet.cs:2454): iterate `__instance.m_players` (verify the list field name and the `ZNet.PlayerInfo` struct members `m_characterID`, `m_publicPosition`, `m_position` in ZNet.cs). For each entry whose character ZDO (`ZDOMan.instance.GetZDO(info.m_characterID)`) satisfies `IsHiddenFromPlayers(zdo)`, set `m_publicPosition = false` and `m_position = Vector3.zero`. `PlayerInfo` is a struct: write the modified copy back into the list by index. Runs on the server (listen host or dedicated) because `UpdatePlayerList` is only called there (verify the caller `SendPlayerList`/`SendPeriodicData` branch).
+
+- [ ] **Step 5: Position spoof in the ZDO header (server side)**
+
+Transpiler on `ZDOMan.SendZDOs` (private; the nested `ZDOPeer` type is obtained via `AccessTools.Inner(typeof(ZDOMan), "ZDOPeer")`; declare the patch with `[HarmonyPatch]` + a `TargetMethod()` returning `AccessTools.Method(typeof(ZDOMan), "SendZDOs", new[] { AccessTools.Inner(typeof(ZDOMan), "ZDOPeer"), typeof(bool) })`). The transpiler replaces the single `callvirt ZDO.GetPosition()` that immediately precedes `ZPackage.Write(Vector3)` in the header block (ZDOMan.cs:1126 in the decompile: the sequence `Write(GetOwner())`, `Write(GetPosition())`) with a call to
+
+```csharp
+public static Vector3 HeaderPosition(ZDO zdo, object zdoPeer)
+{
+    var real = zdo.GetPosition();
+    if (zdoPeer == null || !HiddenState.IsHiddenFromPlayers(zdo)) return real;
+    var peer = PeerOf(zdoPeer);                       // ZNetPeer via AccessTools.Field(ZDOPeer, "m_peer")
+    if (peer == null || zdo.GetOwner() == peer.m_uid) return real;   // the owner always gets its own real position
+    return new Vector3(real.x, SpoofHeight, real.z);  // SpoofHeight = 10000f: far above the world, same sector column
+}
+```
+
+Implementation notes: the transpiler must load the `peer` argument (`ldarg.1`) before the call and verify exactly one replacement happened (log an error and leave IL untouched otherwise; the patch health check then reports `ZDOMan.SendZDOs` as patched but a `PatchHealth` warning line "SendZDOs transpiler: pattern not found" must appear). Use `AccessTools.FieldRefAccess` or a cached `FieldInfo` for `m_peer`. The spoof must stop the instant `IP_Hidden` becomes false (it reads the ZDO each send, so it does). Only the header position is changed; the ZDO data, sectors and `m_refPos` are untouched (decompile-notes §Network). Dedicated servers must run the mod (already enforced by `NetworkCompatibility`).
+
+If the publicized assembly exposes `ZDOMan.ZDOPeer` directly, a plain `[HarmonyPatch(typeof(ZDOMan), "SendZDOs")]` with a typed parameter is acceptable; say which in the report (open question 4 of the decompile notes).
+
+- [ ] **Step 6: Patch health, ip_state, docs**
+
+Add `PatchHealth.TargetKey("EnemyHud", "TestShow")`, `("ZNet", "UpdatePlayerList")`, `("ZDOMan", "SendZDOs")`. `ip_state` prints `hiddenFromPlayers=<bool>` for self. `docs/testing.md`: add the two-client checks (second client: no nameplate, no map pin, player not rendered while hidden; appears within one send interval after a reveal; AI on the second client's zone still ignores the hidden player) marked "pending, needs plan 3 server".
+
+- [ ] **Step 7: Build, test, commit**
+
+`make build` (0/0), `make test`; commit `feat(patches): tier III hidden from other players (nameplate, map pin, position spoof)`.
