@@ -17,10 +17,19 @@ decompile: ## Decompile assembly_valheim.dll into tools/decompiled (rerun after 
 	@echo "Game version: $$(grep -oE 'l-[0-9]+\.[0-9]+\.[0-9]+' $(HOME)/.config/unity3d/IronGate/Valheim/Player.log | tail -1)" > $(DECOMPILE_DIR)/VERSION
 	@ls $(DECOMPILE_DIR)/assembly_valheim | wc -l | xargs echo "Decompiled files:"
 
-build: ## Build Debug and deploy the DLL into BepInEx/plugins (via scripts/publish.sh)
+# Overwriting the deployed DLL under a running game crashes it. The [v] keeps pgrep from matching this recipe's own shell.
+FORCE ?=
+define guard_game
+	@if [ "$(FORCE)" != "1" ] && pgrep -f '[v]alheim\.x86_64' > /dev/null; then \
+		echo "Valheim is running: close the game first (overwriting the deployed DLL crashes it), or override with FORCE=1."; exit 1; fi
+endef
+
+build: ## Build Debug and deploy the DLL into BepInEx/plugins (refuses while Valheim runs; FORCE=1 overrides)
+	$(guard_game)
 	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Debug -nologo -v minimal
 
-package: ## Build Release and zip the Thunderstore package
+package: ## Build Release and zip the Thunderstore package (refuses while Valheim runs; FORCE=1 overrides)
+	$(guard_game)
 	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal
 
 test: ## Run unit tests (pure logic, no game DLLs)

@@ -3,7 +3,7 @@
 Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in files is English.
 
 ## Commands (`make help` lists them)
-- `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`)
+- `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`). `build`, `package` and `run` refuse while Valheim runs (overwriting the DLL crashes the game); `FORCE=1` overrides
 - `make run` – build, launch Valheim through Steam (windowed, console), auto-join world `$IP_DEV_WORLD` (default `testing`, character `$IP_DEV_CHARACTER`, empty = first), then tail the BepInEx log
 - `make log` – follow `BepInEx/LogOutput.log`
 - `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0)
