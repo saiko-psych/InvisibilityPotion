@@ -16,13 +16,8 @@ namespace InvisibilityPotion.Effects
         }
 
         private readonly TierConfig _tier;
-        private InvisibilityPhase _phase = InvisibilityPhase.Hidden;
 
-        public InvisibilityPhase Phase
-        {
-            get => _phase;
-            set => _phase = value;
-        }
+        public InvisibilityPhase Phase { get; private set; } = InvisibilityPhase.Hidden;
 
         public float Elapsed { get; private set; }
         public float RehideTimer { get; private set; }
