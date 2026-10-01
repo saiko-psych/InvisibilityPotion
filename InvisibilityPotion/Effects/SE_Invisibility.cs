@@ -20,7 +20,8 @@ namespace InvisibilityPotion.Effects
         {
             if (p == null) return null;
             foreach (var se in p.GetSEMan().GetStatusEffects())
-                if (se is SE_Invisibility inv) return inv;
+                // An Ended effect lingers until the next SEMan.Update; it no longer counts as active.
+                if (se is SE_Invisibility inv && inv.Machine != null && inv.Machine.Phase != InvisibilityStateMachine.InvisibilityPhase.Ended) return inv;
             return null;
         }
 
@@ -36,9 +37,9 @@ namespace InvisibilityPotion.Effects
             var owner = character as Player;
             if (owner != null)
             {
-                // A lower tier that is still active gives way; its Stop() runs Cleanup, so write our state afterwards.
+                // Any other active invisibility tier gives way (refusal of lower tiers is a CanConsumeItem postfix in a later task); its Stop() runs Cleanup, so write our state afterwards.
                 foreach (var se in owner.GetSEMan().GetStatusEffects().ToArray())
-                    if (se is SE_Invisibility other && other != this) owner.GetSEMan().RemoveStatusEffect(other, true);
+                    if (se is SE_Invisibility other && !ReferenceEquals(other, this)) owner.GetSEMan().RemoveStatusEffect(other, true);
                 HiddenState.Write(owner, Tier, true);
             }
             Plugin.Log.LogInfo($"SE_Invisibility T{Tier} started for {character?.GetHoverName()}");
@@ -62,7 +63,7 @@ namespace InvisibilityPotion.Effects
             base.UpdateStatusEffect(dt);
             if (Machine == null || Owner == null) return;
             var r = Machine.Tick(dt);
-            if (r.ApplyDebuff)
+            if (r.ApplyDebuff && Cfg.DebuffDuration > 0f)   // m_ttl 0 would make SE_Revealed permanent (IsDone needs m_ttl > 0)
             {
                 var cfg = Cfg;
                 SE_Revealed.NextMultiplier = cfg.DebuffStaminaRegenMultiplier;
@@ -72,11 +73,22 @@ namespace InvisibilityPotion.Effects
             if (r.End)
             {
                 // Stop() -> Cleanup() writes the final state, so skip the Hidden/Revealed write on the ending tick.
-                m_time = m_ttl;   // IsDone on the next SEMan.Update; vanilla then calls Stop()
+                // IsDone is a strict m_time > m_ttl, and base.UpdateStatusEffect already advanced m_time this tick.
+                // Never lower it (End is returned on every tick once Ended); the next SEMan.Update then finishes the effect.
+                if (m_time < m_ttl) m_time = m_ttl;
                 return;
             }
             if (r.EnterRevealed) HiddenState.Write(Owner, Tier, false);
             if (r.EnterHidden) HiddenState.Write(Owner, Tier, true);
+        }
+
+        /// <summary>Same-tier re-add (for example ip_give twice) lands here on the existing instance: a deliberate refresh that also restarts the state machine and re-hides.</summary>
+        public override void ResetTime()
+        {
+            base.ResetTime();
+            if (Machine == null) return;
+            Machine = new InvisibilityStateMachine(Cfg);
+            if (Owner != null) HiddenState.Write(Owner, Tier, true);
         }
 
         public override void Stop()
@@ -97,7 +109,8 @@ namespace InvisibilityPotion.Effects
             if (_cleaned) return;
             _cleaned = true;
             var owner = Owner;
-            if (owner != null) HiddenState.Write(owner, 0, false);
+            if (owner == null) return;   // also hit for prefab ScriptableObjects at shutdown; stay silent
+            HiddenState.Write(owner, 0, false);
             Plugin.Log.LogInfo($"SE_Invisibility T{Tier} cleaned up");
         }
     }
