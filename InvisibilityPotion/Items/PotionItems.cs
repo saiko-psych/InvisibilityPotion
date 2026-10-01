@@ -16,61 +16,98 @@ namespace InvisibilityPotion.Items
         public static string MeadName(int tier) => $"MeadInvisibility_T{tier}";
 
         /// <summary>Call from PrefabManager.OnVanillaPrefabsAvailable (unsubscribe after the first call).</summary>
+        private static readonly string[] DefaultRecipes =
+        {
+            "Honey:10,Thistle:5",
+            "Honey:10,Thistle:5,Bloodbag:3",
+            "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1",
+        };
+
         public static void Register()
         {
             for (var t = 1; t <= 3; t++)
             {
-                var cfg = PluginConfig.Tier(t);
-                var requirements = new List<RequirementConfig>();
-                foreach (var (item, amount) in RecipeParser.Parse(cfg.Recipe))
-                    requirements.Add(new RequirementConfig { Item = item, Amount = amount });
-
-                var baseItem = new CustomItem(BaseName(t), "MeadBaseHealthMinor", new ItemConfig
-                {
-                    Name = $"$item_meadbaseinvisibility_t{t}",
-                    Description = $"$item_meadbaseinvisibility_t{t}_description",
-                    CraftingStation = "piece_cauldron",
-                    MinStationLevel = 1,
-                    Requirements = requirements.ToArray(),
-                });
-                Tint(baseItem.ItemPrefab, Tints[t]);
-                ItemManager.Instance.AddItem(baseItem);
-
-                var mead = new CustomItem(MeadName(t), "MeadHealthMinor", new ItemConfig
-                {
-                    Name = $"$item_meadinvisibility_t{t}",
-                    Description = $"$item_meadinvisibility_t{t}_description",
-                    Enabled = false,   // no crafting recipe; produced by the fermenter
-                });
-                var shared = mead.ItemDrop.m_itemData.m_shared;
-                shared.m_itemType = ItemDrop.ItemData.ItemType.Consumable;
-                shared.m_consumeStatusEffect = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
-                shared.m_food = 0f;
-                shared.m_foodStamina = 0f;
-                shared.m_foodRegen = 0f;
-                Tint(mead.ItemPrefab, Tints[t]);
-                ItemManager.Instance.AddItem(mead);
-
-                ItemManager.Instance.AddItemConversion(new CustomItemConversion(new FermenterConversionConfig
-                {
-                    FromItem = BaseName(t),
-                    ToItem = MeadName(t),
-                    ProducedItems = 4,
-                }));
+                try { RegisterTier(t); }
+                catch (System.Exception e) { Plugin.Log.LogError($"Registering tier {t} potions failed: {e}"); }
             }
             // Icons: render the tinted bottles for the items and reuse them for the status effects.
             for (var t = 1; t <= 3; t++)
             {
-                var prefab = PrefabManager.Instance.GetPrefab(MeadName(t));
-                var sprite = RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation);
-                if (sprite == null) continue;
-                prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { sprite };
-                var se = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
-                if (se != null) se.m_icon = sprite;
-                var basePrefab = PrefabManager.Instance.GetPrefab(BaseName(t));
-                var baseSprite = RenderManager.Instance.Render(basePrefab, RenderManager.IsometricRotation);
-                if (baseSprite != null) basePrefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { baseSprite };
+                try
+                {
+                    var prefab = PrefabManager.Instance.GetPrefab(MeadName(t));
+                    var basePrefab = PrefabManager.Instance.GetPrefab(BaseName(t));
+                    if (prefab == null || basePrefab == null)
+                    {
+                        Plugin.Log.LogWarning($"Tier {t} potion prefabs missing; skipping icons");
+                        continue;
+                    }
+                    var sprite = RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation);
+                    if (sprite != null)
+                    {
+                        prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { sprite };
+                        var se = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
+                        if (se != null) se.m_icon = sprite;
+                    }
+                    var baseSprite = RenderManager.Instance.Render(basePrefab, RenderManager.IsometricRotation);
+                    if (baseSprite != null) basePrefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { baseSprite };
+                }
+                catch (System.Exception e) { Plugin.Log.LogError($"Icons for tier {t} failed: {e}"); }
             }
+        }
+
+        private static void RegisterTier(int t)
+        {
+            var cfg = PluginConfig.Tier(t);
+            List<(string, int)> parsed;
+            try
+            {
+                parsed = new List<(string, int)>(RecipeParser.Parse(cfg.Recipe));
+            }
+            catch (System.FormatException e)
+            {
+                Plugin.Log.LogError($"Tier {t} recipe '{cfg.Recipe}' is malformed ({e.Message}); using default '{DefaultRecipes[t - 1]}'");
+                parsed = new List<(string, int)>(RecipeParser.Parse(DefaultRecipes[t - 1]));
+            }
+            var requirements = new List<RequirementConfig>();
+            foreach (var (item, amount) in parsed)
+                requirements.Add(new RequirementConfig { Item = item, Amount = amount });
+
+            var baseItem = new CustomItem(BaseName(t), "MeadBaseHealthMinor", new ItemConfig
+            {
+                Name = $"$item_meadbaseinvisibility_t{t}",
+                Description = $"$item_meadbaseinvisibility_t{t}_description",
+                CraftingStation = "piece_cauldron",
+                MinStationLevel = 1,
+                Requirements = requirements.ToArray(),
+            });
+            Tint(baseItem.ItemPrefab, Tints[t]);
+            ItemManager.Instance.AddItem(baseItem);
+
+            var mead = new CustomItem(MeadName(t), "MeadHealthMinor", new ItemConfig
+            {
+                Name = $"$item_meadinvisibility_t{t}",
+                Description = $"$item_meadinvisibility_t{t}_description",
+                Enabled = false,   // no crafting recipe; produced by the fermenter
+            });
+            var shared = mead.ItemDrop.m_itemData.m_shared;
+            shared.m_itemType = ItemDrop.ItemData.ItemType.Consumable;
+            var effect = ObjectDB.instance.GetStatusEffect(Effects.StatusEffects.NameHash(t));
+            if (effect == null)
+                Plugin.Log.LogError($"status effect SE_Invisibility_T{t} not found in ObjectDB; mead registered without consume effect");
+            shared.m_consumeStatusEffect = effect;
+            shared.m_food = 0f;
+            shared.m_foodStamina = 0f;
+            shared.m_foodRegen = 0f;
+            Tint(mead.ItemPrefab, Tints[t]);
+            ItemManager.Instance.AddItem(mead);
+
+            ItemManager.Instance.AddItemConversion(new CustomItemConversion(new FermenterConversionConfig
+            {
+                FromItem = BaseName(t),
+                ToItem = MeadName(t),
+                ProducedItems = 4,
+            }));
         }
 
         private static void Tint(GameObject prefab, Color tint)
