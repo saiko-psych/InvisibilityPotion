@@ -30,6 +30,16 @@ namespace InvisibilityPotion.Visuals
         private static readonly int NormalScaleId = Shader.PropertyToID("_NormalScale");
         private static readonly int WaveVelId = Shader.PropertyToID("_WaveVel");
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
+        private static readonly int ZFadeDistanceId = Shader.PropertyToID("_ZFadeDistance");
+        private static readonly int CameraFadeMinId = Shader.PropertyToID("_CameraFadeDistanceMin");
+        private static readonly int CameraFadeMaxId = Shader.PropertyToID("_CameraFadeDistanceMax");
+        // swamp_mist (Custom/LitParticles) ships _ZFadeDistance 1 (soft-particle fade within 1 m of the surface behind) and
+        // _CameraFadeDistanceMin/Max 1/5 (fades particles within 5 m of the camera): made for a ground mist the camera walks
+        // through, but our fog always sits 3-5 m from the third-person camera and close to the ground/body, so most of it was faded
+        // out. Our per-veil copy fades only right at the camera and at a hard intersection.
+        private const float FogZFadeDistance = 0.25f;
+        private const float FogCameraFadeMin = 0.3f;
+        private const float FogCameraFadeMax = 1f;
         private static readonly Color TintTarget = new Color(0.3f, 0.35f, 0.4f);
         private const float TintAmount = 0.7f;
         // Only the material of this prefab is borrowed (soft mist sprite + Custom/LitParticles); its emitter is a world-space ground mist.
@@ -59,6 +69,10 @@ namespace InvisibilityPotion.Visuals
         public const float DefaultSpiritStrength = 0.25f;
         /// <summary>Runtime body-mode override per tier (index 1..3), null = use the tier's config. Set by ip_veil.</summary>
         public static readonly BodyVeilMode?[] ModeOverride = new BodyVeilMode?[4];
+#if DEBUG
+        /// <summary>Tuning window "Solo outer": spawn only the outer layer (inner layer off) without touching the settings. Debug only.</summary>
+        public static bool SoloOuter;
+#endif
         /// <summary>Bumped on every look change; a snapshot of another version is rebuilt on the next Apply.</summary>
         public static int Version { get; private set; }
 
@@ -190,7 +204,7 @@ namespace InvisibilityPotion.Visuals
             {
                 Tier = tier, IsLocal = isLocal, ForceHide = forceHide, Version = Version,
                 Requested = requested, Effective = Resolve(requested, isLocal, tier),
-                FogWanted = !forceHide && fog.Enabled && fog.Alpha > 0f,
+                FogWanted = !forceHide && fog.Enabled && (fog.InnerActive || fog.OuterActive),
             };
             _snapshots[p] = snap;
             if (snap.FogWanted) SpawnFog(p, snap);
@@ -372,11 +386,16 @@ namespace InvisibilityPotion.Visuals
             }
             var color = FogColor(s);
             snap.AppliedColor = color;
-            var inner = MakeFogMaterial(source, snap, color, s.Alpha, out var innerVertexAlpha);
+            var innerActive = s.InnerActive;
+#if DEBUG
+            if (SoloOuter) innerActive = false;
+#endif
+            var innerVertexAlpha = 0f;
+            var inner = innerActive ? MakeFogMaterial(source, snap, color, s.Alpha, s.Emission, out innerVertexAlpha) : null;
+            // The outer layer is independent of the inner one (rate, alpha): it can be tuned and tested alone.
             Material outer = null;
             var outerVertexAlpha = 0f;
-            if (s.OuterEnabled && s.OuterAlphaFactor > 0f && s.OuterRateFactor > 0f && s.Rate > 0f && s.OuterAnchors.Count > 0)
-                outer = MakeFogMaterial(source, snap, color, Mathf.Clamp01(s.Alpha * s.OuterAlphaFactor), out outerVertexAlpha);
+            if (s.OuterActive) outer = MakeFogMaterial(source, snap, color, s.OuterAlpha, s.Emission, out outerVertexAlpha);
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -388,10 +407,11 @@ namespace InvisibilityPotion.Visuals
             // Inner layer: the body surface (Mesh) or one emitter per enabled anchor (Bones, also the Mesh fallback).
             var innerLayer = new FogLayer
             {
-                Rate = s.Rate, Size = s.Size, Lifetime = s.Lifetime, SpreadY = s.SpreadY, Trail = s.InnerTrailMode,
-                VertexAlpha = innerVertexAlpha, Material = inner,
+                Rate = s.Rate, Size = s.Size, Lifetime = s.Lifetime, SpreadX = s.SpreadX, SpreadY = s.SpreadY, SpreadZ = s.SpreadZ,
+                Trail = s.InnerTrailMode, VertexAlpha = innerVertexAlpha, Material = inner,
             };
-            if (!(s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, innerLayer)))
+            // inner == null: inner layer off (alpha or rate 0, or solo outer).
+            if (inner != null && !(s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, innerLayer)))
             {
                 var anyEnabled = false;
                 foreach (var a in s.Anchors)
@@ -408,11 +428,12 @@ namespace InvisibilityPotion.Visuals
                     snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", false, 0.4f, new Vector3(0f, 1f, 0f), color, innerLayer, s, snap.MaterialHasColor));
             }
 
-            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter modes.
+            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter
+            // modes. Absolute values: radius in metres (not scaled by SpreadX/Z), its own rate, size, alpha and lifetime.
             if (outer == null || animator == null) return;
             var outerLayer = new FogLayer
             {
-                Rate = s.Rate * s.OuterRateFactor, Size = s.Size * s.OuterSizeFactor, Lifetime = s.OuterLifetime, SpreadY = s.OuterSpreadY,
+                Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
                 Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer,
             };
             foreach (var name in s.OuterAnchors)
@@ -421,7 +442,7 @@ namespace InvisibilityPotion.Visuals
                 if (a == null) continue;
                 var bone = BoneFor(animator, a.Name);
                 if (bone == null) continue;
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, a.Radius * s.OuterRadiusMultiplier, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
+                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, s.OuterRadius, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
             }
         }
 
@@ -435,13 +456,16 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Per-layer emission values shared by every emitter of one fog layer.</summary>
         private sealed class FogLayer
         {
-            public float Rate, Size, Lifetime, SpreadY, VertexAlpha;
+            public float Rate, Size, Lifetime, SpreadX, SpreadY, SpreadZ, VertexAlpha;
             public FogTrailMode Trail;
             public Material Material;
         }
 
-        /// <summary>Per-veil copy of the borrowed material with the layer's alpha split between material and particle colour.</summary>
-        private static Material MakeFogMaterial(Material source, Snapshot snap, Color color, float alpha, out float vertexAlpha)
+        /// <summary>
+        /// Per-veil copy of the borrowed material with the layer's alpha split between material and particle colour, the tier's
+        /// emission (colour x Emission) and shorter soft/camera fades (see FogZFadeDistance).
+        /// </summary>
+        private static Material MakeFogMaterial(Material source, Snapshot snap, Color color, float alpha, float emission, out float vertexAlpha)
         {
             var mat = new Material(source) { name = "ip_fog_mat" };   // never mutate the vanilla shared material
             var materialHasColor = mat.HasProperty(ColorId);
@@ -450,10 +474,22 @@ namespace InvisibilityPotion.Visuals
             else if (AlphaMode == FogAlphaMode.Material) { matAlpha = alpha; vertexAlpha = 1f; }
             else { matAlpha = vertexAlpha = Mathf.Sqrt(alpha); }   // Both: the product of the two is the target alpha
             if (materialHasColor) mat.SetColor(ColorId, new Color(color.r, color.g, color.b, matAlpha));
-            if (mat.HasProperty(EmissionColorId)) mat.SetColor(EmissionColorId, Color.black);
+            if (mat.HasProperty(EmissionColorId)) mat.SetColor(EmissionColorId, Emission(color, emission));
+            if (mat.HasProperty(ZFadeDistanceId)) mat.SetFloat(ZFadeDistanceId, FogZFadeDistance);
+            if (mat.HasProperty(CameraFadeMinId) && mat.HasProperty(CameraFadeMaxId))
+            {
+                mat.SetFloat(CameraFadeMinId, FogCameraFadeMin);
+                mat.SetFloat(CameraFadeMaxId, FogCameraFadeMax);
+            }
             snap.MaterialHasColor = materialHasColor;
             snap.FogMaterials.Add(mat);
             return mat;
+        }
+
+        private static Color Emission(Color color, float emission)
+        {
+            var k = Mathf.Clamp01(emission);
+            return new Color(color.r * k, color.g * k, color.b * k, 1f);
         }
 
         /// <summary>The tier's fog colour; with DynamicColor blended 50/50 with the environment fog colour (EnvMan sets RenderSettings.fogColor).</summary>
@@ -482,6 +518,7 @@ namespace InvisibilityPotion.Visuals
                     if (m == null) continue;
                     var a = m.GetColor(ColorId).a;
                     m.SetColor(ColorId, new Color(c.r, c.g, c.b, a));
+                    if (m.HasProperty(EmissionColorId)) m.SetColor(EmissionColorId, Emission(c, s.Emission));
                 }
                 return;
             }
@@ -510,7 +547,7 @@ namespace InvisibilityPotion.Visuals
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Sphere;
             shape.radius = Mathf.Max(0.001f, radius);
-            shape.scale = new Vector3(s.SpreadX, layer.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
+            shape.scale = new Vector3(layer.SpreadX, layer.SpreadY, layer.SpreadZ);   // follower rotation = player rotation, so y is up
 
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
@@ -545,7 +582,7 @@ namespace InvisibilityPotion.Visuals
             if (rate <= 0f) return true;   // same as Bones with every anchor off: no inner fog
             var layer = new FogLayer
             {
-                Rate = rate, Size = inner.Size, Lifetime = inner.Lifetime, SpreadY = inner.SpreadY, Trail = inner.Trail,
+                Rate = rate, Size = inner.Size, Lifetime = inner.Lifetime, SpreadX = inner.SpreadX, SpreadY = inner.SpreadY, SpreadZ = inner.SpreadZ, Trail = inner.Trail,
                 VertexAlpha = inner.VertexAlpha, Material = inner.Material,
             };
             snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, s.MeshOffset, color, layer, s, snap.MaterialHasColor));

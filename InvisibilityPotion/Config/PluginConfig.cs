@@ -131,18 +131,7 @@ namespace InvisibilityPotion.Config
         /// </summary>
         private static void MigrateAndDropOrphans()
         {
-            Dictionary<ConfigDefinition, string> orphans;
-            try
-            {
-                var prop = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries");
-                if (prop == null) Plugin.Log?.LogWarning("Config: ConfigFile.OrphanedEntries not found (BepInEx changed?); old keys stay in the file");
-                orphans = prop?.GetValue(_file) as Dictionary<ConfigDefinition, string>;
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log?.LogWarning($"Config: cannot read orphaned entries ({ex.Message}); old keys stay in the file");
-                return;
-            }
+            var orphans = Orphans();
             if (orphans == null || orphans.Count == 0) return;
             var t2Mode = (ConfigEntry<string>)_tierEntries[2]["BodyVeilMode"];
             if (orphans.ContainsKey(new ConfigDefinition("Tier2", "FogDensity")) && t2Mode.Value == "Ghost")
@@ -151,20 +140,39 @@ namespace InvisibilityPotion.Config
                 Plugin.Log?.LogInfo("Config migration: [Tier2] BodyVeilMode Ghost (old default) -> Distortion (new default)");
             }
             var names = new List<string>();
-            foreach (var d in orphans.Keys) names.Add($"[{d.Section}] {d.Key}");
+            foreach (var kv in orphans) names.Add($"[{kv.Key.Section}] {kv.Key.Key} = {kv.Value}");
             orphans.Clear();
             _file.Save();
             Plugin.Log?.LogInfo($"Config: removed {names.Count} obsolete keys: {string.Join(", ", names)}");
         }
 
+        /// <summary>Keys in the file that no bound entry claims (BepInEx's private ConfigFile.OrphanedEntries); null when unreadable.</summary>
+        private static Dictionary<ConfigDefinition, string> Orphans()
+        {
+            try
+            {
+                var prop = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries");
+                if (prop == null) Plugin.Log?.LogWarning("Config: ConfigFile.OrphanedEntries not found (BepInEx changed?); old keys stay in the file");
+                return prop?.GetValue(_file) as Dictionary<ConfigDefinition, string>;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"Config: cannot read orphaned entries ({ex.Message}); old keys stay in the file");
+                return null;
+            }
+        }
+
         /// <summary>Revision of the per-tier look defaults; bump when a default the user asked for must reach existing config files.</summary>
-        private const int LookDefaultsRevision = 1;
+        private const int LookDefaultsRevision = 2;
 
         /// <summary>
-        /// Round F (task 10f) changed the tier I and II looks on the user's request (tier I: light distortion plus surface wisps that
-        /// trail; tier II: wide flat outer ring). Existing files keep their old values, so once per file ([Fog] LookDefaultsRevision
-        /// below the current revision) [Fog.Tier1] and [Fog.Tier2] are reset to the new defaults and a [Tier1] BodyVeilMode still on the
-        /// old default Off becomes Distortion. Tier III is untouched (approved as is). The log lists what happened.
+        /// The tier I and II looks changed on the user's request: revision 1 (round F, task 10f: light distortion plus surface
+        /// wisps for tier I, wide flat outer ring for tier II), revision 2 (round G, task 10g: visible tier I body with bone fog and
+        /// trail, whole-body tier II cloud, absolute outer-layer keys, Emission, DynamicColor off). Existing files keep their old
+        /// values, so once per file ([Fog] LookDefaultsRevision below the current revision) [Fog.Tier1] and [Fog.Tier2] are reset to
+        /// the new defaults, the obsolete outer factor keys are logged with their values (MigrateAndDropOrphans then removes them),
+        /// and a [Tier1] BodyVeilMode still on the old default Off becomes Distortion. Tier III is untouched (approved as is).
+        /// The log lists what happened.
         /// </summary>
         private static void MigrateLookDefaults()
         {
@@ -185,6 +193,12 @@ namespace InvisibilityPotion.Config
                         Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {kv.Key} = {kv.Value.BoxedValue} (default {kv.Value.DefaultValue}) is reset");
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
+                var orphans = Orphans();
+                if (orphans != null)
+                    for (var t = 1; t <= 3; t++)
+                        foreach (var key in FogSettings.ObsoleteKeys)
+                            if (orphans.TryGetValue(new ConfigDefinition($"Fog.Tier{t}", key), out var old))
+                                Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {key} = {old} is obsolete (replaced by the absolute OuterRadius/OuterAlpha/OuterRate/OuterSize/OuterLifetime) and removed");
                 var t1Mode = (ConfigEntry<string>)_tierEntries[1]["BodyVeilMode"];
                 var modeChanged = t1Mode.Value == "Off";
                 if (modeChanged) t1Mode.Value = "Distortion";

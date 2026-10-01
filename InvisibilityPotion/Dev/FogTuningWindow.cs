@@ -312,7 +312,7 @@ namespace InvisibilityPotion.Dev
         {
             ToggleRow("Enabled", ref s.Enabled, def.Enabled, saved.Enabled);
             ToggleRow("Trail (world space: particles stay behind)", ref s.Trail, def.Trail, saved.Trail);
-            ToggleRow("Dynamic colour (50% environment fog)", ref s.DynamicColor, def.DynamicColor, saved.DynamicColor);
+            ToggleRow("Dynamic colour (50% environment fog, darker in rain/night)", ref s.DynamicColor, def.DynamicColor, saved.DynamicColor);
             DrawEmitterMode(s, live);
             if (s.EmitterMode == FogEmitterMode.Mesh)
             {
@@ -327,6 +327,7 @@ namespace InvisibilityPotion.Dev
             Row("Colour R", ref s.R, 0f, 1f, 0.05f, def.R, saved.R);
             Row("Colour G", ref s.G, 0f, 1f, 0.05f, def.G, saved.G);
             Row("Colour B", ref s.B, 0f, 1f, 0.05f, def.B, saved.B);
+            Row("Emission (glow)", ref s.Emission, 0f, 1f, 0.05f, def.Emission, saved.Emission);
             Row("Spread X", ref s.SpreadX, 0.05f, 3f, 0.05f, def.SpreadX, saved.SpreadX);
             Row("Spread Y", ref s.SpreadY, 0.05f, 3f, 0.05f, def.SpreadY, saved.SpreadY);
             Row("Spread Z", ref s.SpreadZ, 0.05f, 3f, 0.05f, def.SpreadZ, saved.SpreadZ);
@@ -342,16 +343,18 @@ namespace InvisibilityPotion.Dev
         {
             ToggleRow("Outer layer", ref s.OuterEnabled, def.OuterEnabled, saved.OuterEnabled);
             ToggleRow("Outer trail (world space)", ref s.OuterTrail, def.OuterTrail, saved.OuterTrail);
-            Row("Radius x anchor", ref s.OuterRadiusMultiplier, 0.5f, 12f, 0.5f, def.OuterRadiusMultiplier, saved.OuterRadiusMultiplier);
+            var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner off; not saved, all tiers)", GUILayout.Height(22f));
+            if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
+            Row("Radius m", ref s.OuterRadius, 0.1f, 4f, 0.1f, def.OuterRadius, saved.OuterRadius);
             Row("Spread Y (flat < 1)", ref s.OuterSpreadY, 0.05f, 2f, 0.05f, def.OuterSpreadY, saved.OuterSpreadY);
-            Row("Alpha x", ref s.OuterAlphaFactor, 0f, 2f, 0.05f, def.OuterAlphaFactor, saved.OuterAlphaFactor);
-            Row("Rate x", ref s.OuterRateFactor, 0f, 2f, 0.05f, def.OuterRateFactor, saved.OuterRateFactor);
-            Row("Size x", ref s.OuterSizeFactor, 0.5f, 8f, 0.25f, def.OuterSizeFactor, saved.OuterSizeFactor);
-            Row("Lifetime x", ref s.OuterLifetimeFactor, 0.2f, 4f, 0.1f, def.OuterLifetimeFactor, saved.OuterLifetimeFactor);
+            Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.05f, def.OuterAlpha, saved.OuterAlpha);
+            Row("Rate /s per anchor", ref s.OuterRate, 0f, 40f, 1f, def.OuterRate, saved.OuterRate);
+            Row("Size m", ref s.OuterSize, 0.1f, 5f, 0.1f, def.OuterSize, saved.OuterSize);
+            Row("Lifetime s", ref s.OuterLifetime, 0.2f, 10f, 0.25f, def.OuterLifetime, saved.OuterLifetime);
             var anchorsChanged = s.Get("OuterAnchors") != saved.Get("OuterAnchors");
             var c = GUI.color;
             if (anchorsChanged) GUI.color = ChangedColor;
-            GUILayout.Label((anchorsChanged ? "* " : "") + "Outer anchors (radius from the anchor, x multiplier above):", _wrap);
+            GUILayout.Label((anchorsChanged ? "* " : "") + "Outer anchors (offset from the anchor, radius above):", _wrap);
             GUI.color = c;
             var names = FogSettings.AnchorNames;
             const int perRow = 3;
@@ -375,7 +378,7 @@ namespace InvisibilityPotion.Dev
         {
             DrawModes(tier);
             Row("Distortion", ref s.DistortionStrength, 0f, 0.5f, 0.01f, def.DistortionStrength, saved.DistortionStrength);
-            Row("Distortion alpha", ref s.DA, 0f, 0.5f, 0.01f, def.DA, saved.DA);
+            Row("Distortion alpha (body opacity)", ref s.DA, 0f, 1f, 0.01f, def.DA, saved.DA);
             DrawWave(s, saved);
 
             GUILayout.Label("Shadow / Spirit (all tiers)", _bold);
