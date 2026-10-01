@@ -17,10 +17,21 @@ namespace InvisibilityPotion.Visuals
         private void Awake()
         {
             _instance = this;
-            var configured = PluginConfig.Global.BodyVeilMode;
-            if (!FogVeil.TryParseMode(configured, out var mode))
-                Plugin.Log.LogWarning($"BodyVeilMode '{configured}' is not one of Off, Cutoff, Hide, Tint, Ghost, Distortion; using Hide");
-            FogVeil.CurrentMode = mode;
+            FogVeil.LoadFromConfig();
+            PluginConfig.Changed += OnConfigChanged;
+        }
+
+        private void OnDestroy()
+        {
+            PluginConfig.Changed -= OnConfigChanged;
+            if (_instance == this) _instance = null;
+        }
+
+        /// <summary>Startup, ip_reload_config, server sync: re-read the look and re-apply it.</summary>
+        private static void OnConfigChanged()
+        {
+            FogVeil.LoadFromConfig();
+            ForceRefreshAll();
         }
 
         private void Update()
@@ -39,7 +50,7 @@ namespace InvisibilityPotion.Visuals
             _instance.Refresh();
         }
 
-        /// <summary>Restores and re-applies the veil on every veiled player (after a body-mode switch).</summary>
+        /// <summary>Restores and re-applies the veil on every veiled player (after a look change).</summary>
         public static void ForceRefreshAll()
         {
             if (_instance == null) return;
@@ -52,12 +63,21 @@ namespace InvisibilityPotion.Visuals
         {
             var seen = _seen;
             seen.Clear();
+            var local = Player.m_localPlayer;
             foreach (var p in Player.GetAllPlayers())
             {
                 if (p == null) continue;
                 seen.Add(p);
                 var tier = HiddenState.HiddenTier(p);
-                if (tier > 0) { _veil.Apply(p, tier, p == Player.m_localPlayer); _veiled.Add(p); }
+                if (tier > 0)
+                {
+                    var isLocal = p == local;
+                    // A remote player hidden from players must not be drawn here either (the listen host gets the real position,
+                    // the position spoof only applies to forwarded packets).
+                    var forceHide = !isLocal && HiddenState.IsHiddenFromPlayers(p);
+                    _veil.Apply(p, tier, isLocal, forceHide);
+                    _veiled.Add(p);
+                }
                 else if (_veiled.Remove(p)) _veil.Remove(p);
             }
             _veiled.RemoveWhere(p => { if (p == null || !seen.Contains(p)) { _veil.Remove(p); return true; } return false; });

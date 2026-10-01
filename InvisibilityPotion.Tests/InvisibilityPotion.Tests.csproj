@@ -18,5 +18,6 @@
     <Compile Include="../InvisibilityPotion/Dev/AutoJoinConfig.Core.cs" Link="AutoJoinConfig.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/TierConfig.Core.cs" Link="TierConfig.Core.cs" />
     <Compile Include="../InvisibilityPotion/Effects/InvisibilityStateMachine.Core.cs" Link="InvisibilityStateMachine.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Visuals/FogSettings.Core.cs" Link="FogSettings.Core.cs" />
   </ItemGroup>
 </Project>

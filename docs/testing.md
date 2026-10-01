@@ -31,3 +31,16 @@ Two clients (pending, needs plan 3 server):
 - [ ] After a reveal or the end of the effect, the player appears on the second client within one send interval
 - [ ] AI in the second client's zone still ignores the hidden player
 - [ ] With `AllowPvpInvisibility = false` on the server, tier III hides from enemies only
+
+## Plan 2 – Round C: veil look tuning (Debug console)
+
+Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog dense (0.7); T3 body Distortion, no fog. Config: `[TierN] BodyVeilMode/FogEnabled/FogDensity` (admin), look in `[Fog]` and `[Veil]` (local, not synced).
+
+- `ip_fog` prints the fog look; `ip_fog <rate|size|life|speed|alpha|drift> <v>`, `ip_fog color r g b`, `ip_fog alphamode both|material|vertex`, `ip_fog anchor <Head|Chest|Hips|LeftHand|RightHand|LeftFoot|RightFoot> on|off|radius <v>|offset x y z`; `ip_fog save` writes `[Fog]`, `ip_fog reset` re-reads the file. Every change re-applies at once.
+- `ip_veil` prints per-tier modes; `ip_veil <none|cutoff|hide|tint|ghost|distortion> [tier]` overrides your current tier (none = Off), `ip_veil off [tier|all]` clears; `ip_veil distortion <strength> [alpha]`, `ip_veil ghost <alpha> [emission]`, `ip_veil save` writes `[Veil]`.
+- Log lines `veil ghost/distortion/fog: material ... properties: ...` list the shader properties once; report them if a value has no visible effect.
+- [ ] T1: thin wisps on head, chest, hips, hands, feet; no glowing sphere
+- [ ] T2: ghost body plus denser fog, clearly different from T3
+- [ ] T3: distortion without blue tint, nearly invisible; no fog
+- [ ] Drinking a potion plays the mead sound/particles; the end of the effect plays the stop effect
+- [ ] Listen host: a remote T3 player is not drawn at their real position
