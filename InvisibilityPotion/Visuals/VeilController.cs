@@ -1,0 +1,47 @@
+using System.Collections.Generic;
+using InvisibilityPotion.Net;
+using UnityEngine;
+
+namespace InvisibilityPotion.Visuals
+{
+    /// <summary>Drives the veil for every player from ZDO state, so local and remote players look the same. Attached to the plugin GameObject.</summary>
+    public sealed class VeilController : MonoBehaviour
+    {
+        private static VeilController _instance;
+        private readonly IVeil _veil = new FogVeil();
+        private readonly HashSet<Player> _veiled = new HashSet<Player>();
+        private float _timer;
+
+        private void Awake() { _instance = this; }
+
+        private void Update()
+        {
+            _timer += Time.deltaTime;
+            if (_timer < 0.25f) return;
+            _timer = 0f;
+            Refresh();
+        }
+
+        public static void ForceRefresh(Player p)
+        {
+            if (_instance == null || p == null) return;
+            _instance._veil.Remove(p);
+            _instance._veiled.Remove(p);
+            _instance.Refresh();
+        }
+
+        private void Refresh()
+        {
+            var seen = new HashSet<Player>();
+            foreach (var p in Player.GetAllPlayers())
+            {
+                if (p == null) continue;
+                seen.Add(p);
+                var tier = HiddenState.HiddenTier(p);
+                if (tier > 0) { _veil.Apply(p, tier, p == Player.m_localPlayer); _veiled.Add(p); }
+                else if (_veiled.Remove(p)) _veil.Remove(p);
+            }
+            _veiled.RemoveWhere(p => { if (p == null || !seen.Contains(p)) { _veil.Remove(p); return true; } return false; });
+        }
+    }
+}

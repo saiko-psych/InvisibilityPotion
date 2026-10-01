@@ -14,6 +14,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new StateCommand());
             CommandManager.Instance.AddConsoleCommand(new ReloadConfigCommand());
             CommandManager.Instance.AddConsoleCommand(new GiveCommand());
+            CommandManager.Instance.AddConsoleCommand(new PrefabsCommand());
         }
 
         internal static void Say(string line)
@@ -39,6 +40,26 @@ namespace InvisibilityPotion.Dev
                 {
                     Say($"config reload failed: {e.Message}");
                 }
+            }
+        }
+
+        private class PrefabsCommand : ConsoleCommand
+        {
+            public override string Name => "ip_prefabs";
+            public override string Help => "ip_prefabs <substring>: list registered prefab names containing the substring (max 40)";
+
+            public override void Run(string[] args)
+            {
+                if (args.Length < 1) { Say(Help); return; }
+                if (ZNetScene.instance == null) { Say("no scene"); return; }
+                var n = 0;
+                foreach (var go in ZNetScene.instance.m_prefabs)
+                {
+                    if (go == null || go.name.IndexOf(args[0], System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (n++ >= 40) { Say("... (capped at 40)"); break; }
+                    Say(go.name);
+                }
+                if (n == 0) Say("no match");
             }
         }
 

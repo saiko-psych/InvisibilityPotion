@@ -36,6 +36,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Attack", "StartDraw"),
             PatchHealth.TargetKey("Humanoid", "StartAttack"),
             PatchHealth.TargetKey("Humanoid", "BlockAttack"),
+            PatchHealth.TargetKey("VisEquipment", "UpdateLodgroup"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();
@@ -76,6 +77,14 @@ namespace InvisibilityPotion
                 }
             }
             MissingPatches = PatchHealth.Report(HarmonyInstance, ExpectedPatchTargets);
+            try
+            {
+                gameObject.AddComponent<Visuals.VeilController>();
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Veil controller setup failed: {e}");
+            }
 #if DEBUG
             Dev.DevCommands.Register();
 #endif
