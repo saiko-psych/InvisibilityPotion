@@ -16,7 +16,7 @@ namespace InvisibilityPotion.Dev
     /// [Fog.TierN]/[Veil] (and the body mode of a tier with an override), Reset re-reads the file. The whole window is scaled
     /// with GUI.matrix ([Dev] TuningWindowScale, 0 = screen height / 1080, at least 1); position and size are remembered in
     /// [Dev] TuningWindowRect. Every numeric value is one Row: label (yellow with * when it differs from the saved file), big
-    /// slider (mouse wheel steps), -, typed field (Enter or focus loss applies), +, R (default). Shift = step/10, Ctrl = step×10.
+    /// slider (drag or click anywhere on it, mouse wheel steps), -, typed field (Enter or focus loss applies), +, R (default). Shift = step/10, Ctrl = step×10.
     /// While the window owns the mouse, the game camera releases the cursor and player input is blocked (patch below); F7 hands
     /// the mouse back to the game and returns it.
     /// </summary>
@@ -30,6 +30,7 @@ namespace InvisibilityPotion.Dev
         private const float FieldWidth = 64f;
         private const float SmallFieldWidth = 52f;
         private const float ButtonWidth = 28f;
+        private const float ThumbWidth = 16f;
         private const float RowHeight = 26f;
         private const float MinWidth = 520f;
         private const float MinHeight = 320f;
@@ -66,6 +67,7 @@ namespace InvisibilityPotion.Dev
         private float _previewAt = -1f;
         private bool _resizing;
         private Vector2 _resizeMouse, _resizeSize;
+        private int _sliderHot;   // control id of the slider being dragged (0 = none), see Slider
         private LookState _undo;
         // Typed fields: text while a field has focus, keyed by control name; committed on Enter or when focus leaves it.
         private readonly Dictionary<string, string> _buf = new Dictionary<string, string>();
@@ -117,6 +119,7 @@ namespace InvisibilityPotion.Dev
             {
                 if (_dirty) ApplyNow();
                 _resizing = false;
+                _sliderHot = 0;   // may run outside OnGUI: only our grab state, GUIUtility.hotControl is released on the next press
                 _buf.Clear();
                 _commitId = null;
                 GUIUtility.keyboardControl = 0;   // a focused text field must not keep swallowing game keys
@@ -133,6 +136,7 @@ namespace InvisibilityPotion.Dev
             if (ZInput.GetKeyDown(MouseToggleKey))
             {
                 _mouseToWindow = !_mouseToWindow;
+                _sliderHot = 0;
                 var cam = GameCamera.instance;
                 if (!_mouseToWindow && cam != null) cam.m_mouseCapture = _savedCapture;
             }
@@ -183,6 +187,7 @@ namespace InvisibilityPotion.Dev
             try
             {
                 HandleResize();
+                if (Event.current.rawType == EventType.MouseDown) ReleaseSlider();   // a lost MouseUp must not keep a slider grabbed
                 _rect = GUI.Window(WindowId, _rect, DrawWindow, "Veil tuning (ip_fogui)");
                 ClampRect();
             }
@@ -669,7 +674,7 @@ namespace InvisibilityPotion.Dev
             _slider.normal.background = _slider.hover.background = _slider.active.background = _slider.focused.background = track;
             _thumb = new GUIStyle(GUI.skin.horizontalSliderThumb)
             {
-                fixedWidth = 16f, fixedHeight = 22f, margin = new RectOffset(0, 0, 0, 0), padding = new RectOffset(0, 0, 0, 0),
+                fixedWidth = ThumbWidth, fixedHeight = 22f, margin = new RectOffset(0, 0, 0, 0), padding = new RectOffset(0, 0, 0, 0),
                 border = new RectOffset(0, 0, 0, 0), overflow = new RectOffset(0, 0, 0, 0),
             };
             _thumb.normal.background = Tex(1, 1, (x, y) => new Color(0.78f, 0.8f, 0.86f, 1f));
@@ -727,10 +732,9 @@ namespace InvisibilityPotion.Dev
                             GUILayout.Width(LabelWidth), GUILayout.Height(RowHeight));
             GUI.color = c;
 
-            GUI.changed = false;
-            var slid = GUILayout.HorizontalSlider(Mathf.Clamp(v, min, max), min, max, _slider, _thumb, GUILayout.MinWidth(90f), GUILayout.ExpandWidth(true));
-            if (GUI.changed) v = Snap(slid, grid);
-            if (e.type == EventType.ScrollWheel && GUILayoutUtility.GetLastRect().Contains(e.mousePosition))
+            var sliderRect = GUILayoutUtility.GetRect(90f, 10000f, RowHeight, RowHeight, GUILayout.MinWidth(90f), GUILayout.ExpandWidth(true));
+            if (Slider(sliderRect, v, min, max, out var slid)) v = Snap(slid, grid);
+            if (e.type == EventType.ScrollWheel && sliderRect.Contains(e.mousePosition))
             {
                 v = Mathf.Clamp(Snap(v - Mathf.Sign(e.delta.y) * step * mod, grid * Mathf.Min(1f, mod)), min, max);
                 e.Use();   // the scroll view must not scroll as well
@@ -749,6 +753,64 @@ namespace InvisibilityPotion.Dev
             MarkDirty();
             return true;
         }
+
+        /// <summary>
+        /// Draggable slider (replaces GUILayout.HorizontalSlider, whose thumb could not be dragged in game): a press anywhere on
+        /// the track grabs it (hotControl) and sets the value from the mouse x; while grabbed the value follows the mouse until the
+        /// button is released. The grab is kept in our own field (not only GUIUtility.hotControl) and drag/up are read from
+        /// rawType, so a drag still reaches the grabbed slider when IMGUI marks the event Used or Ignore for this window (another
+        /// OnGUI, window focus under the scaled matrix); it also follows the mouse on Repaint, in case no MouseDrag arrives at all.
+        /// Any new mouse press releases a grab whose MouseUp got lost (OnGUI). True when it set a new value.
+        /// </summary>
+        private bool Slider(Rect r, float v, float min, float max, out float value)
+        {
+            value = v;
+            var id = GUIUtility.GetControlID(FocusType.Passive);
+            var e = Event.current;
+            var hot = id == _sliderHot;
+            switch (e.rawType)
+            {
+                case EventType.MouseDown:
+                    if (e.type != EventType.MouseDown || e.button != 0 || !r.Contains(e.mousePosition)) break;
+                    GUIUtility.hotControl = _sliderHot = id;
+                    GUIUtility.keyboardControl = 0;   // a focused typed field must not keep its stale text
+                    value = ValueAt(r, e.mousePosition.x, min, max);
+                    e.Use();
+                    return true;
+                case EventType.MouseDrag:
+                    if (!hot) break;
+                    value = ValueAt(r, e.mousePosition.x, min, max);
+                    e.Use();
+                    return true;
+                case EventType.MouseUp:
+                    if (!hot) break;
+                    ReleaseSlider();
+                    e.Use();
+                    break;
+                case EventType.Repaint:
+                    var thumbX = r.x + (r.width - ThumbWidth) * Mathf.InverseLerp(min, max, Mathf.Clamp(v, min, max));
+                    var track = new Rect(r.x, r.y + (r.height - _slider.fixedHeight) * 0.5f, r.width, _slider.fixedHeight);
+                    _slider.Draw(track, GUIContent.none, id, false, r.Contains(e.mousePosition));
+                    _thumb.Draw(new Rect(thumbX, track.y, ThumbWidth, track.height), GUIContent.none, id, hot, r.Contains(e.mousePosition));
+                    if (hot)
+                    {
+                        var follow = ValueAt(r, e.mousePosition.x, min, max);
+                        if (!Same(follow, Mathf.Clamp(v, min, max))) { value = follow; return true; }
+                    }
+                    break;
+            }
+            return false;
+        }
+
+        private void ReleaseSlider()
+        {
+            if (_sliderHot != 0 && GUIUtility.hotControl == _sliderHot) GUIUtility.hotControl = 0;
+            _sliderHot = 0;
+        }
+
+        /// <summary>Slider value for a mouse x: the thumb centre follows the mouse, clamped to min..max.</summary>
+        private static float ValueAt(Rect r, float x, float min, float max) =>
+            Mathf.Lerp(min, max, Mathf.InverseLerp(r.x + ThumbWidth * 0.5f, r.xMax - ThumbWidth * 0.5f, x));
 
         /// <summary>Compact typed field (anchor grid): wheel over it steps by step (Shift/Ctrl modifiers). True when changed.</summary>
         private bool Field(string id, ref float v, float min, float max, float step, float width)
