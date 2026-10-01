@@ -23,7 +23,7 @@ namespace InvisibilityPotion.Dev
         private class ReloadConfigCommand : ConsoleCommand
         {
             public override string Name => "ip_reload_config";
-            public override string Help => "InvisibilityPotion: re-read the config file; Duration applies to new effects only";
+            public override string Help => "InvisibilityPotion: re-read the local config file; Duration applies to new effects only. On a client the values are replaced again at the next server sync";
 
             public override void Run(string[] args)
             {

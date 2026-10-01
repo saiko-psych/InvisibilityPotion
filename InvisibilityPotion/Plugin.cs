@@ -34,7 +34,14 @@ namespace InvisibilityPotion
         {
             Log = Logger;
             Config.SaveOnConfigSet = true;
-            Cfg.PluginConfig.Bind(Config);
+            try
+            {
+                Cfg.PluginConfig.Bind(Config);
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Config binding failed: {e}");
+            }
             // Server-synced values arrive after join; rebuild the snapshots so they take effect.
             Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) => Cfg.PluginConfig.Refresh();
             HarmonyInstance = new Harmony(PluginGuid);

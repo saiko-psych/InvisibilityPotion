@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
-using Jotunn.Utils;
 
 namespace InvisibilityPotion.Config
 {
@@ -65,30 +64,47 @@ namespace InvisibilityPotion.Config
 
         private static T Get<T>(Dictionary<string, ConfigEntryBase> entries, string key) => ((ConfigEntry<T>)entries[key]).Value;
 
-        /// <summary>Rebuilds the snapshots from the bound entries and raises Changed. Call after Config.Reload() or a sync.</summary>
+        private static T GetDefault<T>(Dictionary<string, ConfigEntryBase> entries, string key) => (T)entries[key].DefaultValue;
+
+        private static TierConfig BuildTier(int t, bool defaults)
+        {
+            var e = _tierEntries[t];
+            T V<T>(string key) => defaults ? GetDefault<T>(e, key) : Get<T>(e, key);
+            return new TierConfig
+            {
+                Tier = t,
+                Duration = V<float>("Duration"),
+                StealthModifier = V<float>("StealthModifier"),
+                NoiseModifier = V<float>("NoiseModifier"),
+                IgnoredByEnemies = V<bool>("IgnoredByEnemies"),
+                AggroLossTime = V<float>("AggroLossTime"),
+                RehideDelay = V<float>("RehideDelay"),
+                DebuffStaminaRegenMultiplier = V<float>("DebuffStaminaRegenMultiplier"),
+                DebuffDuration = V<float>("DebuffDuration"),
+                Cooldown = V<float>("Cooldown"),
+                Recipe = V<string>("Recipe"),
+            };
+        }
+
+        /// <summary>Rebuilds the snapshots from the bound entries and raises Changed. Never throws: an invalid tier falls back to its defaults with a warning.</summary>
         public static void Refresh()
         {
+            var tiers = new TierConfig[4];
             for (var t = 1; t <= 3; t++)
             {
-                var e = _tierEntries[t];
-                var tc = new TierConfig
+                var tc = BuildTier(t, false);
+                try
                 {
-                    Tier = t,
-                    Duration = Get<float>(e, "Duration"),
-                    StealthModifier = Get<float>(e, "StealthModifier"),
-                    NoiseModifier = Get<float>(e, "NoiseModifier"),
-                    IgnoredByEnemies = Get<bool>(e, "IgnoredByEnemies"),
-                    AggroLossTime = Get<float>(e, "AggroLossTime"),
-                    RehideDelay = Get<float>(e, "RehideDelay"),
-                    DebuffStaminaRegenMultiplier = Get<float>(e, "DebuffStaminaRegenMultiplier"),
-                    DebuffDuration = Get<float>(e, "DebuffDuration"),
-                    Cooldown = Get<float>(e, "Cooldown"),
-                    Recipe = Get<string>(e, "Recipe"),
-                };
-                tc.Validate();
-                _tiers[t] = tc;
+                    tc.Validate();
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    Plugin.Log?.LogWarning($"Invalid config in [Tier{t}] {ex.ParamName} = {ex.ActualValue}: {ex.Message} Using defaults for this tier.");
+                    tc = BuildTier(t, true);
+                }
+                tiers[t] = tc;
             }
-            Global = new GlobalConfig
+            var global = new GlobalConfig
             {
                 RevealOnDamage = Get<bool>(_globalEntries, "RevealOnDamage"),
                 RevealOnBlock = Get<bool>(_globalEntries, "RevealOnBlock"),
@@ -98,6 +114,8 @@ namespace InvisibilityPotion.Config
                 FogCutoffDense = Get<float>(_globalEntries, "FogCutoffDense"),
                 FogCutoffSelf = Get<float>(_globalEntries, "FogCutoffSelf"),
             };
+            for (var t = 1; t <= 3; t++) _tiers[t] = tiers[t];
+            Global = global;
             Changed?.Invoke();
         }
 

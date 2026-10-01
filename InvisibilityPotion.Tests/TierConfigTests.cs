@@ -74,4 +74,22 @@ public class TierConfigTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TierConfig { Tier = 1, Duration = 0f }.Validate());
     }
+
+    [Fact]
+    public void Validate_RejectsNegativeAggroLossTime()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TierConfig { Tier = 1, Duration = 1f, AggroLossTime = -1f }.Validate());
+    }
+
+    [Fact]
+    public void Validate_RejectsNegativeDebuffDuration()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TierConfig { Tier = 1, Duration = 1f, DebuffDuration = -1f }.Validate());
+    }
+
+    [Fact]
+    public void Validate_AcceptsValidConfig()
+    {
+        new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, DebuffDuration = 20f }.Validate();
+    }
 }
