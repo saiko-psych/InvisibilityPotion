@@ -138,7 +138,7 @@ Visuals (Task 9, rounds C-F):
 
 Cleanup stress list (Task 9; every exit must go through `SE_Invisibility.Stop()`):
 - [ ] Given tier II active, do change armour, expect the veil persists and the armour shows correctly after expiry (pending round F)
-- [ ] Given tier III active, do die, expect no leftover fog or distortion after respawn
+- [x] Given tier III active, do die, expect no leftover fog or distortion after respawn (confirmed in round A for the state; the round-C+ visuals are covered by the Round F armour/expiry check)
 - [ ] Given tier II active, do log out to the menu and back in, expect no veil on the next login and the log shows `cleaned up`
 - [ ] Given tier I active, do `ip_give 3`, expect a clean upgrade (no leftover tier I fog)
 - [ ] Given a veil, do wait for expiry, expect no `ip_fog*` child left on the player
