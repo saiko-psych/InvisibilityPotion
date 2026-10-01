@@ -1066,11 +1066,19 @@ namespace InvisibilityPotion.Visuals
                 foreach (var kv in snap.SharedMaterials)
                 {
                     if (kv.Key == null) continue;   // destroyed (old armour piece): nothing to restore
-                    if (kv.Key == body && snap.Effective == BodyVeilMode.Spirit) CarryBodyChanges(kv.Key, kv.Value, snap);
-                    // Vanilla replaced the materials since the swap (they no longer hold one of ours): keep vanilla's, restoring
-                    // the snapshot would bring back stale ones.
-                    if (!HoldsOurMaterial(kv.Key)) continue;
-                    kv.Key.sharedMaterials = kv.Value;
+                    try
+                    {
+                        if (kv.Key == body && snap.Effective == BodyVeilMode.Spirit) CarryBodyChanges(kv.Key, kv.Value, snap);
+                        // Vanilla replaced the materials since the swap (they no longer hold one of ours): keep vanilla's, restoring
+                        // the snapshot would bring back stale ones.
+                        if (!HoldsOurMaterial(kv.Key)) continue;
+                        kv.Key.sharedMaterials = kv.Value;
+                    }
+                    catch (Exception e)
+                    {
+                        // One failing renderer must not leave the others in the swapped state.
+                        Plugin.Log.LogError($"veil remove: restoring renderer '{kv.Key.name}' failed: {e}");
+                    }
                 }
                 foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
             }

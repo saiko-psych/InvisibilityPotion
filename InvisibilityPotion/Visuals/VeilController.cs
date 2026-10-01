@@ -16,7 +16,7 @@ namespace InvisibilityPotion.Visuals
     public sealed class VeilController : MonoBehaviour
     {
         private static VeilController _instance;
-        private readonly FogVeil _veil = new FogVeil();
+        private readonly FogVeil _veil = new FogVeil();   // concrete: SuspendBody/ResumeBody/HasVeil/... are not part of IVeil
         private readonly HashSet<Player> _seen = new HashSet<Player>();
         private readonly HashSet<Player> _veiled = new HashSet<Player>();
         private readonly HashSet<string> _loggedErrors = new HashSet<string>();

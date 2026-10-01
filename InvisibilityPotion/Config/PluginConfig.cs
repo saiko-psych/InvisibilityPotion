@@ -84,14 +84,14 @@ namespace InvisibilityPotion.Config
                 ["NoiseModifier"] = Bind(section, "NoiseModifier", noise, "Fraction of vanilla noise while hidden (1 = vanilla). Tier I only."),
                 ["IgnoredByEnemies"] = Bind(section, "IgnoredByEnemies", ignored, "Enemies cannot see or hear the player at all"),
                 ["HiddenFromPlayers"] = Bind(section, "HiddenFromPlayers", hiddenFromPlayers, "Other players cannot see this player's position, model or nameplate"),
-                ["AggroLossTime"] = Bind(section, "AggroLossTime", aggroLoss, "Seconds a chasing enemy keeps searching before it gives up"),
+                ["AggroLossTime"] = Bind(section, "AggroLossTime", aggroLoss, "Seconds a chasing enemy keeps searching before it gives up. Values above 30 have no effect (vanilla's own limit); lower values make enemies give up sooner"),
                 ["RehideDelay"] = Bind(section, "RehideDelay", rehide, "Seconds without attacking until hidden again; 0 = an attack ends the effect"),
                 ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", 0.5f, "Stamina regeneration multiplier after revealing"),
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount"),
                 ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
-                                        $"How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow or Spirit. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
+                                        $"How the hidden player's body is drawn. Exactly one of (case-sensitive, an unknown value falls back to the default): Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
                                         ModeValues(bodyMode)),
             };
             _tierEntries[tier] = e;
@@ -134,7 +134,9 @@ namespace InvisibilityPotion.Config
             Dictionary<ConfigDefinition, string> orphans;
             try
             {
-                orphans = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries")?.GetValue(_file) as Dictionary<ConfigDefinition, string>;
+                var prop = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries");
+                if (prop == null) Plugin.Log?.LogWarning("Config: ConfigFile.OrphanedEntries not found (BepInEx changed?); old keys stay in the file");
+                orphans = prop?.GetValue(_file) as Dictionary<ConfigDefinition, string>;
             }
             catch (Exception ex)
             {
@@ -173,14 +175,28 @@ namespace InvisibilityPotion.Config
             _file.SaveOnConfigSet = false;
             try
             {
+                // Log what is about to be overwritten so a user's tuned values can be recovered from the log.
+                var differing = 0;
                 foreach (var t in new[] { 1, 2 })
-                    foreach (var kv in _fogEntries[t]) kv.Value.BoxedValue = kv.Value.DefaultValue;
+                    foreach (var kv in _fogEntries[t])
+                    {
+                        if (Equals(kv.Value.BoxedValue, kv.Value.DefaultValue)) continue;
+                        differing++;
+                        Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {kv.Key} = {kv.Value.BoxedValue} (default {kv.Value.DefaultValue}) is reset");
+                        kv.Value.BoxedValue = kv.Value.DefaultValue;
+                    }
                 var t1Mode = (ConfigEntry<string>)_tierEntries[1]["BodyVeilMode"];
                 var modeChanged = t1Mode.Value == "Off";
                 if (modeChanged) t1Mode.Value = "Distortion";
                 rev.Value = LookDefaultsRevision;
-                Plugin.Log?.LogInfo($"Config migration (look defaults revision {LookDefaultsRevision}): [Fog.Tier1] and [Fog.Tier2] reset to the new defaults" +
-                                    (modeChanged ? "; [Tier1] BodyVeilMode Off -> Distortion" : ""));
+                Plugin.Log?.LogInfo(differing == 0 && !modeChanged
+                    ? $"Config migration (look defaults revision {LookDefaultsRevision}): nothing to change, [Fog.Tier1] and [Fog.Tier2] already hold the defaults"
+                    : $"Config migration (look defaults revision {LookDefaultsRevision}): {differing} [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults" +
+                      (modeChanged ? "; [Tier1] BodyVeilMode Off -> Distortion" : ""));
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"Config migration (look defaults) failed: {ex.Message}");
             }
             finally
             {
