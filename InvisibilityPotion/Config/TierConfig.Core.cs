@@ -11,6 +11,7 @@ namespace InvisibilityPotion.Config
         public float StealthModifier = 1f;   // fraction of vanilla visibility, 1 = unchanged
         public float NoiseModifier = 1f;     // fraction of vanilla noise, 1 = unchanged
         public bool IgnoredByEnemies;
+        public bool HiddenFromPlayers;       // other players cannot see position, model or nameplate
         public float AggroLossTime;
         public float RehideDelay;            // <= 0: an attack ends the effect
         public float DebuffStaminaRegenMultiplier = 1f;
@@ -41,6 +42,7 @@ namespace InvisibilityPotion.Config
         public float FogRateLight = 20f;
         public float FogRateDense = 45f;
         public string BodyVeilMode = "Hide";
+        public bool AllowPvpInvisibility = true;
     }
 
     public static class ModifierMath

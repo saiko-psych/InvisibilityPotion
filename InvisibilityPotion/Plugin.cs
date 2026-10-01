@@ -38,6 +38,9 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Humanoid", "BlockAttack"),
             PatchHealth.TargetKey("VisEquipment", "UpdateLodgroup"),
             PatchHealth.TargetKey("Player", "CanConsumeItem"),
+            PatchHealth.TargetKey("EnemyHud", "TestShow"),
+            PatchHealth.TargetKey("ZNet", "UpdatePlayerList"),
+            PatchHealth.TargetKey("ZDOMan", "SendZDOs"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();

@@ -88,6 +88,12 @@ public class TierConfigTests
     }
 
     [Fact]
+    public void HiddenFromPlayers_DefaultsToFalse()
+    {
+        Assert.False(new TierConfig().HiddenFromPlayers);
+    }
+
+    [Fact]
     public void Validate_AcceptsValidConfig()
     {
         new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, DebuffDuration = 20f }.Validate();

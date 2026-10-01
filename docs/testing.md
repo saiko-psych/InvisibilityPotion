@@ -17,3 +17,17 @@ Run `make run`, press F5 for the console. Run `devcommands` once per session onl
 | Dedicated, I own the zone | | | |
 | Dedicated, another player owns the zone | | | |
 | Player joins while I am hidden | | | |
+
+## Plan 2 – Tier III hidden from other players
+
+Singleplayer (checkable now):
+- [ ] `ip_give 3`, then `ip_state` prints `hiddenFromPlayers=True`; after the effect ends or a reveal it prints `False`
+- [ ] Log shows `Patch health: … 0 missing` with `EnemyHud.TestShow`, `ZNet.UpdatePlayerList`, `ZDOMan.SendZDOs` patched, and no `SendZDOs transpiler: pattern not found` error
+
+Two clients (pending, needs plan 3 server):
+- [ ] Second client: no nameplate over the hidden player
+- [ ] Second client: no map pin for the hidden player (even with "share position" on)
+- [ ] Second client: the hidden player is not rendered near their real position while hidden
+- [ ] After a reveal or the end of the effect, the player appears on the second client within one send interval
+- [ ] AI in the second client's zone still ignores the hidden player
+- [ ] With `AllowPvpInvisibility = false` on the server, tier III hides from enemies only

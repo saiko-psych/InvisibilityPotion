@@ -24,9 +24,9 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, 5f, 0f, "Honey:10,Thistle:5");
-            BindTier(2, 120f, 1f, 1f, true, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3");
-            BindTier(3, 180f, 1f, 1f, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1");
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5");
+            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3");
+            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1");
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
@@ -37,10 +37,11 @@ namespace InvisibilityPotion.Config
             BindGlobal("FogRateLight", 20f, "Fog particles emitted per second around a player under the light veil (tier I)");
             BindGlobal("FogRateDense", 45f, "Fog particles emitted per second around a player under the dense veil (tier II/III)");
             BindGlobal("BodyVeilMode", "Hide", "How a veiled player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. Read at startup; the Debug command ip_veil overrides it in memory");
+            BindGlobal("AllowPvpInvisibility", true, "Server switch for hiding players from other players (tier III)");
             Refresh();
         }
 
-        private static void BindTier(int tier, float duration, float stealth, float noise, bool ignored, float aggroLoss, float rehide, string recipe)
+        private static void BindTier(int tier, float duration, float stealth, float noise, bool ignored, bool hiddenFromPlayers, float aggroLoss, float rehide, string recipe)
         {
             var section = $"Tier{tier}";
             var e = new Dictionary<string, ConfigEntryBase>
@@ -49,6 +50,7 @@ namespace InvisibilityPotion.Config
                 ["StealthModifier"] = Bind(section, "StealthModifier", stealth, "Fraction of vanilla visibility while hidden (1 = vanilla, 0.25 = a quarter). Tier I only."),
                 ["NoiseModifier"] = Bind(section, "NoiseModifier", noise, "Fraction of vanilla noise while hidden (1 = vanilla). Tier I only."),
                 ["IgnoredByEnemies"] = Bind(section, "IgnoredByEnemies", ignored, "Enemies cannot see or hear the player at all"),
+                ["HiddenFromPlayers"] = Bind(section, "HiddenFromPlayers", hiddenFromPlayers, "Other players cannot see this player's position, model or nameplate"),
                 ["AggroLossTime"] = Bind(section, "AggroLossTime", aggroLoss, "Seconds a chasing enemy keeps searching before it gives up"),
                 ["RehideDelay"] = Bind(section, "RehideDelay", rehide, "Seconds without attacking until hidden again; 0 = an attack ends the effect"),
                 ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", 0.5f, "Stamina regeneration multiplier after revealing"),
@@ -80,6 +82,7 @@ namespace InvisibilityPotion.Config
                 StealthModifier = V<float>("StealthModifier"),
                 NoiseModifier = V<float>("NoiseModifier"),
                 IgnoredByEnemies = V<bool>("IgnoredByEnemies"),
+                HiddenFromPlayers = V<bool>("HiddenFromPlayers"),
                 AggroLossTime = V<float>("AggroLossTime"),
                 RehideDelay = V<float>("RehideDelay"),
                 DebuffStaminaRegenMultiplier = V<float>("DebuffStaminaRegenMultiplier"),
@@ -119,6 +122,7 @@ namespace InvisibilityPotion.Config
                 FogRateLight = Get<float>(_globalEntries, "FogRateLight"),
                 FogRateDense = Get<float>(_globalEntries, "FogRateDense"),
                 BodyVeilMode = Get<string>(_globalEntries, "BodyVeilMode"),
+                AllowPvpInvisibility = Get<bool>(_globalEntries, "AllowPvpInvisibility"),
             };
             for (var t = 1; t <= 3; t++) _tiers[t] = tiers[t];
             Global = global;

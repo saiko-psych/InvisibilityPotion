@@ -41,6 +41,22 @@ namespace InvisibilityPotion.Net
             return tier > 0 && PluginConfig.Tier(tier).IgnoredByEnemies;
         }
 
+        /// <summary>Tier III: other players cannot see this player (nameplate, map pin, position). Server switch: Global.AllowPvpInvisibility.</summary>
+        public static bool IsHiddenFromPlayers(Character c)
+        {
+            var tier = HiddenTier(c);
+            return tier > 0 && PluginConfig.Global.AllowPvpInvisibility && PluginConfig.Tier(tier).HiddenFromPlayers;
+        }
+
+        /// <summary>Server-side check by ZDO (no Character instance needed). Reads the two keys directly; no cache, no allocation. Runs per ZDO per peer per send.</summary>
+        public static bool IsHiddenFromPlayers(ZDO zdo)
+        {
+            if (zdo == null || !PluginConfig.Global.AllowPvpInvisibility) return false;
+            var tier = zdo.GetInt(HashTier, 0);
+            if (tier < 1 || tier > 3 || !zdo.GetBool(HashHidden, false)) return false;
+            return PluginConfig.Tier(tier).HiddenFromPlayers;
+        }
+
         /// <summary>Owner side only (SE_Invisibility runs only on the owner).</summary>
         public static void Write(Player owner, int tier, bool hidden)
         {

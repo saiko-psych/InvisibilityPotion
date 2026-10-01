@@ -140,9 +140,10 @@ namespace InvisibilityPotion.Dev
                 {
                     var inv = Effects.SE_Invisibility.ActiveOn(p);
                     var (tier, hidden) = Net.HiddenState.Get(p);
+                    var fromPlayers = Net.HiddenState.IsHiddenFromPlayers(p);
                     Say(inv == null
-                        ? $"self: no effect; zdo tier={tier} hidden={hidden}"
-                        : $"self: T{inv.Tier} phase={inv.Machine.Phase} elapsed={inv.Machine.Elapsed:F1}s rehide={inv.Machine.RehideTimer:F1}s pending={inv.Machine.PendingReveal}; zdo tier={tier} hidden={hidden}");
+                        ? $"self: no effect; zdo tier={tier} hidden={hidden} hiddenFromPlayers={fromPlayers}"
+                        : $"self: T{inv.Tier} phase={inv.Machine.Phase} elapsed={inv.Machine.Elapsed:F1}s rehide={inv.Machine.RehideTimer:F1}s pending={inv.Machine.PendingReveal}; zdo tier={tier} hidden={hidden} hiddenFromPlayers={fromPlayers}");
                     var mine = ZDOMan.GetSessionID();
                     foreach (var c in Character.GetAllCharacters())
                     {
