@@ -31,6 +31,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("BaseAI", "FindEnemy"),
             PatchHealth.TargetKey("MonsterAI", "UpdateTarget"),
             PatchHealth.TargetKey("MonsterAI", "UpdateSleep"),
+            PatchHealth.TargetKey("Player", "UpdateStealth"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();
