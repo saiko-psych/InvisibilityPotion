@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Logging;
@@ -32,7 +33,18 @@ namespace InvisibilityPotion
         {
             Log = Logger;
             HarmonyInstance = new Harmony(PluginGuid);
-            HarmonyInstance.PatchAll(typeof(Plugin).Assembly);
+            // Per-class patching: one unresolvable target must not abort Awake before the health check runs.
+            foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Plugin).Assembly))
+            {
+                try
+                {
+                    HarmonyInstance.CreateClassProcessor(type).Patch();
+                }
+                catch (Exception e)
+                {
+                    Log.LogError($"Failed to apply patches in {type.FullName}: {e.Message}");
+                }
+            }
             MissingPatches = PatchHealth.Report(HarmonyInstance, ExpectedPatchTargets);
 #if DEBUG
             Dev.DevCommands.Register();

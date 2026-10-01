@@ -174,7 +174,7 @@ interface IVeil { void Apply(Player p, int tier); void Remove(Player p); }
 
 ### 5.10 Dev tooling (`Dev/`, DEBUG builds only)
 
-- `AutoJoin`: if env var `IP_DEV_WORLD` is set, patch `FejdStartup` to skip the menu and load that world with the character in `IP_DEV_CHARACTER`.
+- `AutoJoin`: reads `BepInEx/config/InvisibilityPotion.autojoin` (written by `make run` from `IP_DEV_WORLD`/`IP_DEV_CHARACTER`; the env vars are only a fallback) and patches `FejdStartup` to skip the menu and load that world with that character. The file is one-shot: it is deleted after reading.
 - Console commands via Jötunn `CommandManager`: `ip_give <tier>` (drink instantly), `ip_state` (print own and nearby players' hidden state and active patches), `ip_spawn <prefab> [n]` (shortcut around `devcommands`).
 - Compiled out of Release builds with `#if DEBUG`.
 
@@ -184,9 +184,8 @@ Makefile targets:
 
 | Target | Does |
 |---|---|
-| `setup` | prints the sudo commands to run (`pacman -S dotnet-sdk-8.0`, `yay -S unityhub`), installs `ilspycmd` as a dotnet tool, creates `Environment.props` from the example |
 | `build` | `dotnet build -c Debug`; Jötunn's `publish.sh` copies the DLL and pdb into `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` |
-| `run` | `build`, then starts `start_game_bepinex.sh -console -screen-fullscreen 0 -screen-width 1600 -screen-height 900` with `IP_DEV_WORLD=testing`; BepInEx log streams to the terminal |
+| `run` | `build`, writes `BepInEx/config/InvisibilityPotion.autojoin` from `IP_DEV_WORLD`/`IP_DEV_CHARACTER`, launches Valheim through Steam (launch option `./start_game_bepinex.sh %command%`), tails the BepInEx log |
 | `log` | `tail -f BepInEx/LogOutput.log` |
 | `test` | `dotnet test` on the xunit project |
 | `decompile` | `ilspycmd -p -o tools/decompiled assembly_valheim.dll`; rerun after game updates |

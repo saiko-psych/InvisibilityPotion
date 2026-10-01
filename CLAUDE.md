@@ -16,6 +16,7 @@ Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in fi
 - Dev-only code lives in `InvisibilityPotion/Dev/` behind `#if DEBUG`; Release builds must not contain it.
 - Pure logic goes into `*.Core.cs` files without game types; they are linked into `InvisibilityPotion.Tests`.
 - Game stdout goes to Steam, so the BepInEx log is the only readable output. The in-game F5 console cannot be copied from: dev console commands must also write their output to `Plugin.Log`.
+- Patch health keys use the declaring type of the method (for example a method declared on `Character` is `Character.X` even when patched through `Player`).
 - One cleanup path: `SE_Invisibility.Stop()` restores everything. Every exit must go through it.
 - Copy code only from MIT / MIT-0 / Unlicense sources and credit them in a comment.
 - `sudo` commands are run by the user; print them and wait.
@@ -25,8 +26,8 @@ See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans
 
 ## Environment
 - Game: `~/.local/share/Steam/steamapps/common/Valheim` (BepInEx installed directly, no mod manager profile)
-- One-time Steam launch option on Valheim: `./start_game_bepinex.sh %command%`. Starting the game binary directly from a terminal does not work here; always use `make run`.
-- Dev auto-join reads `<game>/BepInEx/config/InvisibilityPotion.autojoin` (`world=`, `character=`). `make run` writes that file from the Makefile variables `IP_DEV_WORLD` (default `testing`) and `IP_DEV_CHARACTER` (default empty = first character), overridable as `make run IP_DEV_WORLD=other`. The plugin falls back to the env vars of the same names only when the file or a key is missing (env vars do not reach a game started through Steam).
+- One-time Steam launch option on Valheim: `./start_game_bepinex.sh %command%`. Use `make run`; launching the binary directly is untested on this machine.
+- Dev auto-join reads `<game>/BepInEx/config/InvisibilityPotion.autojoin` (`world=`, `character=`). `make run` writes that file from the Makefile variables `IP_DEV_WORLD` (default `testing`) and `IP_DEV_CHARACTER` (default empty = first character), overridable as `make run IP_DEV_WORLD=other`. The plugin falls back to the env vars of the same names only when the file or a key is missing (env vars do not reach a game started through Steam). The file is one-shot: the plugin deletes it after reading, so a normal Steam start does not auto-join.
 - Local test world: `testing`
 - `Environment.props` (gitignored) holds `VALHEIM_INSTALL`; root `Directory.Build.props` sets `SolutionDir` so Jötunn's props load when building the csproj directly.
 - `InvisibilityPotion/Package/plugins/` and `*.zip` are build output (gitignored).

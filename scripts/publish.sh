@@ -2,6 +2,8 @@
 # Post-build publish step. Debug: copy dll+pdb into BepInEx/plugins/<name>/. Release: build the Thunderstore zip.
 # Adapted from JotunnModStub (MIT-0): https://github.com/Valheim-Modding/JotunnModStub
 
+set -e
+
 target="Debug"
 targetPath=""
 targetAssembly="InvisibilityPotion.dll"

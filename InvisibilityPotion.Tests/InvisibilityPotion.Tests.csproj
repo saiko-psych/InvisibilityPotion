@@ -4,6 +4,7 @@
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
     <LangVersion>10</LangVersion>
+    <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
@@ -13,7 +14,7 @@
   <ItemGroup>
     <!-- Pure logic is compiled straight into the test assembly; the game project cannot be referenced from net8.0 -->
     <Compile Include="../InvisibilityPotion/PatchHealth.Core.cs" Link="PatchHealth.Core.cs" />
-    <!-- Wrapped in #if DEBUG, so the tests must be built in Debug (the dotnet test default) -->
+    <!-- Wrapped in #if DEBUG; DEBUG is defined above so this compiles in any configuration -->
     <Compile Include="../InvisibilityPotion/Dev/AutoJoinConfig.Core.cs" Link="AutoJoinConfig.Core.cs" />
   </ItemGroup>
 </Project>

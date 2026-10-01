@@ -17,12 +17,18 @@ namespace InvisibilityPotion.Dev
             public override string Name => "ip_state";
             public override string Help => "InvisibilityPotion: print patch health and plugin state";
 
+            private static void Say(string line)
+            {
+                Console.instance.Print(line);
+                Plugin.Log.LogInfo(line);
+            }
+
             public override void Run(string[] args)
             {
                 var patched = PatchHealth.PatchedTargets(Plugin.HarmonyInstance);
-                Console.instance.Print($"{Plugin.PluginName} {Plugin.PluginVersion}");
-                Console.instance.Print($"patched: {string.Join(", ", patched)}");
-                Console.instance.Print($"missing: {(Plugin.MissingPatches.Count == 0 ? "none" : string.Join(", ", Plugin.MissingPatches))}");
+                Say($"{Plugin.PluginName} {Plugin.PluginVersion}");
+                Say($"patched: {string.Join(", ", patched)}");
+                Say($"missing: {(Plugin.MissingPatches.Count == 0 ? "none" : string.Join(", ", Plugin.MissingPatches))}");
             }
         }
     }

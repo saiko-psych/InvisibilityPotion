@@ -82,4 +82,30 @@ public class AutoJoinConfigTests
         Assert.Equal("", world);
         Assert.Equal("", character);
     }
+
+    [Fact]
+    public void Parse_KeysAreCaseInsensitive()
+    {
+        var (world, character) = AutoJoinConfig.Parse("World=testing\nCHARACTER=Bob\n", "", "");
+
+        Assert.Equal("testing", world);
+        Assert.Equal("Bob", character);
+    }
+
+    [Fact]
+    public void Parse_DuplicateKey_LastOneWins()
+    {
+        var (world, _) = AutoJoinConfig.Parse("world=first\nworld=second\n", "", "");
+
+        Assert.Equal("second", world);
+    }
+
+    [Fact]
+    public void Parse_LineWithoutKey_IsIgnored()
+    {
+        var (world, character) = AutoJoinConfig.Parse("=value\nworld=testing\n", "", "");
+
+        Assert.Equal("testing", world);
+        Assert.Equal("", character);
+    }
 }

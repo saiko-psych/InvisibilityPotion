@@ -28,7 +28,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `Makefile` | `setup`, `build`, `run`, `log`, `test`, `decompile`, `package` targets |
+| `Makefile` | `build`, `run`, `log`, `test`, `decompile`, `package` targets |
 | `Environment.props.example` | template for the gitignored `Environment.props` (VALHEIM_INSTALL) |
 | `DoPrebuild.props` | `ExecutePrebuild=true` so Jötunn publicizes game DLLs |
 | `Directory.Build.props` | sets `$(SolutionDir)` before NuGet props so Jötunn's props load when the csproj is built directly |
@@ -1013,8 +1013,8 @@ Linux, CLI only. Install `dotnet-sdk-8.0`, then `make help`. See `CLAUDE.md` for
 
 - [ ] **Step 4: Verify the Release build strips dev code**
 
-Run: `make package 2>&1 | tail -3 && strings InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'`
-Expected: `Package ready: ...` and `0`.
+Run: `make package 2>&1 | tail -3 && strings InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'; strings -el InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'`
+Expected: `Package ready: ...` and `0` for both (ASCII and UTF-16).
 
 - [ ] **Step 5: Commit**
 

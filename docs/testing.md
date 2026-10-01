@@ -1,6 +1,6 @@
 # In-game testing checklist
 
-Run `make run`, press F5 for the console, `devcommands` once per session. Update this file per plan.
+Run `make run`, press F5 for the console. Run `devcommands` once per session only where vanilla cheat commands are needed (Jötunn commands such as `ip_state` work without it). Update this file per plan.
 
 ## Plan 1 – skeleton
 - [x] Log shows `InvisibilityPotion 0.1.0 loaded` and `Patch health: … 0 missing`

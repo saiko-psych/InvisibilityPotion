@@ -19,6 +19,8 @@ namespace InvisibilityPotion.Dev
     internal static class AutoJoin
     {
         private const string FileName = "InvisibilityPotion.autojoin";
+        // Set before the attempt on purpose: auto-join fires at most once per process. Returning to the
+        // menu does not re-join, and a failed join is not retried.
         private static bool _done;
 
         [HarmonyPostfix]
@@ -29,7 +31,20 @@ namespace InvisibilityPotion.Dev
             {
                 string content = null;
                 var path = Path.Combine(Paths.ConfigPath, FileName);
-                if (File.Exists(path)) content = File.ReadAllText(path);
+                if (File.Exists(path))
+                {
+                    content = File.ReadAllText(path);
+                    // One-shot: a normal Steam start must not auto-join. `make run` rewrites the file every time.
+                    try
+                    {
+                        File.Delete(path);
+                        Plugin.Log.LogInfo($"AutoJoin: consumed and deleted {FileName}");
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.Log.LogWarning($"AutoJoin: could not delete {FileName}: {e.Message}");
+                    }
+                }
 
                 var (world, character) = AutoJoinConfig.Parse(content,
                     Environment.GetEnvironmentVariable("IP_DEV_WORLD"),
@@ -53,6 +68,10 @@ namespace InvisibilityPotion.Dev
             while (CinematicsManager.IsStartedPlaying() && Time.realtimeSinceStartup < deadline)
             {
                 yield return null;
+            }
+            if (CinematicsManager.IsStartedPlaying())
+            {
+                Plugin.Log.LogWarning("AutoJoin: intro cinematic still playing after 30 s; joining anyway");
             }
             yield return null;
             Join(startup, worldName, characterName);
