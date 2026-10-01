@@ -1,6 +1,7 @@
 #if DEBUG
 using Jotunn.Entities;
 using Jotunn.Managers;
+using Cfg = InvisibilityPotion.Config;
 
 namespace InvisibilityPotion.Dev
 {
@@ -10,18 +11,39 @@ namespace InvisibilityPotion.Dev
         public static void Register()
         {
             CommandManager.Instance.AddConsoleCommand(new StateCommand());
+            CommandManager.Instance.AddConsoleCommand(new ReloadConfigCommand());
+        }
+
+        internal static void Say(string line)
+        {
+            Console.instance.Print(line);
+            Plugin.Log.LogInfo(line);
+        }
+
+        private class ReloadConfigCommand : ConsoleCommand
+        {
+            public override string Name => "ip_reload_config";
+            public override string Help => "InvisibilityPotion: re-read the config file; Duration applies to new effects only";
+
+            public override void Run(string[] args)
+            {
+                try
+                {
+                    Cfg.PluginConfig.Reload();
+                    var t2 = Cfg.PluginConfig.Tier(2);
+                    Say($"config reloaded: T1 duration {Cfg.PluginConfig.Tier(1).Duration}s, T2 rehide {t2.RehideDelay}s, T3 aggro-loss {Cfg.PluginConfig.Tier(3).AggroLossTime}s");
+                }
+                catch (System.Exception e)
+                {
+                    Say($"config reload failed: {e.Message}");
+                }
+            }
         }
 
         private class StateCommand : ConsoleCommand
         {
             public override string Name => "ip_state";
             public override string Help => "InvisibilityPotion: print patch health and plugin state";
-
-            private static void Say(string line)
-            {
-                Console.instance.Print(line);
-                Plugin.Log.LogInfo(line);
-            }
 
             public override void Run(string[] args)
             {

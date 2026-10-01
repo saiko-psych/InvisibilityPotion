@@ -4,6 +4,7 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using Jotunn.Utils;
+using Cfg = InvisibilityPotion.Config;
 
 namespace InvisibilityPotion
 {
@@ -32,6 +33,10 @@ namespace InvisibilityPotion
         private void Awake()
         {
             Log = Logger;
+            Config.SaveOnConfigSet = true;
+            Cfg.PluginConfig.Bind(Config);
+            // Server-synced values arrive after join; rebuild the snapshots so they take effect.
+            Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) => Cfg.PluginConfig.Refresh();
             HarmonyInstance = new Harmony(PluginGuid);
             // Per-class patching: one unresolvable target must not abort Awake before the health check runs.
             foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Plugin).Assembly))
