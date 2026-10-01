@@ -156,6 +156,8 @@ namespace InvisibilityPotion.Dev
             s.SpreadY = Slider("Spread Y", s.SpreadY, 0.1f, 3f);
             s.SpreadZ = Slider("Spread Z", s.SpreadZ, 0.1f, 3f);
             s.Drift = Slider("Drift m/s", s.Drift, -0.5f, 0.5f);
+            DrawFogMaterial(s);
+            DrawEmitterMode(s, tier == current);
             GUILayout.Label($"~{s.LiveParticlesInner:0} live particles per emitter (rate x lifetime){(s.OuterEnabled ? $", outer ~{s.LiveParticlesOuter:0}" : "")}");
             if (s.ExceedsParticleBudget)
                 GUILayout.Label($"Over {FogSettings.ParticleWarnThreshold} particles per emitter: heavy and capped at {FogSettings.ParticleHardCap}. Lower rate or lifetime.", _warn);
@@ -171,6 +173,17 @@ namespace InvisibilityPotion.Dev
             DrawModes(tier);
             s.DistortionStrength = Slider("Distortion", s.DistortionStrength, 0f, 0.5f);
             s.DA = Slider("Distortion alpha", s.DA, 0f, 0.5f);
+            DrawWave(s);
+            Header("Shadow / Spirit (all tiers)");
+            var shadow = FogVeil.ShadowColor;
+            var shadowAlpha = Slider("Shadow alpha", shadow.a, 0f, 0.6f);
+            if (!Mathf.Approximately(shadowAlpha, shadow.a)) { shadow.a = shadowAlpha; FogVeil.ShadowColor = shadow; }
+            FogVeil.SpiritStrength = Slider("Spirit strength", FogVeil.SpiritStrength, 0f, 3f);
+            var spirit = FogVeil.SpiritColor;
+            var sr = Slider("Spirit R", spirit.r, 0f, 1f);
+            var sg = Slider("Spirit G", spirit.g, 0f, 1f);
+            var sb = Slider("Spirit B", spirit.b, 0f, 1f);
+            if (sr != spirit.r || sg != spirit.g || sb != spirit.b) FogVeil.SpiritColor = new Color(sr, sg, sb, 1f);
 
             GUILayout.BeginHorizontal();
             Header("Anchors");
@@ -190,14 +203,67 @@ namespace InvisibilityPotion.Dev
             var active = FogVeil.ModeFor(tier);
             var ov = FogVeil.ModeOverride[tier];
             GUILayout.Label($"Body mode: {active} ({(ov.HasValue ? "override" : "config")}; config {FogVeil.ConfiguredMode(tier)})");
-            GUILayout.BeginHorizontal();
-            foreach (var m in Modes)
+            const int perRow = 4;
+            for (var i = 0; i < Modes.Length; i += perRow)
             {
-                var label = m == active ? $"[{m}]" : m.ToString();
-                if (GUILayout.Button(label)) { FogVeil.ModeOverride[tier] = m; MarkDirty(); }
+                GUILayout.BeginHorizontal();
+                for (var j = i; j < Mathf.Min(i + perRow, Modes.Length); j++)
+                {
+                    var m = Modes[j];
+                    var label = m == active ? $"[{m}]" : m.ToString();
+                    if (GUILayout.Button(label)) { FogVeil.ModeOverride[tier] = m; MarkDirty(); }
+                }
+                GUILayout.EndHorizontal();
+            }
+            // Defaults stay unchanged until the user decides; these are the research's candidates for "nearly invisible".
+            if (tier == 3) GUILayout.Label("T3 candidates to compare: Spirit (faint light shell, keeps armour) and Shadow (dark see-through silhouette).");
+            if (ov.HasValue && GUILayout.Button("Use config mode")) { FogVeil.ModeOverride[tier] = null; MarkDirty(); }
+        }
+
+        private void DrawFogMaterial(FogSettings s)
+        {
+            GUILayout.Label($"Fog material: {s.FogMaterial}");
+            var names = FogSettings.FogMaterialNames;
+            for (var i = 0; i < names.Length; i += 2)   // two per row: the names are long for the 420 px window
+            {
+                GUILayout.BeginHorizontal();
+                for (var j = i; j < Mathf.Min(i + 2, names.Length); j++)
+                {
+                    var label = names[j] == s.FogMaterial ? $"[{names[j]}]" : names[j];
+                    if (GUILayout.Button(label) && names[j] != s.FogMaterial) { s.FogMaterial = names[j]; MarkDirty(); }
+                }
+                GUILayout.EndHorizontal();
+            }
+        }
+
+        private void DrawEmitterMode(FogSettings s, bool live)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Emitter", GUILayout.Width(110f));
+            foreach (FogEmitterMode m in Enum.GetValues(typeof(FogEmitterMode)))
+            {
+                var label = m == s.EmitterMode ? $"[{m}]" : m.ToString();
+                if (GUILayout.Button(label) && m != s.EmitterMode) { s.EmitterMode = m; MarkDirty(); }
             }
             GUILayout.EndHorizontal();
-            if (ov.HasValue && GUILayout.Button("Use config mode")) { FogVeil.ModeOverride[tier] = null; MarkDirty(); }
+            if (s.EmitterMode != FogEmitterMode.Mesh) return;
+            s.MeshOffset = Slider("Mesh offset m", s.MeshOffset, 0f, 0.3f);
+            GUILayout.Label($"Mesh: one emitter on the body surface, rate = Rate x enabled anchors{(live ? $"; live {Count("Mesh")}" : "")}. " +
+                            "Falls back to Bones when the body mesh is not readable (see log).");
+        }
+
+        private void DrawWave(FogSettings s)
+        {
+            var borrowed = FogVeil.BorrowedDistortionWave;
+            var text = s.DistortionWave >= 0f ? s.DistortionWave.ToString("0.##", CultureInfo.InvariantCulture)
+                     : float.IsNaN(borrowed) ? "borrowed" : $"borrowed {borrowed.ToString("0.##", CultureInfo.InvariantCulture)}";
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Distortion wave: {text}", GUILayout.Width(200f));
+            if (s.DistortionWave >= 0f && GUILayout.Button("use borrowed")) { s.DistortionWave = -1f; MarkDirty(); }
+            GUILayout.EndHorizontal();
+            var start = s.DistortionWave >= 0f ? s.DistortionWave : float.IsNaN(borrowed) ? 5f : borrowed;
+            var v = Slider("   wave", start, 0f, 10f);
+            if (v != start) s.DistortionWave = v;
         }
 
         private void DrawAnchors(FogSettings s, bool live)
@@ -264,8 +330,8 @@ namespace InvisibilityPotion.Dev
                 var ov = FogVeil.ModeOverride[t];
                 if (ov.HasValue) Cfg.PluginConfig.SaveBodyVeilMode(t, ov.Value.ToString());
             }
-            Cfg.PluginConfig.SaveGhostLook(FogVeil.FormatColor(FogVeil.GhostColor), FogVeil.GhostEmission);
-            Say("saved [Fog.Tier1..3], [Veil] and overridden body modes to the config file");
+            FogVeil.SaveGlobalLook();
+            Say("saved [Fog.Tier1..3], [Veil] (ghost, shadow, spirit) and overridden body modes to the config file");
         }
 
         private void Reset()

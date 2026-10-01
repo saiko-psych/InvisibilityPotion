@@ -57,6 +57,9 @@ namespace InvisibilityPotion.Config
             for (var t = 1; t <= 3; t++) BindFogTier(t);
             BindLook(VeilSection, "GhostColor", "0.75,0.8,0.9,1", "Colour of the Ghost body mode as r,g,b,a (_Color; the shader is alpha-tested, low alpha may cut the body away)");
             BindLook(VeilSection, "GhostEmission", 0.25f, "Multiplier on the Ghost material's glow (_EmissionColor); 1 = vanilla ghost glow");
+            BindLook(VeilSection, "ShadowColor", "0,0,0,0.12", "Colour of the Shadow body mode as r,g,b,a (_Color of a copy of the vanilla ShadowPerson material, transparent; alpha = opacity)");
+            BindLook(VeilSection, "SpiritColor", "0.6,0.7,0.8", "Tint of the Spirit body mode as r,g,b (Custom/Fallen Warrior _TintColor, multiplied by SpiritStrength)");
+            BindLook(VeilSection, "SpiritStrength", 0.25f, "Intensity of the Spirit body mode (HDR multiplier on SpiritColor); 0 = invisible, vanilla Fallen Warrior is about 6");
             MigrateAndDropOrphans();
             Refresh();
         }
@@ -79,7 +82,7 @@ namespace InvisibilityPotion.Config
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount"),
                 ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
-                                        $"How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
+                                        $"How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow or Spirit. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
                                         ModeValues(bodyMode)),
             };
             _tierEntries[tier] = e;
@@ -152,9 +155,9 @@ namespace InvisibilityPotion.Config
         private static ConfigEntry<T> Bind<T>(string section, string key, T value, string description, AcceptableValueBase acceptable = null) =>
             _file.Bind(section, key, value, new ConfigDescription(description, acceptable, new ConfigurationManagerAttributes { IsAdminOnly = true }));
 
-        private static readonly string[] BodyVeilModes = { "Off", "Cutoff", "Hide", "Tint", "Ghost", "Distortion" };
+        private static readonly string[] BodyVeilModes = { "Off", "Cutoff", "Hide", "Tint", "Ghost", "Distortion", "Shadow", "Spirit" };
 
-        /// <summary>The six mode names with the tier's default first: BepInEx clamps an unlisted value to the first entry, i.e. the default.</summary>
+        /// <summary>The mode names with the tier's default first: BepInEx clamps an unlisted value to the first entry, i.e. the default.</summary>
         private static AcceptableValueList<string> ModeValues(string tierDefault)
         {
             var list = new List<string> { tierDefault };
@@ -221,6 +224,9 @@ namespace InvisibilityPotion.Config
                 AllowPvpInvisibility = Get<bool>(_globalEntries, "AllowPvpInvisibility"),
                 GhostColor = Get<string>(_lookEntries, "GhostColor"),
                 GhostEmission = Get<float>(_lookEntries, "GhostEmission"),
+                ShadowColor = Get<string>(_lookEntries, "ShadowColor"),
+                SpiritColor = Get<string>(_lookEntries, "SpiritColor"),
+                SpiritStrength = Get<float>(_lookEntries, "SpiritStrength"),
             };
             var fog = new FogSettings[4];
             for (var t = 1; t <= 3; t++) fog[t] = BuildFog(t);
@@ -284,11 +290,23 @@ namespace InvisibilityPotion.Config
             _file.Save();
         }
 
-        /// <summary>Writes the Ghost look into [Veil] and saves the file (ip_veil save). Does not raise Changed.</summary>
-        public static void SaveGhostLook(string ghostColor, float ghostEmission)
+        /// <summary>Writes the global body looks (Ghost, Shadow, Spirit) into [Veil] and saves the file once (ip_veil save, tuning window). Does not raise Changed.</summary>
+        public static void SaveVeilLook(string ghostColor, float ghostEmission, string shadowColor, string spiritColor, float spiritStrength)
         {
-            ((ConfigEntry<string>)_lookEntries["GhostColor"]).Value = ghostColor;
-            ((ConfigEntry<float>)_lookEntries["GhostEmission"]).Value = ghostEmission;
+            var saveOnSet = _file.SaveOnConfigSet;
+            _file.SaveOnConfigSet = false;
+            try
+            {
+                ((ConfigEntry<string>)_lookEntries["GhostColor"]).Value = ghostColor;
+                ((ConfigEntry<float>)_lookEntries["GhostEmission"]).Value = ghostEmission;
+                ((ConfigEntry<string>)_lookEntries["ShadowColor"]).Value = shadowColor;
+                ((ConfigEntry<string>)_lookEntries["SpiritColor"]).Value = spiritColor;
+                ((ConfigEntry<float>)_lookEntries["SpiritStrength"]).Value = spiritStrength;
+            }
+            finally
+            {
+                _file.SaveOnConfigSet = saveOnSet;
+            }
             _file.Save();
         }
 

@@ -62,6 +62,9 @@ namespace InvisibilityPotion.Visuals
         }
     }
 
+    /// <summary>Where the fog particles spawn: around body bones (one emitter per anchor) or on the body mesh surface (one emitter).</summary>
+    public enum FogEmitterMode { Bones, Mesh }
+
     public enum FogValueKind { Float, Bool, Text }
 
     /// <summary>One config key of a per-tier fog section ([Fog.TierN]).</summary>
@@ -110,7 +113,34 @@ namespace InvisibilityPotion.Visuals
         public float OuterSizeFactor = 1.5f;
         public float DistortionStrength = 0.1f;
         public float DR = 1f, DG = 1f, DB = 1f, DA = 0.08f;
+        /// <summary>Ripple speed (_WaveVel) of the Distortion body mode; negative = keep the value borrowed from staff_shield_shard.</summary>
+        public float DistortionWave = -1f;
+        /// <summary>Borrowed vanilla particle material of the fog, one of <see cref="FogMaterialNames"/>.</summary>
+        public string FogMaterial = DefaultFogMaterial;
+        public FogEmitterMode EmitterMode = FogEmitterMode.Bones;
+        /// <summary>Mesh emitter: distance in metres the particles spawn off the body surface (along the normal).</summary>
+        public float MeshOffset = 0.03f;
         public List<FogAnchor> Anchors = new List<FogAnchor>();
+
+        public const string DefaultFogMaterial = "swamp_mist";
+
+        /// <summary>
+        /// Selectable fog materials (config names). slowwispysmoke stands for the Ghost's slowwispysmoke_gradient_alphablend;
+        /// FogVeil maps each name to the vanilla material and its source prefab.
+        /// </summary>
+        public static readonly string[] FogMaterialNames = { "swamp_mist", "ghost_smoke", "wraith_smoke", "slowwispysmoke" };
+
+        /// <summary>Canonical fog material name for a config value (case-insensitive), or null when it is not one of <see cref="FogMaterialNames"/>.</summary>
+        public static string NormalizeFogMaterial(string text)
+        {
+            var t = (text ?? "").Trim();
+            foreach (var n in FogMaterialNames)
+                if (string.Equals(n, t, StringComparison.OrdinalIgnoreCase)) return n;
+            return null;
+        }
+
+        public static bool TryParseEmitterMode(string text, out FogEmitterMode mode) =>
+            Enum.TryParse((text ?? "").Trim(), true, out mode) && Enum.IsDefined(typeof(FogEmitterMode), mode);
 
         public static FogSettings Defaults(int tier)
         {
@@ -213,6 +243,10 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterSizeFactor", FogValueKind.Float, "Outer layer particle size as a multiple of Size"),
                 new FogKey("DistortionStrength", FogValueKind.Float, "Refraction strength when this tier's body mode is Distortion (shader property _RefractionIntensity)"),
                 new FogKey("DistortionColor", FogValueKind.Text, "Colour of the Distortion body mode as r,g,b,a (shader property _Color)"),
+                new FogKey("DistortionWave", FogValueKind.Float, "Ripple speed of the Distortion body mode (_WaveVel, normal map borrowed from staff_shield_shard); negative = the borrowed vanilla value"),
+                new FogKey("FogMaterial", FogValueKind.Text, "Vanilla particle material of the fog: swamp_mist, ghost_smoke, wraith_smoke or slowwispysmoke"),
+                new FogKey("FogEmitterMode", FogValueKind.Text, "Bones = one emitter per anchor below; Mesh = one emitter on the body mesh surface with rate = Rate x enabled anchors (falls back to Bones when the mesh is not readable)"),
+                new FogKey("MeshOffset", FogValueKind.Float, "Mesh emitter: distance in metres the fog spawns off the body surface"),
             };
             foreach (var name in AnchorNames)
                 k.Add(new FogKey(AnchorPrefix + name, FogValueKind.Text,
@@ -246,6 +280,10 @@ namespace InvisibilityPotion.Visuals
                 case "OuterSizeFactor": return FloatList.Format(OuterSizeFactor);
                 case "DistortionStrength": return FloatList.Format(DistortionStrength);
                 case "DistortionColor": return FloatList.Format(DR, DG, DB, DA);
+                case "DistortionWave": return FloatList.Format(DistortionWave);
+                case "FogMaterial": return FogMaterial;
+                case "FogEmitterMode": return EmitterMode.ToString();
+                case "MeshOffset": return FloatList.Format(MeshOffset);
                 default: return null;
             }
         }
@@ -276,6 +314,15 @@ namespace InvisibilityPotion.Visuals
                     if (!FloatList.TryParse(text, 4, out var rgba)) return false;
                     DR = Clamp01(rgba[0]); DG = Clamp01(rgba[1]); DB = Clamp01(rgba[2]); DA = Clamp01(rgba[3]);
                     return true;
+                case "FogMaterial":
+                    var name = NormalizeFogMaterial(text);
+                    if (name == null) return false;
+                    FogMaterial = name;
+                    return true;
+                case "FogEmitterMode":
+                    if (!TryParseEmitterMode(text, out var em)) return false;
+                    EmitterMode = em;
+                    return true;
             }
             if (!FloatList.TryParseOne(text, out var v)) return false;
             switch (key)
@@ -294,6 +341,8 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRateFactor": OuterRateFactor = Math.Max(0f, v); return true;
                 case "OuterSizeFactor": OuterSizeFactor = Math.Max(0.01f, v); return true;
                 case "DistortionStrength": DistortionStrength = Math.Max(0f, v); return true;
+                case "DistortionWave": DistortionWave = v < 0f ? -1f : v; return true;
+                case "MeshOffset": MeshOffset = Math.Max(0f, v); return true;
                 default: return false;
             }
         }

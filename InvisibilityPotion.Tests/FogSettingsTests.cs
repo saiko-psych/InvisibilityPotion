@@ -132,4 +132,64 @@ public class FogSettingsTests
         Assert.Equal(FogSettings.ParticleHardCap, s.MaxParticles(s.Rate));
         Assert.True(s.MaxParticles(0f) >= 8);
     }
+    [Fact]
+    public void NewLookKeys_DefaultsAndRoundTrip()
+    {
+        var s = FogSettings.Defaults(2);
+        Assert.Equal("swamp_mist", s.Get("FogMaterial"));
+        Assert.Equal("Bones", s.Get("FogEmitterMode"));
+        Assert.Equal("-1", s.Get("DistortionWave"));
+        Assert.Equal("0.03", s.Get("MeshOffset"));
+
+        s.FogMaterial = "slowwispysmoke"; s.EmitterMode = FogEmitterMode.Mesh; s.DistortionWave = 3.5f; s.MeshOffset = 0.08f;
+        var text = new Dictionary<string, string>();
+        foreach (var k in FogSettings.Keys) text[k.Name] = s.Get(k.Name);
+        var warnings = new List<string>();
+        var parsed = FogSettings.Parse(2, k => text.TryGetValue(k, out var v) ? v : null, warnings);
+
+        Assert.Empty(warnings);
+        Assert.Equal("slowwispysmoke", parsed.FogMaterial);
+        Assert.Equal(FogEmitterMode.Mesh, parsed.EmitterMode);
+        Assert.Equal(3.5f, parsed.DistortionWave, 5);
+        Assert.Equal(0.08f, parsed.MeshOffset, 5);
+    }
+
+    [Fact]
+    public void NewLookKeys_NormalizeAndReject()
+    {
+        var s = FogSettings.Defaults(1);
+        Assert.True(s.TrySet("FogMaterial", " Ghost_Smoke "));
+        Assert.Equal("ghost_smoke", s.FogMaterial);
+        Assert.False(s.TrySet("FogMaterial", "lava"));
+        Assert.Equal("ghost_smoke", s.FogMaterial);
+        Assert.True(s.TrySet("FogEmitterMode", "mesh"));
+        Assert.Equal(FogEmitterMode.Mesh, s.EmitterMode);
+        Assert.False(s.TrySet("FogEmitterMode", "surface"));
+        Assert.True(s.TrySet("DistortionWave", "-7"));
+        Assert.Equal(-1f, s.DistortionWave);
+        Assert.True(s.TrySet("MeshOffset", "-1"));
+        Assert.Equal(0f, s.MeshOffset);
+        foreach (var n in FogSettings.FogMaterialNames) Assert.Equal(n, FogSettings.NormalizeFogMaterial(n.ToUpperInvariant()));
+    }
+
+    [Fact]
+    public void Parse_MalformedFogMaterialKeepsDefaultAndWarns()
+    {
+        var warnings = new List<string>();
+        var parsed = FogSettings.Parse(1, k => k == "FogMaterial" ? "nope" : k == "FogEmitterMode" ? "x" : null, warnings);
+        Assert.Equal(2, warnings.Count);
+        Assert.Equal(FogSettings.DefaultFogMaterial, parsed.FogMaterial);
+        Assert.Equal(FogEmitterMode.Bones, parsed.EmitterMode);
+    }
+
+    [Fact]
+    public void GlobalVeilLookDefaults_AreParseableColors()
+    {
+        var g = new InvisibilityPotion.Config.GlobalConfig();
+        Assert.True(FloatList.TryParse(g.ShadowColor, 4, out var shadow));
+        Assert.Equal(0.12f, shadow[3], 5);
+        Assert.True(FloatList.TryParse(g.SpiritColor, 3, out var spirit));
+        Assert.Equal(0.7f, spirit[1], 5);
+        Assert.Equal(0.25f, g.SpiritStrength, 5);
+    }
 }

@@ -18,7 +18,7 @@ namespace InvisibilityPotion.Config
         public float DebuffDuration;
         public float Cooldown;
         public string Recipe = "";
-        public string BodyVeilMode = "Off";  // Off, Cutoff, Hide, Tint, Ghost, Distortion; the fog look lives in [Fog.TierN]
+        public string BodyVeilMode = "Off";  // Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit; the fog look lives in [Fog.TierN]
 
         public bool EndsOnReveal => RehideDelay <= 0f;
 
@@ -42,6 +42,9 @@ namespace InvisibilityPotion.Config
         public float FogCutoffSelf = 0.3f;
         public string GhostColor = "0.75,0.8,0.9,1";
         public float GhostEmission = 0.25f;
+        public string ShadowColor = "0,0,0,0.12";
+        public string SpiritColor = "0.6,0.7,0.8";
+        public float SpiritStrength = 0.25f;
         public bool AllowPvpInvisibility = true;
     }
 

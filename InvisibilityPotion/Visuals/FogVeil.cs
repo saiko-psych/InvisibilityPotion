@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 namespace InvisibilityPotion.Visuals
 {
     /// <summary>How a veiled player's body is drawn. Per tier in the config (TierN.BodyVeilMode); ip_veil overrides it at runtime.</summary>
-    public enum BodyVeilMode { Off, Cutoff, Hide, Tint, Ghost, Distortion }
+    public enum BodyVeilMode { Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit }
 
     /// <summary>
     /// Wraps a veiled player in flattened fog emitters that follow body bones (head, chest, hips, shoulders, hands, legs, feet;
@@ -25,6 +25,10 @@ namespace InvisibilityPotion.Visuals
         private static readonly int RefractionId = Shader.PropertyToID("_RefractionIntensity");
         private static readonly int GlossinessId = Shader.PropertyToID("_Glossiness");
         private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
+        private static readonly int NormalTexId = Shader.PropertyToID("_NormalTex");
+        private static readonly int NormalScaleId = Shader.PropertyToID("_NormalScale");
+        private static readonly int WaveVelId = Shader.PropertyToID("_WaveVel");
+        private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly Color TintTarget = new Color(0.3f, 0.35f, 0.4f);
         private const float TintAmount = 0.7f;
         // Only the material of this prefab is borrowed (soft mist sprite + Custom/LitParticles); its emitter is a world-space ground mist.
@@ -45,6 +49,12 @@ namespace InvisibilityPotion.Visuals
         public static FogAlphaMode AlphaMode = FogAlphaMode.Both;
         public static Color GhostColor = new Color(0.75f, 0.8f, 0.9f, 1f);
         public static float GhostEmission = 0.25f;
+        public static Color ShadowColor = DefaultShadowColor;
+        /// <summary>Spirit tint (rgb, alpha ignored); _TintColor = SpiritColor x SpiritStrength.</summary>
+        public static Color SpiritColor = DefaultSpiritColor;
+        public static float SpiritStrength = 0.25f;
+        private static readonly Color DefaultShadowColor = new Color(0f, 0f, 0f, 0.12f);
+        private static readonly Color DefaultSpiritColor = new Color(0.6f, 0.7f, 0.8f, 1f);
         /// <summary>Runtime body-mode override per tier (index 1..3), null = use the tier's config. Set by ip_veil.</summary>
         public static readonly BodyVeilMode?[] ModeOverride = new BodyVeilMode?[4];
         /// <summary>Bumped on every look change; a snapshot of another version is rebuilt on the next Apply.</summary>
@@ -54,6 +64,7 @@ namespace InvisibilityPotion.Visuals
         {
             Version++;
             if (_ghostInstance != null) ApplyGhostLook(_ghostInstance);
+            if (_shadowInstance != null) ApplyShadowLook(_shadowInstance);
             for (var t = 1; t <= 3; t++)
                 if (_distortionInstances[t] != null) ApplyDistortionLook(_distortionInstances[t], t);
         }
@@ -66,6 +77,9 @@ namespace InvisibilityPotion.Visuals
             AlphaMode = PluginConfig.FogAlphaMode;
             GhostColor = ParseColor(g.GhostColor, 4, new Color(0.75f, 0.8f, 0.9f, 1f), "GhostColor");
             GhostEmission = Mathf.Max(0f, g.GhostEmission);
+            ShadowColor = ParseColor(g.ShadowColor, 4, DefaultShadowColor, "ShadowColor");
+            SpiritColor = ParseColor(g.SpiritColor, 3, DefaultSpiritColor, "SpiritColor");
+            SpiritStrength = Mathf.Max(0f, g.SpiritStrength);
             ParseConfiguredModes();
             Bump();
         }
@@ -78,6 +92,12 @@ namespace InvisibilityPotion.Visuals
         }
 
         public static string FormatColor(Color c) => FloatList.Format(c.r, c.g, c.b, c.a);
+
+        public static string FormatRgb(Color c) => FloatList.Format(c.r, c.g, c.b);
+
+        /// <summary>Writes the global body looks (Ghost, Shadow, Spirit) to [Veil].</summary>
+        public static void SaveGlobalLook() =>
+            PluginConfig.SaveVeilLook(FormatColor(GhostColor), GhostEmission, FormatColor(ShadowColor), FormatRgb(SpiritColor), SpiritStrength);
 
         public static bool TryParseMode(string text, out BodyVeilMode mode)
         {
@@ -100,7 +120,7 @@ namespace InvisibilityPotion.Visuals
                 if (TryParseMode(text, out var mode)) { _configuredModes[t] = mode; continue; }
                 var fallback = PluginConfig.DefaultBodyVeilMode(t);
                 TryParseMode(fallback, out mode);
-                Plugin.Log.LogWarning($"[Tier{t}] BodyVeilMode '{text}' is not one of Off, Cutoff, Hide, Tint, Ghost, Distortion; using the default {mode}");
+                Plugin.Log.LogWarning($"[Tier{t}] BodyVeilMode '{text}' is not one of {string.Join(", ", Enum.GetNames(typeof(BodyVeilMode)))}; using the default {mode}");
                 _configuredModes[t] = mode;
             }
         }
@@ -125,7 +145,9 @@ namespace InvisibilityPotion.Visuals
             public readonly Dictionary<Material, float> Cutoffs = new Dictionary<Material, float>();
             public readonly Dictionary<Material, Color> Colors = new Dictionary<Material, Color>();
             public readonly Dictionary<Renderer, Material[]> SharedMaterials = new Dictionary<Renderer, Material[]>();
-            public readonly HashSet<Renderer> Hidden = new HashSet<Renderer>();   // renderers disabled by Hide, and vanilla particles in Ghost/Distortion
+            public readonly HashSet<Renderer> Hidden = new HashSet<Renderer>();   // renderers disabled by Hide, and vanilla particles in the swap modes
+            public readonly Dictionary<Material, Material> SpiritByOriginal = new Dictionary<Material, Material>();   // per-veil Spirit copies by original material
+            public readonly List<Material> SpiritOwned = new List<Material>();   // every Spirit copy of this veil, destroyed on Remove
 
             public bool FogIntact()
             {
@@ -191,6 +213,14 @@ namespace InvisibilityPotion.Visuals
                     if (DistortionInstance(tier) != null) return BodyVeilMode.Distortion;
                     Plugin.Log.LogWarning($"veil mode Distortion: shader '{DistortionShaderName}' not found; using Tint");
                     return BodyVeilMode.Tint;
+                case BodyVeilMode.Shadow:
+                    if (ShadowInstance() != null) return BodyVeilMode.Shadow;
+                    Plugin.Log.LogWarning($"veil mode Shadow: material '{ShadowMaterialName}' not found (prefab {ShadowPrefabName}, SP_* items, loaded materials); using Tint");
+                    return BodyVeilMode.Tint;
+                case BodyVeilMode.Spirit:
+                    if (SpiritShader() != null) return BodyVeilMode.Spirit;
+                    Plugin.Log.LogWarning($"veil mode Spirit: shader '{SpiritShaderName}' not found; using Tint");
+                    return BodyVeilMode.Tint;
                 default:
                     return mode;
             }
@@ -202,10 +232,16 @@ namespace InvisibilityPotion.Visuals
             var g = PluginConfig.Global;
             var cutoff = snap.IsLocal && g.ShowSelfFaintly ? g.FogCutoffSelf : (snap.Tier == 1 ? g.FogCutoffLight : g.FogCutoffDense);
             var swap = snap.Effective == BodyVeilMode.Ghost ? GhostInstance()
-                     : snap.Effective == BodyVeilMode.Distortion ? DistortionInstance(snap.Tier) : null;
+                     : snap.Effective == BodyVeilMode.Distortion ? DistortionInstance(snap.Tier)
+                     : snap.Effective == BodyVeilMode.Shadow ? ShadowInstance() : null;
             // Vanilla particles parented to the player (rain splashes, wet/tarred status effects, torch flames) would float in
             // the air around an invisible body: hide them while a body-hiding mode is active, restore on Remove.
-            var hideParticles = snap.Effective == BodyVeilMode.Ghost || snap.Effective == BodyVeilMode.Distortion;
+            var hideParticles = IsSwapMode(snap.Effective);
+            // MaterialMan (decision, task 10e): VisEquipment puts only _SnowCover into the MaterialPropertyBlock that MaterialMan
+            // sets on every player MeshRenderer/SkinnedMeshRenderer (VisEquipment.cs:237/1447, MaterialMan.cs:88). A block only
+            // overrides the properties it contains; none of the swap shaders (Custom/Distortion, Standard, Custom/Fallen Warrior)
+            // declares _SnowCover, and Custom/Creature (Ghost) uses it as intended. So the block is left alone: clearing it would
+            // be undone by MaterialMan's next UpdateBlock anyway, and restoring it on Remove would race with MaterialMan.
 
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
             {
@@ -246,6 +282,7 @@ namespace InvisibilityPotion.Visuals
                         break;
                     case BodyVeilMode.Ghost:
                     case BodyVeilMode.Distortion:
+                    case BodyVeilMode.Shadow:
                         if (swap == null || !IsBodyRenderer(r) || snap.SharedMaterials.ContainsKey(r)) break;
                         var originals = r.sharedMaterials;
                         snap.SharedMaterials[r] = originals;
@@ -253,10 +290,21 @@ namespace InvisibilityPotion.Visuals
                         for (var i = 0; i < replaced.Length; i++) replaced[i] = swap;
                         r.sharedMaterials = replaced;
                         break;
+                    case BodyVeilMode.Spirit:
+                        if (!IsBodyRenderer(r) || snap.SharedMaterials.ContainsKey(r)) break;
+                        var spiritOriginals = r.sharedMaterials;
+                        var spirit = new Material[spiritOriginals.Length];
+                        for (var i = 0; i < spirit.Length; i++) spirit[i] = SpiritFor(snap, spiritOriginals[i]);
+                        snap.SharedMaterials[r] = spiritOriginals;
+                        r.sharedMaterials = spirit;
+                        break;
                 }
             }
             MatBuf.Clear();
         }
+
+        private static bool IsSwapMode(BodyVeilMode m) =>
+            m == BodyVeilMode.Ghost || m == BodyVeilMode.Distortion || m == BodyVeilMode.Shadow || m == BodyVeilMode.Spirit;
 
         /// <summary>Material swaps and tints only touch meshes; particle and line renderers (equipment effects) keep their shaders.</summary>
         private static bool IsBodyRenderer(Renderer r) => r is SkinnedMeshRenderer || r is MeshRenderer;
@@ -313,13 +361,13 @@ namespace InvisibilityPotion.Visuals
 
         private static void SpawnFog(Player p, Snapshot snap)
         {
-            var source = FogSourceMaterial();
+            var s = Fog[snap.Tier];
+            var source = FogSourceMaterial(s.FogMaterial);
             if (source == null)
             {
                 if (!_fogWarned) { _fogWarned = true; Plugin.Log.LogWarning("veil fog: no particle material available; fog skipped"); }
                 return;
             }
-            var s = Fog[snap.Tier];
             var color = FogColor(s);
             snap.AppliedColor = color;
             var inner = MakeFogMaterial(source, snap, color, s.Alpha, out var innerVertexAlpha);
@@ -327,6 +375,8 @@ namespace InvisibilityPotion.Visuals
             var outerVertexAlpha = 0f;
             if (s.OuterEnabled && s.OuterAlphaFactor > 0f && s.OuterRateFactor > 0f)
                 outer = MakeFogMaterial(source, snap, color, Mathf.Clamp01(s.Alpha * s.OuterAlphaFactor), out outerVertexAlpha);
+
+            if (s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, inner, innerVertexAlpha, outer, outerVertexAlpha)) return;
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -422,6 +472,88 @@ namespace InvisibilityPotion.Visuals
             follower.Offset = offset;
             follower.Snap();
 
+            var ps = ConfigureSystem(go, rate, size, color, vertexAlpha, mat, s, materialHasColor);
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = Mathf.Max(0.001f, radius);
+            shape.scale = new Vector3(s.SpreadX, s.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
+
+            go.SetActive(true);
+            ps.Play();
+            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = vertexAlpha };
+        }
+
+        private static readonly HashSet<string> _meshWarned = new HashSet<string>();
+        private const string MeshAnchorName = "Mesh";
+
+        /// <summary>
+        /// FogEmitterMode Mesh: one emitter per layer spawning on the body mesh surface (ShapeModule SkinnedMeshRenderer, like the
+        /// vanilla Ghost's black_smoke). Rate = Rate x enabled anchors, so the total matches the Bones mode. False (caller falls back
+        /// to Bones) when no readable body mesh exists: Unity cannot sample a mesh without Read/Write.
+        /// </summary>
+        private static bool SpawnMeshFog(Player p, Snapshot snap, FogSettings s, Color color, Material inner, float innerVertexAlpha, Material outer, float outerVertexAlpha)
+        {
+            var smr = FindBodyRenderer(p);
+            string problem = null;
+            if (smr == null) problem = "no body SkinnedMeshRenderer under Visual";
+            else if (smr.sharedMesh == null) problem = $"body renderer '{smr.name}' has no mesh";
+            else if (!smr.sharedMesh.isReadable) problem = $"mesh '{smr.sharedMesh.name}' of renderer '{smr.name}' is not readable";
+            if (problem != null)
+            {
+                if (_meshWarned.Add(problem)) Plugin.Log.LogWarning($"veil fog: Mesh emitter not possible ({problem}); using Bones");
+                return false;
+            }
+            var anchors = 0;
+            foreach (var a in s.Anchors) if (a.Enabled) anchors++;
+            if (anchors == 0) return true;   // same as Bones with every anchor off: no fog
+            var rate = s.Rate * anchors;
+            snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, false, s.MeshOffset, rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
+            if (outer != null)
+                snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, true, Mathf.Max(0.05f, s.MeshOffset * s.OuterRadiusMultiplier), rate * s.OuterRateFactor,
+                                              s.Size * s.OuterSizeFactor, color, outerVertexAlpha, outer, s, snap.MaterialHasColor));
+            if (_meshWarned.Add("ok:" + smr.name)) Plugin.Log.LogInfo($"veil fog: Mesh emitter on '{smr.name}' (mesh '{smr.sharedMesh.name}')");
+            return true;
+        }
+
+        /// <summary>The player's body SkinnedMeshRenderer under Visual: the one named "body", else VisEquipment.m_bodyModel, else the first.</summary>
+        private static SkinnedMeshRenderer FindBodyRenderer(Player p)
+        {
+            var visual = p.m_visual != null ? p.m_visual.transform : p.transform;
+            SkinnedMeshRenderer first = null;
+            foreach (var smr in visual.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (smr == null || IsOurs(smr.gameObject)) continue;
+                if (string.Equals(smr.name, "body", StringComparison.OrdinalIgnoreCase)) return smr;
+                if (first == null) first = smr;
+            }
+            var ve = p.m_visEquipment;
+            return ve != null && ve.m_bodyModel != null ? ve.m_bodyModel : first;
+        }
+
+        private static FogEmitter SpawnMeshEmitter(Transform root, SkinnedMeshRenderer smr, bool outerLayer, float normalOffset, float rate, float size,
+                                                   Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        {
+            var go = new GameObject(outerLayer ? OuterObjectName : FogObjectName);
+            go.SetActive(false);
+            go.transform.SetParent(root, false);   // identity under the player root; Local space keeps the particles with the player
+            var ps = ConfigureSystem(go, rate, size, color, vertexAlpha, mat, s, materialHasColor);
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.SkinnedMeshRenderer;
+            shape.skinnedMeshRenderer = smr;
+            shape.meshShapeType = ParticleSystemMeshShapeType.Triangle;
+            shape.normalOffset = normalOffset;
+            shape.useMeshColors = false;
+
+            go.SetActive(true);
+            ps.Play();
+            return new FogEmitter { Go = go, Ps = ps, Anchor = MeshAnchorName, Outer = outerLayer, VertexAlpha = vertexAlpha };
+        }
+
+        /// <summary>Adds and configures the ParticleSystem shared by both emitter kinds (everything except the shape).</summary>
+        private static ParticleSystem ConfigureSystem(GameObject go, float rate, float size, Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        {
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
@@ -440,12 +572,6 @@ namespace InvisibilityPotion.Visuals
             var emission = ps.emission;
             emission.enabled = true;
             emission.rateOverTime = Mathf.Max(0f, rate);
-
-            var shape = ps.shape;
-            shape.enabled = true;
-            shape.shapeType = ParticleSystemShapeType.Sphere;
-            shape.radius = Mathf.Max(0.001f, radius);
-            shape.scale = new Vector3(s.SpreadX, s.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
 
             var vel = ps.velocityOverLifetime;
             vel.enabled = Mathf.Abs(s.Drift) > 0.0001f;
@@ -468,10 +594,7 @@ namespace InvisibilityPotion.Visuals
             psr.shadowCastingMode = ShadowCastingMode.Off;
             psr.receiveShadows = false;
             psr.lightProbeUsage = LightProbeUsage.Off;
-
-            go.SetActive(true);
-            ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = vertexAlpha };
+            return ps;
         }
 
         /// <summary>Live particle count per emitter of a player's veil (tuning window readout). Empty when the player has no veil.</summary>
@@ -485,10 +608,84 @@ namespace InvisibilityPotion.Visuals
 
         public bool HasVeil(Player p) => p != null && _snapshots.ContainsKey(p);
 
+        /// <summary>Vanilla material name and the prefabs that carry it, per selectable fog material (research doc 2026-10-01, section 4).</summary>
+        private static readonly Dictionary<string, KeyValuePair<string, string[]>> FogMaterialSources = new Dictionary<string, KeyValuePair<string, string[]>>
+        {
+            ["ghost_smoke"] = new KeyValuePair<string, string[]>("ghost_smoke", new[] { "Ghost_Void" }),
+            ["wraith_smoke"] = new KeyValuePair<string, string[]>("wraith_smoke", new[] { "Wraith", "vfx_ghost_spawn" }),
+            ["slowwispysmoke"] = new KeyValuePair<string, string[]>("slowwispysmoke_gradient_alphablend", new[] { "Ghost" }),
+        };
+        private static readonly Dictionary<string, Material> _fogMaterials = new Dictionary<string, Material>();
+        private static readonly HashSet<string> _fogMaterialMissing = new HashSet<string>();
+
+        /// <summary>
+        /// The tier's selected vanilla fog material (prefab asset, read-only; every veil uses a new Material copy). An unknown name or a
+        /// material that cannot be found falls back to swamp_mist with one log line.
+        /// </summary>
+        private static Material FogSourceMaterial(string name)
+        {
+            name = FogSettings.NormalizeFogMaterial(name) ?? FogSettings.DefaultFogMaterial;
+            if (!FogMaterialSources.TryGetValue(name, out var source)) return SwampMistMaterial();
+            if (_fogMaterials.TryGetValue(name, out var cached) && cached != null) return cached;
+            if (ZNetScene.instance == null || _fogMaterialMissing.Contains(name)) return SwampMistMaterial();
+            var found = FindMaterialOnPrefabs(source.Value, m => MaterialNameIs(m, source.Key), particlesOnly: true, out var from)
+                        ?? FindLoadedMaterial(m => MaterialNameIs(m, source.Key));
+            if (found == null)
+            {
+                _fogMaterialMissing.Add(name);
+                Plugin.Log.LogWarning($"veil fog: material '{source.Key}' not found on {string.Join("/", source.Value)} or among loaded materials; using swamp_mist");
+                return SwampMistMaterial();
+            }
+            _fogMaterials[name] = found;
+            Plugin.Log.LogInfo($"veil fog: borrowed material '{found.name}' (shader '{found.shader?.name}') from {from ?? "loaded materials"} for FogMaterial {name}");
+            LogProperties("fog " + name, found);
+            return found;
+        }
+
+        /// <summary>Unity appends " (Instance)" to runtime copies; compare the asset name only.</summary>
+        private static bool MaterialNameIs(Material m, string name)
+        {
+            if (m == null) return false;
+            var n = m.name;
+            const string suffix = " (Instance)";
+            if (n.EndsWith(suffix, StringComparison.Ordinal)) n = n.Substring(0, n.Length - suffix.Length);
+            return string.Equals(n, name, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>First shared material on the named ZNetScene prefabs that matches; <paramref name="from"/> names prefab and renderer.</summary>
+        private static Material FindMaterialOnPrefabs(IEnumerable<string> prefabs, Func<Material, bool> match, bool particlesOnly, out string from)
+        {
+            from = null;
+            var scene = ZNetScene.instance;
+            if (scene == null) return null;
+            foreach (var name in prefabs)
+            {
+                var prefab = scene.GetPrefab(name);
+                if (prefab == null) continue;
+                var renderers = particlesOnly ? (Renderer[])prefab.GetComponentsInChildren<ParticleSystemRenderer>(true) : prefab.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in renderers)
+                foreach (var m in r.sharedMaterials)
+                {
+                    if (m == null || !match(m)) continue;
+                    from = $"{name}/{r.name}";
+                    return m;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Last resort: scans every loaded material once per lookup (callers cache the result or the miss).</summary>
+        private static Material FindLoadedMaterial(Func<Material, bool> match)
+        {
+            foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
+                if (m != null && match(m)) return m;
+            return null;
+        }
+
         private static Material _fogMaterial;
 
         /// <summary>Borrowed vanilla soft-particle material (shared, never mutated); falls back to Particles/Standard Unlit with a generated soft sprite.</summary>
-        private static Material FogSourceMaterial()
+        private static Material SwampMistMaterial()
         {
             if (_fogMaterial != null) return _fogMaterial;
             var scene = ZNetScene.instance;
@@ -597,6 +794,149 @@ namespace InvisibilityPotion.Visuals
             if (m.HasProperty(EmissionColorId)) m.SetColor(EmissionColorId, _ghostSourceEmission * GhostEmission);
         }
 
+        // ---------- Shadow (copy of the vanilla ShadowPerson material) ----------
+
+        private const string ShadowPrefabName = "ShadowPerson";
+        private const string ShadowMaterialName = "ShadowPerson 1";
+        private static Material _shadowSource;
+        private static Material _shadowInstance;
+        private static bool _shadowSearched;
+
+        /// <summary>
+        /// One shared copy of "ShadowPerson 1" (Standard, transparent premultiplied) tinted with ShadowColor. Located on the
+        /// ShadowPerson prefab, else on any SP_* item prefab (they reuse the material), else among loaded materials.
+        /// </summary>
+        private static Material ShadowInstance()
+        {
+            if (_shadowInstance != null) return _shadowInstance;
+            if (_shadowSource == null)
+            {
+                if (_shadowSearched || ZNetScene.instance == null) return null;
+                _shadowSearched = true;
+                string from;
+                _shadowSource = FindMaterialOnPrefabs(new[] { ShadowPrefabName }, m => MaterialNameIs(m, ShadowMaterialName), false, out from)
+                                ?? FindMaterialOnPrefabs(SpPrefabNames(), m => MaterialNameIs(m, ShadowMaterialName), false, out from)
+                                ?? FindMaterialOnPrefabs(new[] { ShadowPrefabName }, m => m.name.StartsWith("ShadowPerson", StringComparison.OrdinalIgnoreCase), false, out from)
+                                ?? FindLoadedMaterial(m => MaterialNameIs(m, ShadowMaterialName));
+                if (_shadowSource == null) return null;
+                Plugin.Log.LogInfo($"veil shadow: borrowed material '{_shadowSource.name}' from {from ?? "loaded materials"}");
+                LogProperties("shadow", _shadowSource);
+            }
+            _shadowInstance = new Material(_shadowSource) { name = "ip_shadow" };
+            ApplyShadowLook(_shadowInstance);
+            return _shadowInstance;
+        }
+
+        private static IEnumerable<string> SpPrefabNames()
+        {
+            var scene = ZNetScene.instance;
+            if (scene == null) yield break;
+            foreach (var go in scene.m_prefabs)
+                if (go != null && go.name.StartsWith("SP_", StringComparison.Ordinal)) yield return go.name;
+        }
+
+        private static void ApplyShadowLook(Material m)
+        {
+            if (m.HasProperty(ColorId)) m.SetColor(ColorId, ShadowColor);
+        }
+
+        // ---------- Spirit (Custom/Fallen Warrior per original material) ----------
+
+        private const string SpiritShaderName = "Custom/Fallen Warrior";
+        private static readonly string[] SpiritPrefabNames = { "FallenWarrior", "Wolf_spiritcaller", "Boar_spiritcaller", "Moose_spiritcaller", "Bjorn_spiritcaller" };
+        /// <summary>Texture slots shared by Custom/Player (and VisEquipment) and Custom/Fallen Warrior; copied so armour still reads.</summary>
+        private static readonly string[] SpiritTextureSlots = { "_MainTex", "_SkinBumpMap", "_ChestTex", "_ChestBumpMap", "_LegsTex", "_LegsBumpMap" };
+        private static readonly int SkinColorId = Shader.PropertyToID("_SkinColor");
+        private static readonly int BumpScaleId = Shader.PropertyToID("_BumpScale");
+        private static Shader _spiritShader;
+        private static Material _spiritSource;
+        private static bool _spiritSearched;
+
+        /// <summary>The Custom/Fallen Warrior shader, taken from a FallenWarrior / spiritcaller prefab material, else Shader.Find.</summary>
+        private static Shader SpiritShader()
+        {
+            if (_spiritShader != null) return _spiritShader;
+            if (_spiritSearched || ZNetScene.instance == null) return null;
+            _spiritSearched = true;
+            _spiritSource = FindMaterialOnPrefabs(SpiritPrefabNames, m => m.shader != null && m.shader.name == SpiritShaderName, false, out var from);
+            if (_spiritSource != null)
+            {
+                _spiritShader = _spiritSource.shader;
+                Plugin.Log.LogInfo($"veil spirit: shader '{SpiritShaderName}' from material '{_spiritSource.name}' on {from}");
+                LogProperties("spirit", _spiritSource);
+            }
+            else
+            {
+                _spiritShader = Shader.Find(SpiritShaderName);
+                if (_spiritShader != null) Plugin.Log.LogInfo($"veil spirit: shader '{SpiritShaderName}' via Shader.Find (no source prefab found)");
+            }
+            return _spiritShader;
+        }
+
+        /// <summary>Per-veil Spirit copy of one original material (shared between renderers that share the original).</summary>
+        private static Material SpiritFor(Snapshot snap, Material original)
+        {
+            if (original != null && snap.SpiritByOriginal.TryGetValue(original, out var existing) && existing != null) return existing;
+            var m = new Material(SpiritShader()) { name = "ip_spirit" };
+            if (original != null)
+            {
+                foreach (var slot in SpiritTextureSlots)
+                {
+                    if (!original.HasProperty(slot) || !m.HasProperty(slot)) continue;
+                    m.SetTexture(slot, original.GetTexture(slot));
+                    m.SetTextureScale(slot, original.GetTextureScale(slot));
+                    m.SetTextureOffset(slot, original.GetTextureOffset(slot));
+                }
+                if (original.HasProperty(SkinColorId) && m.HasProperty(SkinColorId)) m.SetColor(SkinColorId, original.GetColor(SkinColorId));
+                if (original.HasProperty(BumpScaleId) && m.HasProperty(BumpScaleId)) m.SetFloat(BumpScaleId, original.GetFloat(BumpScaleId));
+            }
+            // Hair, beards and capes are alpha-tested: keep their cutoff; otherwise use the vanilla Fallen Warrior value.
+            if (m.HasProperty(CutoffId))
+            {
+                if (original != null && original.HasProperty(CutoffId)) m.SetFloat(CutoffId, original.GetFloat(CutoffId));
+                else if (_spiritSource != null && _spiritSource.HasProperty(CutoffId)) m.SetFloat(CutoffId, _spiritSource.GetFloat(CutoffId));
+            }
+            ApplySpiritLook(m);
+            if (original != null) snap.SpiritByOriginal[original] = m;
+            snap.SpiritOwned.Add(m);
+            return m;
+        }
+
+        private static void ApplySpiritLook(Material m)
+        {
+            var k = SpiritStrength;
+            if (m.HasProperty(TintColorId)) m.SetColor(TintColorId, new Color(SpiritColor.r * k, SpiritColor.g * k, SpiritColor.b * k, 1f));
+        }
+
+        // ---------- Distortion ----------
+
+        private const string ShieldPrefabName = "vfx_StaffShield";
+        private const string ShieldMaterialName = "staff_shield_shard";
+        private static bool _shieldSearched;
+        private static Texture _shieldNormal;
+        private static float _shieldNormalScale = float.NaN;
+        /// <summary>_WaveVel of staff_shield_shard; NaN until found (DistortionWave &lt; 0 uses it).</summary>
+        public static float BorrowedDistortionWave { get; private set; } = float.NaN;
+
+        /// <summary>Reads _NormalTex/_NormalScale/_WaveVel once from staff_shield_shard (vfx_StaffShield, else loaded materials). Read-only.</summary>
+        private static void FindShieldShard()
+        {
+            if (_shieldSearched || ZNetScene.instance == null) return;
+            _shieldSearched = true;
+            var m = FindMaterialOnPrefabs(new[] { ShieldPrefabName }, x => MaterialNameIs(x, ShieldMaterialName), false, out var from)
+                    ?? FindLoadedMaterial(x => MaterialNameIs(x, ShieldMaterialName));
+            if (m == null)
+            {
+                Plugin.Log.LogWarning($"veil distortion: material '{ShieldMaterialName}' not found ({ShieldPrefabName}, loaded materials); no ripple normal map");
+                return;
+            }
+            if (m.HasProperty(NormalTexId)) _shieldNormal = m.GetTexture(NormalTexId);
+            if (m.HasProperty(NormalScaleId)) _shieldNormalScale = m.GetFloat(NormalScaleId);
+            if (m.HasProperty(WaveVelId)) BorrowedDistortionWave = m.GetFloat(WaveVelId);
+            Plugin.Log.LogInfo($"veil distortion: ripple from '{m.name}' on {from ?? "loaded materials"}: _NormalTex {(_shieldNormal != null ? _shieldNormal.name : "-")}, " +
+                               $"_NormalScale {_shieldNormalScale}, _WaveVel {BorrowedDistortionWave}");
+        }
+
         private static readonly Material[] _distortionInstances = new Material[4];
         private static Material _distortionSource;
         private static bool _distortionSearched;
@@ -631,6 +971,9 @@ namespace InvisibilityPotion.Visuals
                 Plugin.Log.LogInfo("veil distortion: no vanilla material uses the shader; created a bare one (no normal map, refraction may be invisible)");
             }
             if (!_distortionLogged) { _distortionLogged = true; LogProperties("distortion (before tuning)", instance); }
+            FindShieldShard();
+            if (_shieldNormal != null && instance.HasProperty(NormalTexId)) instance.SetTexture(NormalTexId, _shieldNormal);
+            if (!float.IsNaN(_shieldNormalScale) && _shieldNormal != null && instance.HasProperty(NormalScaleId)) instance.SetFloat(NormalScaleId, _shieldNormalScale);
             ApplyDistortionLook(instance, tier);
             _distortionInstances[tier] = instance;
             return instance;
@@ -641,6 +984,8 @@ namespace InvisibilityPotion.Visuals
             var s = Fog[tier];
             if (m.HasProperty(ColorId)) m.SetColor(ColorId, new Color(s.DR, s.DG, s.DB, s.DA));
             if (m.HasProperty(RefractionId)) m.SetFloat(RefractionId, s.DistortionStrength);
+            var wave = s.DistortionWave >= 0f ? s.DistortionWave : BorrowedDistortionWave;
+            if (!float.IsNaN(wave) && m.HasProperty(WaveVelId)) m.SetFloat(WaveVelId, wave);
             // Specular reflections of the sky made the body read as blue glass.
             if (m.HasProperty(GlossinessId)) m.SetFloat(GlossinessId, 0f);
             if (m.HasProperty(MetallicId)) m.SetFloat(MetallicId, 0f);
@@ -671,7 +1016,13 @@ namespace InvisibilityPotion.Visuals
             {
                 foreach (var kv in snap.Cutoffs) if (kv.Key != null) kv.Key.SetFloat(CutoffId, kv.Value);
                 foreach (var kv in snap.Colors) if (kv.Key != null) kv.Key.SetColor(ColorId, kv.Value);
-                foreach (var kv in snap.SharedMaterials) if (kv.Key != null) kv.Key.sharedMaterials = kv.Value;
+                var body = p.m_visEquipment != null ? p.m_visEquipment.m_bodyModel : null;
+                foreach (var kv in snap.SharedMaterials)
+                {
+                    if (kv.Key == null) continue;
+                    if (kv.Key == body && snap.Effective == BodyVeilMode.Spirit) CarryBodyChanges(kv.Key, kv.Value, snap);
+                    kv.Key.sharedMaterials = kv.Value;
+                }
                 foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
             }
             catch (Exception e)
@@ -681,6 +1032,28 @@ namespace InvisibilityPotion.Visuals
             finally
             {
                 DestroyFog(snap);
+            }
+        }
+
+        /// <summary>
+        /// VisEquipment changes body textures/skin colour through m_bodyModel.materials[i], which clones a material the renderer
+        /// did not instantiate: armour or skin changed while Spirit was on lands on a clone of our Spirit copy. Carry those slots
+        /// back to the original body material (a per-player instance created by VisEquipment.Awake, not a shared asset) so the
+        /// restore does not bring back pre-veil armour, and destroy the orphaned clone.
+        /// </summary>
+        private static void CarryBodyChanges(Renderer body, Material[] originals, Snapshot snap)
+        {
+            var current = body.sharedMaterials;
+            for (var i = 0; i < current.Length && i < originals.Length; i++)
+            {
+                var clone = current[i];
+                var original = originals[i];
+                if (clone == null || original == null || snap.SpiritOwned.Contains(clone)) continue;
+                if (clone.shader == null || clone.shader.name != SpiritShaderName) continue;   // not derived from our Spirit copy
+                foreach (var slot in SpiritTextureSlots)
+                    if (clone.HasProperty(slot) && original.HasProperty(slot)) original.SetTexture(slot, clone.GetTexture(slot));
+                if (clone.HasProperty(SkinColorId) && original.HasProperty(SkinColorId)) original.SetColor(SkinColorId, clone.GetColor(SkinColorId));
+                snap.SpiritOwned.Add(clone);   // destroyed with the veil's other Spirit copies
             }
         }
 
@@ -715,6 +1088,10 @@ namespace InvisibilityPotion.Visuals
 
         private static void DestroyFog(Snapshot snap)
         {
+            // Spirit copies: the renderers already got their originals back (Remove restores before this runs).
+            foreach (var m in snap.SpiritOwned) if (m != null) Object.Destroy(m);
+            snap.SpiritOwned.Clear();
+            snap.SpiritByOriginal.Clear();
             foreach (var e in snap.Fog)
             {
                 if (e.Go == null) continue;

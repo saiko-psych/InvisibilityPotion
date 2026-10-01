@@ -57,9 +57,10 @@ namespace InvisibilityPotion.Dev
         {
             public override string Name => "ip_veil";
             public override string Help =>
-                "ip_veil: print modes | ip_veil <none|cutoff|hide|tint|ghost|distortion> [tier]: override the body mode of your current (or the given) tier, none = mode Off | " +
-                "ip_veil off [tier|all]: clear the override | ip_veil look distortion <strength 0..5> [alpha 0..1] [tier] | ip_veil look ghost <alpha 0..1> [emission 0..5] | " +
-                "ip_veil save: writes the ghost look to [Veil] and every tier's look (incl. distortion) to [Fog.TierN]";
+                "ip_veil: print modes | ip_veil <none|cutoff|hide|tint|ghost|distortion|shadow|spirit> [tier]: override the body mode of your current (or the given) tier, none = mode Off | " +
+                "ip_veil off [tier|all]: clear the override | ip_veil look distortion <strength 0..5> [alpha 0..1] [wave, -1 = borrowed] [tier] | ip_veil look ghost <alpha 0..1> [emission 0..5] | " +
+                "ip_veil look shadow <alpha 0..1> | ip_veil look spirit <strength 0..10> [r g b] | " +
+                "ip_veil save: writes ghost/shadow/spirit to [Veil] and every tier's look (incl. distortion) to [Fog.TierN]";
 
             public override void Run(string[] args)
             {
@@ -67,9 +68,9 @@ namespace InvisibilityPotion.Dev
                 var verb = args[0].ToLowerInvariant();
                 if (verb == "save")
                 {
-                    Cfg.PluginConfig.SaveGhostLook(FogVeil.FormatColor(FogVeil.GhostColor), FogVeil.GhostEmission);
+                    FogVeil.SaveGlobalLook();
                     for (var t = 1; t <= 3; t++) Cfg.PluginConfig.SaveFog(t, FogVeil.Fog[t], FogVeil.AlphaMode);
-                    Say("veil look saved: [Veil] GhostColor/GhostEmission, [Fog.Tier1..3] (distortion and fog)");
+                    Say("veil look saved: [Veil] Ghost/Shadow/Spirit, [Fog.Tier1..3] (distortion and fog)");
                     return;
                 }
                 if (verb == "look") { Look(args); return; }
@@ -98,12 +99,25 @@ namespace InvisibilityPotion.Dev
                 Fog.FloatList.TryParseOne(args.Length >= 4 ? args[3] : "", out var second);
                 if (target == "distortion")
                 {
-                    var tier = ExplicitOrCurrentTier(args, 4);
-                    if (tier == 0) { Say("no current tier; pass one: ip_veil look distortion <strength> <alpha> <1|2|3>"); return; }
+                    var tier = ExplicitOrCurrentTier(args, 5);
+                    if (tier == 0) { Say("no current tier; pass one: ip_veil look distortion <strength> <alpha> <wave> <1|2|3>"); return; }
                     var s = FogVeil.Fog[tier];
                     s.DistortionStrength = Mathf.Clamp(first, 0f, 5f);
                     if (hasSecond) s.DA = Mathf.Clamp01(second);
-                    LookChanged($"T{tier} distortion strength {s.DistortionStrength}, color {s.Get("DistortionColor")}");
+                    if (args.Length >= 5) s.TrySet("DistortionWave", args[4]);   // malformed: keeps the current wave
+                    LookChanged($"T{tier} distortion strength {s.DistortionStrength}, color {s.Get("DistortionColor")}, wave {WaveText(s)}");
+                }
+                else if (target == "shadow")
+                {
+                    var c = FogVeil.ShadowColor; c.a = Mathf.Clamp01(first); FogVeil.ShadowColor = c;
+                    LookChanged($"shadow color {FogVeil.FormatColor(FogVeil.ShadowColor)}");
+                }
+                else if (target == "spirit")
+                {
+                    FogVeil.SpiritStrength = Mathf.Clamp(first, 0f, 10f);
+                    if (args.Length >= 6 && Fog.FloatList.TryParseOne(args[3], out var r) && Fog.FloatList.TryParseOne(args[4], out var g) && Fog.FloatList.TryParseOne(args[5], out var b))
+                        FogVeil.SpiritColor = new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
+                    LookChanged($"spirit tint {FogVeil.FormatRgb(FogVeil.SpiritColor)} x{FogVeil.SpiritStrength}");
                 }
                 else if (target == "ghost")
                 {
@@ -113,6 +127,10 @@ namespace InvisibilityPotion.Dev
                 }
                 else Say(Help);
             }
+
+            internal static string WaveText(Fog.FogSettings s) =>
+                s.DistortionWave >= 0f ? Fog.FloatList.Format(s.DistortionWave)
+                : float.IsNaN(FogVeil.BorrowedDistortionWave) ? "borrowed (not loaded yet)" : $"borrowed {Fog.FloatList.Format(FogVeil.BorrowedDistortionWave)}";
 
             private static void ClearAll()
             {
@@ -128,13 +146,15 @@ namespace InvisibilityPotion.Dev
                     var ov = FogVeil.ModeOverride[t];
                     var s = FogVeil.Fog[t];
                     Say($"T{t}: mode {FogVeil.ModeFor(t)} (config {cfg.BodyVeilMode}{(ov.HasValue ? $", override {ov.Value}" : "")}), fog {(s.Enabled ? "on" : "off")}, " +
-                        $"distortion strength {Fog.FloatList.Format(s.DistortionStrength)} color {s.Get("DistortionColor")}");
+                        $"distortion strength {Fog.FloatList.Format(s.DistortionStrength)} color {s.Get("DistortionColor")} wave {WaveText(s)}, " +
+                        $"fog material {s.FogMaterial}, emitter {s.EmitterMode}");
                 }
                 Say($"look ghost: color {FogVeil.FormatColor(FogVeil.GhostColor)}, emission x{FogVeil.GhostEmission} (ip_veil look ghost <alpha> [emission])");
+                Say($"look shadow: color {FogVeil.FormatColor(FogVeil.ShadowColor)} (ip_veil look shadow <alpha>); spirit: tint {FogVeil.FormatRgb(FogVeil.SpiritColor)} x{FogVeil.SpiritStrength} (ip_veil look spirit <strength> [r g b])");
             }
 
             public override System.Collections.Generic.List<string> CommandOptionList() =>
-                new System.Collections.Generic.List<string> { "none", "cutoff", "hide", "tint", "ghost", "distortion", "off", "look", "save" };
+                new System.Collections.Generic.List<string> { "none", "cutoff", "hide", "tint", "ghost", "distortion", "shadow", "spirit", "off", "look", "save" };
         }
 
         private class FogCommand : ConsoleCommand
@@ -142,13 +162,15 @@ namespace InvisibilityPotion.Dev
             public override string Name => "ip_fog";
             public override string Help =>
                 "ip_fog [t1|t2|t3] ...: tier defaults to your current one (else 1) | ip_fog [tN]: print | ip_fog [tN] <key> <value>, keys: enabled, rate, size, life, speed, alpha, " +
-                "dynamic, spreadx, spready, spreadz, drift, outer (on|off), outerradius, outeralpha, outerrate, outersize | ip_fog [tN] color r g b | " +
+                "dynamic, spreadx, spready, spreadz, drift, outer (on|off), outerradius, outeralpha, outerrate, outersize, material (swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
+                "emitter (bones|mesh), meshoffset, wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
                 "ip_fog alphamode <both|material|vertex> | ip_fog [tN] anchor <name> on|off | radius <v> | offset x y z | ip_fog [tN] save | ip_fog reset | ip_fogui: tuning window";
 
             private static readonly System.Collections.Generic.Dictionary<string, string> Aliases = new System.Collections.Generic.Dictionary<string, string>
             {
                 ["life"] = "Lifetime", ["dynamic"] = "DynamicColor", ["outer"] = "OuterEnabled", ["outerradius"] = "OuterRadiusMultiplier",
                 ["outeralpha"] = "OuterAlphaFactor", ["outerrate"] = "OuterRateFactor", ["outersize"] = "OuterSizeFactor",
+                ["material"] = "FogMaterial", ["emitter"] = "FogEmitterMode", ["wave"] = "DistortionWave",
             };
 
             public override void Run(string[] args)
@@ -219,7 +241,8 @@ namespace InvisibilityPotion.Dev
             {
                 var s = FogVeil.Fog[tier];
                 Say($"T{tier} fog {(s.Enabled ? "on" : "off")}: rate {s.Rate}/s per emitter, size {s.Size} m, life {s.Lifetime} s, speed {s.Speed}, alpha {s.Alpha}, " +
-                    $"color {s.Get("Color")} (dynamic {s.DynamicColor}), spread {s.SpreadX}/{s.SpreadY}/{s.SpreadZ}, drift {s.Drift}, alphamode {FogVeil.AlphaMode}");
+                    $"color {s.Get("Color")} (dynamic {s.DynamicColor}), spread {s.SpreadX}/{s.SpreadY}/{s.SpreadZ}, drift {s.Drift}, alphamode {FogVeil.AlphaMode}, " +
+                    $"material {s.FogMaterial}, emitter {s.EmitterMode} (mesh offset {s.MeshOffset})");
                 Say($"  outer {(s.OuterEnabled ? "on" : "off")}: radius x{s.OuterRadiusMultiplier}, alpha x{s.OuterAlphaFactor}, rate x{s.OuterRateFactor}, size x{s.OuterSizeFactor}; " +
                     $"~{s.LiveParticlesInner:0} live particles per inner emitter{(s.ExceedsParticleBudget ? $" (over {Fog.FogSettings.ParticleWarnThreshold})" : "")}");
                 foreach (var a in s.Anchors) Say($"  anchor {a.Name}: {a.Format()}  (on|off,radius,x,y,z)");
@@ -227,7 +250,7 @@ namespace InvisibilityPotion.Dev
 
             public override System.Collections.Generic.List<string> CommandOptionList() =>
                 new System.Collections.Generic.List<string> { "t1", "t2", "t3", "enabled", "rate", "size", "life", "speed", "alpha", "color", "dynamic", "spreadx", "spready", "spreadz",
-                    "drift", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "alphamode", "anchor", "save", "reset" };
+                    "drift", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "material", "emitter", "meshoffset", "wave", "alphamode", "anchor", "save", "reset" };
         }
 
         private class FogUiCommand : ConsoleCommand
