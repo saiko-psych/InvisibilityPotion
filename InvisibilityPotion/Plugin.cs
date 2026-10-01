@@ -25,6 +25,7 @@ namespace InvisibilityPotion
         {
 #if DEBUG
             PatchHealth.TargetKey("FejdStartup", "Start"),
+            PatchHealth.TargetKey("PlayerController", "TakeInput"),
 #endif
             PatchHealth.TargetKey("BaseAI", "CanHearTarget"),
             PatchHealth.TargetKey("BaseAI", "CanSeeTarget"),
@@ -100,6 +101,7 @@ namespace InvisibilityPotion
             }
 #if DEBUG
             Dev.DevCommands.Register();
+            gameObject.AddComponent<Dev.FogTuningWindow>();
 #endif
             Log.LogInfo($"{PluginName} {PluginVersion} loaded");
         }

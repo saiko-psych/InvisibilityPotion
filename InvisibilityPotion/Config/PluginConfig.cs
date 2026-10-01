@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BepInEx.Configuration;
+using HarmonyLib;
 using InvisibilityPotion.Visuals;
 
 namespace InvisibilityPotion.Config
@@ -11,16 +13,25 @@ namespace InvisibilityPotion.Config
         private static ConfigFile _file;
         private static readonly Dictionary<int, Dictionary<string, ConfigEntryBase>> _tierEntries = new Dictionary<int, Dictionary<string, ConfigEntryBase>>();
         private static readonly Dictionary<string, ConfigEntryBase> _globalEntries = new Dictionary<string, ConfigEntryBase>();
-        // Look-only entries ([Fog], [Veil]): local per client, not server-synced, so each player can tune what they see.
+        // Look-only entries ([Fog], [Fog.TierN], [Veil]): local per client, not server-synced, so each player can tune what they see.
         private static readonly Dictionary<string, ConfigEntryBase> _lookEntries = new Dictionary<string, ConfigEntryBase>();
+        private static readonly Dictionary<int, Dictionary<string, ConfigEntryBase>> _fogEntries = new Dictionary<int, Dictionary<string, ConfigEntryBase>>();
         private const string FogSection = "Fog";
         private const string VeilSection = "Veil";
         private static readonly TierConfig[] _tiers = new TierConfig[4];
+        private static readonly FogSettings[] _fog = { null, FogSettings.Defaults(1), FogSettings.Defaults(2), FogSettings.Defaults(3) };
 
         public static GlobalConfig Global { get; private set; } = new GlobalConfig();
-        /// <summary>Fog look from the [Fog] section. A fresh copy per Refresh; FogVeil clones it for live tuning.</summary>
-        public static FogSettings Fog { get; private set; } = FogSettings.Defaults();
+        /// <summary>Global fog alpha split ([Fog] FogAlphaMode).</summary>
+        public static FogAlphaMode FogAlphaMode { get; private set; } = FogAlphaMode.Both;
         public static event Action Changed;
+
+        /// <summary>The tier's fog/look settings from [Fog.TierN]. A fresh object per Refresh; FogVeil clones it for live tuning.</summary>
+        public static FogSettings Fog(int tier)
+        {
+            if (tier < 1 || tier > 3) throw new ArgumentOutOfRangeException(nameof(tier));
+            return _fog[tier];
+        }
 
         public static TierConfig Tier(int tier)
         {
@@ -31,9 +42,9 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", "Off", true, 0.35f);
-            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", "Ghost", true, 0.7f);
-            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", "Distortion", false, 0f);
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", "Off");
+            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", "Distortion");
+            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", "Distortion");
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
@@ -42,26 +53,16 @@ namespace InvisibilityPotion.Config
             BindGlobal("FogCutoffDense", 0.8f, "Alpha cutoff for the dense veil (tier II/III)");
             BindGlobal("FogCutoffSelf", 0.3f, "Alpha cutoff the hidden player sees on themselves");
             BindGlobal("AllowPvpInvisibility", true, "Server switch for hiding players from other players (tier III)");
-            var fog = FogSettings.Defaults();
-            BindLook(FogSection, "FogRate", fog.Rate, "Fog particles per second per body emitter at FogDensity 1 (scaled by the tier's FogDensity)");
-            BindLook(FogSection, "FogSize", fog.Size, "Fog particle size in metres (randomised 0.6x..1.25x)");
-            BindLook(FogSection, "FogLifetime", fog.Lifetime, "Fog particle lifetime in seconds (randomised 0.8x..1.2x)");
-            BindLook(FogSection, "FogSpeed", fog.Speed, "Fog particle start speed in m/s");
-            BindLook(FogSection, "FogAlpha", fog.Alpha, $"Fog alpha at FogDensity {FogSettings.ReferenceDensity}; scales linearly with the tier's FogDensity");
-            BindLook(FogSection, "FogColor", FloatList.Format(fog.R, fog.G, fog.B), "Fog colour as r,g,b (0..1)");
-            BindLook(FogSection, "FogDrift", fog.Drift, "Upward drift of fog particles in m/s");
-            BindLook(FogSection, "FogAlphaMode", fog.AlphaMode.ToString(), "Where the fog alpha goes: Both (split between material and particle colour), Material or Vertex");
-            foreach (var a in fog.Anchors)
-                BindLook(FogSection, "Anchor." + a.Name, a.Format(), $"Fog emitter on the {a.Name} bone: on|off,radius,x,y,z (offset in metres, player space: x right, y up, z forward)");
-            BindLook(VeilSection, "DistortionStrength", 0.2f, "Refraction strength of the Distortion body mode (shader property _RefractionIntensity)");
-            BindLook(VeilSection, "DistortionColor", "1,1,1,0.15", "Colour of the Distortion body mode as r,g,b,a (shader property _Color)");
+            BindLook(FogSection, "FogAlphaMode", FogAlphaMode.Both.ToString(), "Where the fog alpha goes (all tiers): Both (split between material and particle colour), Material or Vertex");
+            for (var t = 1; t <= 3; t++) BindFogTier(t);
             BindLook(VeilSection, "GhostColor", "0.75,0.8,0.9,1", "Colour of the Ghost body mode as r,g,b,a (_Color; the shader is alpha-tested, low alpha may cut the body away)");
             BindLook(VeilSection, "GhostEmission", 0.25f, "Multiplier on the Ghost material's glow (_EmissionColor); 1 = vanilla ghost glow");
+            MigrateAndDropOrphans();
             Refresh();
         }
 
         private static void BindTier(int tier, float duration, float stealth, float noise, bool ignored, bool hiddenFromPlayers, float aggroLoss, float rehide, string recipe,
-                                     string bodyMode, bool fogEnabled, float fogDensity)
+                                     string bodyMode)
         {
             var section = $"Tier{tier}";
             var e = new Dictionary<string, ConfigEntryBase>
@@ -77,12 +78,69 @@ namespace InvisibilityPotion.Config
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount"),
-                ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode, "How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. The Debug command ip_veil overrides it in memory",
+                ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
+                                        $"How the hidden player's body is drawn: Off, Cutoff, Hide, Tint, Ghost or Distortion. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
                                         ModeValues(bodyMode)),
-                ["FogEnabled"] = Bind(section, "FogEnabled", fogEnabled, "Body-anchored fog around the hidden player"),
-                ["FogDensity"] = Bind(section, "FogDensity", fogDensity, "Fog density 0..1; scales the fog rate and alpha"),
             };
             _tierEntries[tier] = e;
+        }
+
+        /// <summary>Binds every key of [Fog.TierN] with the tier's defaults; floats and bools as typed entries, colours and anchors as text.</summary>
+        private static void BindFogTier(int tier)
+        {
+            var section = $"Fog.Tier{tier}";
+            var defaults = FogSettings.Defaults(tier);
+            var e = new Dictionary<string, ConfigEntryBase>();
+            foreach (var key in FogSettings.Keys)
+            {
+                var text = defaults.Get(key.Name);
+                switch (key.Kind)
+                {
+                    case FogValueKind.Float:
+                        FloatList.TryParseOne(text, out var f);
+                        e[key.Name] = _file.Bind(section, key.Name, f, key.Description);
+                        break;
+                    case FogValueKind.Bool:
+                        FogAnchor.TryParseSwitch(text, out var b);
+                        e[key.Name] = _file.Bind(section, key.Name, b, key.Description);
+                        break;
+                    default:
+                        e[key.Name] = _file.Bind(section, key.Name, text, key.Description);
+                        break;
+                }
+            }
+            _fogEntries[tier] = e;
+        }
+
+        /// <summary>
+        /// Drops every orphaned key (left over from older layouts: [Fog] FogRate/Anchor.*, [TierN] FogEnabled/FogDensity,
+        /// [Veil] Distortion*, [General] FogRate*/BodyVeilMode) so the file only holds bound keys. A file from before the
+        /// per-tier fog (it still has [Tier2] FogDensity) gets the new tier II default body mode when it kept the old default Ghost.
+        /// </summary>
+        private static void MigrateAndDropOrphans()
+        {
+            Dictionary<ConfigDefinition, string> orphans;
+            try
+            {
+                orphans = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries")?.GetValue(_file) as Dictionary<ConfigDefinition, string>;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"Config: cannot read orphaned entries ({ex.Message}); old keys stay in the file");
+                return;
+            }
+            if (orphans == null || orphans.Count == 0) return;
+            var t2Mode = (ConfigEntry<string>)_tierEntries[2]["BodyVeilMode"];
+            if (orphans.ContainsKey(new ConfigDefinition("Tier2", "FogDensity")) && t2Mode.Value == "Ghost")
+            {
+                t2Mode.Value = "Distortion";
+                Plugin.Log?.LogInfo("Config migration: [Tier2] BodyVeilMode Ghost (old default) -> Distortion (new default)");
+            }
+            var names = new List<string>();
+            foreach (var d in orphans.Keys) names.Add($"[{d.Section}] {d.Key}");
+            orphans.Clear();
+            _file.Save();
+            Plugin.Log?.LogInfo($"Config: removed {names.Count} obsolete keys: {string.Join(", ", names)}");
         }
 
         private static void BindGlobal<T>(string key, T value, string description) =>
@@ -130,8 +188,6 @@ namespace InvisibilityPotion.Config
                 Cooldown = V<float>("Cooldown"),
                 Recipe = V<string>("Recipe"),
                 BodyVeilMode = V<string>("BodyVeilMode"),
-                FogEnabled = V<bool>("FogEnabled"),
-                FogDensity = Math.Max(0f, Math.Min(1f, V<float>("FogDensity"))),
             };
         }
 
@@ -163,66 +219,74 @@ namespace InvisibilityPotion.Config
                 FogCutoffDense = Get<float>(_globalEntries, "FogCutoffDense"),
                 FogCutoffSelf = Get<float>(_globalEntries, "FogCutoffSelf"),
                 AllowPvpInvisibility = Get<bool>(_globalEntries, "AllowPvpInvisibility"),
-                DistortionStrength = Get<float>(_lookEntries, "DistortionStrength"),
-                DistortionColor = Get<string>(_lookEntries, "DistortionColor"),
                 GhostColor = Get<string>(_lookEntries, "GhostColor"),
                 GhostEmission = Get<float>(_lookEntries, "GhostEmission"),
             };
-            var fog = BuildFog();
-            for (var t = 1; t <= 3; t++) _tiers[t] = tiers[t];
+            var fog = new FogSettings[4];
+            for (var t = 1; t <= 3; t++) fog[t] = BuildFog(t);
+            var modeText = Get<string>(_lookEntries, "FogAlphaMode");
+            var alphaMode = FogAlphaMode.Both;
+            if (!FogSettings.TryParseAlphaMode(modeText, out alphaMode))
+            {
+                alphaMode = FogAlphaMode.Both;
+                Plugin.Log?.LogWarning($"[Fog] FogAlphaMode '{modeText}' is not Both, Material or Vertex; using Both");
+            }
+            for (var t = 1; t <= 3; t++) { _tiers[t] = tiers[t]; _fog[t] = fog[t]; }
             Global = global;
-            Fog = fog;
+            FogAlphaMode = alphaMode;
             Changed?.Invoke();
         }
 
-        /// <summary>Builds the fog look from [Fog]. A malformed value falls back to its default with a warning.</summary>
-        private static FogSettings BuildFog()
+        /// <summary>Builds a tier's look from [Fog.TierN]. A malformed value falls back to its default with a warning.</summary>
+        private static FogSettings BuildFog(int tier)
         {
-            var s = FogSettings.Defaults();
-            s.Rate = Math.Max(0f, Get<float>(_lookEntries, "FogRate"));
-            s.Size = Math.Max(0.01f, Get<float>(_lookEntries, "FogSize"));
-            s.Lifetime = Math.Max(0.05f, Get<float>(_lookEntries, "FogLifetime"));
-            s.Speed = Get<float>(_lookEntries, "FogSpeed");
-            s.Alpha = Math.Max(0f, Math.Min(1f, Get<float>(_lookEntries, "FogAlpha")));
-            s.Drift = Get<float>(_lookEntries, "FogDrift");
-            var color = Get<string>(_lookEntries, "FogColor");
-            if (FloatList.TryParse(color, 3, out var rgb)) { s.R = rgb[0]; s.G = rgb[1]; s.B = rgb[2]; }
-            else Plugin.Log?.LogWarning($"[Fog] FogColor '{color}' is not r,g,b; using default");
-            var mode = Get<string>(_lookEntries, "FogAlphaMode");
-            if (FogSettings.TryParseAlphaMode(mode, out var alphaMode)) s.AlphaMode = alphaMode;
-            else Plugin.Log?.LogWarning($"[Fog] FogAlphaMode '{mode}' is not Both, Material or Vertex; using {s.AlphaMode}");
-            for (var i = 0; i < s.Anchors.Count; i++)
-            {
-                var name = s.Anchors[i].Name;
-                var text = Get<string>(_lookEntries, "Anchor." + name);
-                if (FogAnchor.TryParse(name, text, out var anchor)) s.Anchors[i] = anchor;
-                else Plugin.Log?.LogWarning($"[Fog] Anchor.{name} '{text}' is not on|off,radius,x,y,z; using default");
-            }
+            var e = _fogEntries[tier];
+            var warnings = new List<string>();
+            var s = FogSettings.Parse(tier, key => e.TryGetValue(key, out var entry) ? Convert.ToString(entry.BoxedValue, CultureInfo.InvariantCulture) : null, warnings);
+            foreach (var w in warnings) Plugin.Log?.LogWarning($"[Fog.Tier{tier}] {w}");
             return s;
         }
 
-        /// <summary>Writes a fog look into the [Fog] entries and saves the file (ip_fog save). Does not raise Changed.</summary>
-        public static void SaveFog(FogSettings s)
+        /// <summary>Writes a tier's look into [Fog.TierN] plus the global alpha mode and saves the file once. Does not raise Changed.</summary>
+        public static void SaveFog(int tier, FogSettings s, FogAlphaMode alphaMode)
         {
-            ((ConfigEntry<float>)_lookEntries["FogRate"]).Value = s.Rate;
-            ((ConfigEntry<float>)_lookEntries["FogSize"]).Value = s.Size;
-            ((ConfigEntry<float>)_lookEntries["FogLifetime"]).Value = s.Lifetime;
-            ((ConfigEntry<float>)_lookEntries["FogSpeed"]).Value = s.Speed;
-            ((ConfigEntry<float>)_lookEntries["FogAlpha"]).Value = s.Alpha;
-            ((ConfigEntry<string>)_lookEntries["FogColor"]).Value = FloatList.Format(s.R, s.G, s.B);
-            ((ConfigEntry<float>)_lookEntries["FogDrift"]).Value = s.Drift;
-            ((ConfigEntry<string>)_lookEntries["FogAlphaMode"]).Value = s.AlphaMode.ToString();
-            foreach (var a in s.Anchors)
-                if (_lookEntries.TryGetValue("Anchor." + a.Name, out var e)) ((ConfigEntry<string>)e).Value = a.Format();
+            var e = _fogEntries[tier];
+            var saveOnSet = _file.SaveOnConfigSet;
+            _file.SaveOnConfigSet = false;   // one write instead of one per key
+            try
+            {
+                foreach (var key in FogSettings.Keys)
+                {
+                    var text = s.Get(key.Name);
+                    if (text == null || !e.TryGetValue(key.Name, out var entry)) continue;
+                    switch (key.Kind)
+                    {
+                        case FogValueKind.Float: if (FloatList.TryParseOne(text, out var f)) ((ConfigEntry<float>)entry).Value = f; break;
+                        case FogValueKind.Bool: if (FogAnchor.TryParseSwitch(text, out var b)) ((ConfigEntry<bool>)entry).Value = b; break;
+                        default: ((ConfigEntry<string>)entry).Value = text; break;
+                    }
+                }
+                ((ConfigEntry<string>)_lookEntries["FogAlphaMode"]).Value = alphaMode.ToString();
+            }
+            finally
+            {
+                _file.SaveOnConfigSet = saveOnSet;
+            }
             _file.Save();
-            Fog = s.Clone();
+            _fog[tier] = s.Clone();
+            FogAlphaMode = alphaMode;
         }
 
-        /// <summary>Writes the Distortion/Ghost look into [Veil] and saves the file (ip_veil save). Does not raise Changed.</summary>
-        public static void SaveVeilLook(float distortionStrength, string distortionColor, string ghostColor, float ghostEmission)
+        /// <summary>Writes a tier's BodyVeilMode ([TierN], admin-synced: on a client the server's value wins at the next sync). Does not raise Changed.</summary>
+        public static void SaveBodyVeilMode(int tier, string mode)
         {
-            ((ConfigEntry<float>)_lookEntries["DistortionStrength"]).Value = distortionStrength;
-            ((ConfigEntry<string>)_lookEntries["DistortionColor"]).Value = distortionColor;
+            ((ConfigEntry<string>)_tierEntries[tier]["BodyVeilMode"]).Value = mode;
+            _file.Save();
+        }
+
+        /// <summary>Writes the Ghost look into [Veil] and saves the file (ip_veil save). Does not raise Changed.</summary>
+        public static void SaveGhostLook(string ghostColor, float ghostEmission)
+        {
             ((ConfigEntry<string>)_lookEntries["GhostColor"]).Value = ghostColor;
             ((ConfigEntry<float>)_lookEntries["GhostEmission"]).Value = ghostEmission;
             _file.Save();

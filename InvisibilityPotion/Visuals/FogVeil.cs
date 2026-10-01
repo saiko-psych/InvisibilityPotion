@@ -11,10 +11,11 @@ namespace InvisibilityPotion.Visuals
     public enum BodyVeilMode { Off, Cutoff, Hide, Tint, Ghost, Distortion }
 
     /// <summary>
-    /// Wraps a veiled player in small fog emitters that follow body bones (head, chest, hips, hands, feet) and changes the body
-    /// according to the tier's mode. Every change is recorded in a per-player snapshot; Remove restores it exactly,
-    /// whichever mode applied it. Look values are static and live-tunable (Debug: ip_fog, ip_veil); any change bumps
-    /// <see cref="Version"/>, which makes the next Apply rebuild the veil.
+    /// Wraps a veiled player in flattened fog emitters that follow body bones (head, chest, hips, shoulders, hands, legs, feet;
+    /// optionally a second, wider and fainter layer on the trunk) and changes the body according to the tier's mode.
+    /// Every change is recorded in a per-player snapshot; Remove restores it exactly, whichever mode applied it.
+    /// Look values are static, per tier and live-tunable (Debug: ip_fog, ip_veil, ip_fogui); any change bumps
+    /// <see cref="Version"/>, which makes the next Apply rebuild the veil. Apply is only called by VeilController.Refresh.
     /// </summary>
     public sealed class FogVeil : IVeil
     {
@@ -32,14 +33,16 @@ namespace InvisibilityPotion.Visuals
         private const string DistortionShaderName = "Custom/Distortion";
         // Vanilla Custom/Distortion material with a normal map; its bluish _Color is overridden by DistortionColor.
         private const string PreferredDistortionMaterial = "Aspect_mat";
-        private const string FogObjectName = "ip_fog";
+        /// <summary>Every GameObject this veil creates starts with this name; ApplyBody and the particle hiding skip them.</summary>
+        public const string FogObjectName = "ip_fog";
+        private const string OuterObjectName = "ip_fog_outer";
+        private const float DynamicColorBlend = 0.5f;
 
         // ---------- live look state ----------
 
-        /// <summary>Current fog look (a copy of PluginConfig.Fog, mutated by ip_fog).</summary>
-        public static FogSettings Fog = FogSettings.Defaults();
-        public static float DistortionStrength = 0.2f;
-        public static Color DistortionColor = new Color(1f, 1f, 1f, 0.15f);
+        /// <summary>Current per-tier look (index 1..3; copies of PluginConfig.Fog(t), mutated by ip_fog / ip_fogui).</summary>
+        public static readonly FogSettings[] Fog = { null, FogSettings.Defaults(1), FogSettings.Defaults(2), FogSettings.Defaults(3) };
+        public static FogAlphaMode AlphaMode = FogAlphaMode.Both;
         public static Color GhostColor = new Color(0.75f, 0.8f, 0.9f, 1f);
         public static float GhostEmission = 0.25f;
         /// <summary>Runtime body-mode override per tier (index 1..3), null = use the tier's config. Set by ip_veil.</summary>
@@ -51,16 +54,16 @@ namespace InvisibilityPotion.Visuals
         {
             Version++;
             if (_ghostInstance != null) ApplyGhostLook(_ghostInstance);
-            if (_distortionInstance != null) ApplyDistortionLook(_distortionInstance);
+            for (var t = 1; t <= 3; t++)
+                if (_distortionInstances[t] != null) ApplyDistortionLook(_distortionInstances[t], t);
         }
 
         /// <summary>Re-reads all look values from PluginConfig (startup, ip_reload_config, server sync, ip_fog reset).</summary>
         public static void LoadFromConfig()
         {
             var g = PluginConfig.Global;
-            Fog = PluginConfig.Fog.Clone();
-            DistortionStrength = g.DistortionStrength;
-            DistortionColor = ParseColor(g.DistortionColor, 4, new Color(1f, 1f, 1f, 0.15f), "DistortionColor");
+            for (var t = 1; t <= 3; t++) Fog[t] = PluginConfig.Fog(t).Clone();
+            AlphaMode = PluginConfig.FogAlphaMode;
             GhostColor = ParseColor(g.GhostColor, 4, new Color(0.75f, 0.8f, 0.9f, 1f), "GhostColor");
             GhostEmission = Mathf.Max(0f, g.GhostEmission);
             ParseConfiguredModes();
@@ -83,7 +86,7 @@ namespace InvisibilityPotion.Visuals
             return false;
         }
 
-        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Off, BodyVeilMode.Ghost, BodyVeilMode.Distortion };
+        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Off, BodyVeilMode.Distortion, BodyVeilMode.Distortion };
 
         /// <summary>The tier's configured body mode, parsed once per LoadFromConfig.</summary>
         public static BodyVeilMode ConfiguredMode(int tier) => tier >= 1 && tier <= 3 ? _configuredModes[tier] : BodyVeilMode.Off;
@@ -115,20 +118,31 @@ namespace InvisibilityPotion.Visuals
             public BodyVeilMode Requested;
             public BodyVeilMode Effective;
             public bool FogWanted;
-            public readonly List<GameObject> Fog = new List<GameObject>();
-            public Material FogMaterial;   // per-veil instance, destroyed on Remove
+            public readonly List<FogEmitter> Fog = new List<FogEmitter>();
+            public readonly List<Material> FogMaterials = new List<Material>();   // per-veil instances (inner, outer), destroyed on Remove
+            public bool MaterialHasColor;
+            public Color AppliedColor;     // rgb currently on the fog (dynamic colour follows the environment)
             public readonly Dictionary<Material, float> Cutoffs = new Dictionary<Material, float>();
             public readonly Dictionary<Material, Color> Colors = new Dictionary<Material, Color>();
             public readonly Dictionary<Renderer, Material[]> SharedMaterials = new Dictionary<Renderer, Material[]>();
-            public readonly HashSet<Renderer> Hidden = new HashSet<Renderer>();
+            public readonly HashSet<Renderer> Hidden = new HashSet<Renderer>();   // renderers disabled by Hide, and vanilla particles in Ghost/Distortion
 
             public bool FogIntact()
             {
                 if (!FogWanted) return true;
                 if (Fog.Count == 0) return false;
-                foreach (var go in Fog) if (go == null) return false;
+                foreach (var e in Fog) if (e.Go == null) return false;
                 return true;
             }
+        }
+
+        private sealed class FogEmitter
+        {
+            public GameObject Go;
+            public ParticleSystem Ps;
+            public string Anchor;
+            public bool Outer;
+            public float VertexAlpha;
         }
         private readonly Dictionary<Player, Snapshot> _snapshots = new Dictionary<Player, Snapshot>();
 
@@ -143,18 +157,19 @@ namespace InvisibilityPotion.Visuals
                 && existing.Version == Version && existing.Requested == requested && existing.FogIntact())
             {
                 ApplyBody(p, existing);   // idempotent: originals are recorded once, values derived from them
+                UpdateFogColor(existing);
                 return;
             }
             Remove(p);
-            var cfg = PluginConfig.Tier(tier);
+            var fog = Fog[tier];
             var snap = new Snapshot
             {
                 Tier = tier, IsLocal = isLocal, ForceHide = forceHide, Version = Version,
-                Requested = requested, Effective = Resolve(requested, isLocal),
-                FogWanted = !forceHide && cfg.FogEnabled && cfg.FogDensity > 0f,
+                Requested = requested, Effective = Resolve(requested, isLocal, tier),
+                FogWanted = !forceHide && fog.Enabled && fog.Alpha > 0f && fog.Rate > 0f,
             };
             _snapshots[p] = snap;
-            if (snap.FogWanted) SpawnFog(p, snap, cfg.FogDensity);
+            if (snap.FogWanted) SpawnFog(p, snap);
             if (snap.Fog.Count == 0) snap.FogWanted = false;   // nothing spawned (no material/bones): do not retry every tick
             ApplyBody(p, snap);
             Plugin.Log.LogDebug($"veil T{tier} on {p.GetPlayerName()}: mode {snap.Requested} (effective {snap.Effective}){(forceHide ? " [hidden from players]" : "")}, " +
@@ -162,7 +177,7 @@ namespace InvisibilityPotion.Visuals
         }
 
         /// <summary>Maps the requested mode to the one actually applied (self view and missing materials fall back to Tint).</summary>
-        private static BodyVeilMode Resolve(BodyVeilMode mode, bool isLocal)
+        private static BodyVeilMode Resolve(BodyVeilMode mode, bool isLocal, int tier)
         {
             switch (mode)
             {
@@ -173,7 +188,7 @@ namespace InvisibilityPotion.Visuals
                     Plugin.Log.LogWarning($"veil mode Ghost: no material found on prefab '{GhostPrefabName}'; using Tint");
                     return BodyVeilMode.Tint;
                 case BodyVeilMode.Distortion:
-                    if (DistortionInstance() != null) return BodyVeilMode.Distortion;
+                    if (DistortionInstance(tier) != null) return BodyVeilMode.Distortion;
                     Plugin.Log.LogWarning($"veil mode Distortion: shader '{DistortionShaderName}' not found; using Tint");
                     return BodyVeilMode.Tint;
                 default:
@@ -187,12 +202,20 @@ namespace InvisibilityPotion.Visuals
             var g = PluginConfig.Global;
             var cutoff = snap.IsLocal && g.ShowSelfFaintly ? g.FogCutoffSelf : (snap.Tier == 1 ? g.FogCutoffLight : g.FogCutoffDense);
             var swap = snap.Effective == BodyVeilMode.Ghost ? GhostInstance()
-                     : snap.Effective == BodyVeilMode.Distortion ? DistortionInstance() : null;
+                     : snap.Effective == BodyVeilMode.Distortion ? DistortionInstance(snap.Tier) : null;
+            // Vanilla particles parented to the player (rain splashes, wet/tarred status effects, torch flames) would float in
+            // the air around an invisible body: hide them while a body-hiding mode is active, restore on Remove.
+            var hideParticles = snap.Effective == BodyVeilMode.Ghost || snap.Effective == BodyVeilMode.Distortion;
 
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
             {
                 // Skips the current fog and a previous one whose deferred Destroy has not run yet (ForceRefresh re-applies in the same frame).
-                if (r == null || r.gameObject.name == FogObjectName) continue;
+                if (r == null || IsOurs(r.gameObject)) continue;
+                if (hideParticles && r is ParticleSystemRenderer)
+                {
+                    if (r.enabled) { snap.Hidden.Add(r); r.enabled = false; }
+                    continue;
+                }
                 switch (snap.Effective)
                 {
                     case BodyVeilMode.Cutoff:
@@ -238,6 +261,8 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Material swaps and tints only touch meshes; particle and line renderers (equipment effects) keep their shaders.</summary>
         private static bool IsBodyRenderer(Renderer r) => r is SkinnedMeshRenderer || r is MeshRenderer;
 
+        private static bool IsOurs(GameObject go) => go.name.StartsWith(FogObjectName, StringComparison.Ordinal);
+
         // ---------- fog ----------
 
         private static bool _fogWarned;
@@ -250,11 +275,29 @@ namespace InvisibilityPotion.Visuals
         {
             ["Chest"] = new[] { "Spine2", "Spine1", "Spine", "UpperChest" },
             ["Hips"] = new[] { "Pelvis" },
+            ["LeftShoulder"] = new[] { "LeftArm", "LeftShoulder" },
+            ["RightShoulder"] = new[] { "RightArm", "RightShoulder" },
+            ["LeftUpperLeg"] = new[] { "LeftUpLeg" },
+            ["RightUpperLeg"] = new[] { "RightUpLeg" },
+            ["LeftLowerLeg"] = new[] { "LeftLeg" },
+            ["RightLowerLeg"] = new[] { "RightLeg" },
+        };
+
+        /// <summary>Anchor names that are not HumanBodyBones names: the shoulder anchors sit on the upper arm bones.</summary>
+        private static readonly Dictionary<string, HumanBodyBones> AnchorBones = new Dictionary<string, HumanBodyBones>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["LeftShoulder"] = HumanBodyBones.LeftUpperArm,
+            ["RightShoulder"] = HumanBodyBones.RightUpperArm,
         };
 
         private static Transform FindBone(Animator animator, string anchorName)
         {
-            if (Enum.TryParse(anchorName, true, out HumanBodyBones bone) && Enum.IsDefined(typeof(HumanBodyBones), bone))
+            if (AnchorBones.TryGetValue(anchorName, out var mapped))
+            {
+                var t = Utils.GetBoneTransform(animator, mapped);
+                if (t != null) return t;
+            }
+            else if (Enum.TryParse(anchorName, true, out HumanBodyBones bone) && Enum.IsDefined(typeof(HumanBodyBones), bone))
             {
                 var t = Utils.GetBoneTransform(animator, bone);
                 if (t != null) return t;
@@ -268,7 +311,7 @@ namespace InvisibilityPotion.Visuals
             return null;
         }
 
-        private static void SpawnFog(Player p, Snapshot snap, float density)
+        private static void SpawnFog(Player p, Snapshot snap)
         {
             var source = FogSourceMaterial();
             if (source == null)
@@ -276,18 +319,14 @@ namespace InvisibilityPotion.Visuals
                 if (!_fogWarned) { _fogWarned = true; Plugin.Log.LogWarning("veil fog: no particle material available; fog skipped"); }
                 return;
             }
-            var s = Fog;
-            var alpha = s.EffectiveAlpha(density);
-            var mat = new Material(source) { name = "ip_fog_mat" };   // never mutate the vanilla shared material
-            var materialHasColor = mat.HasProperty(ColorId);
-            float matAlpha, vertexAlpha;
-            if (!materialHasColor || s.AlphaMode == FogAlphaMode.Vertex) { matAlpha = 1f; vertexAlpha = alpha; }
-            else if (s.AlphaMode == FogAlphaMode.Material) { matAlpha = alpha; vertexAlpha = 1f; }
-            else { matAlpha = vertexAlpha = Mathf.Sqrt(alpha); }   // Both: the product of the two is the target alpha
-            if (materialHasColor) mat.SetColor(ColorId, new Color(s.R, s.G, s.B, matAlpha));
-            if (mat.HasProperty(EmissionColorId)) mat.SetColor(EmissionColorId, Color.black);
-            snap.FogMaterial = mat;
-            var startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(s.R, s.G, s.B, vertexAlpha);
+            var s = Fog[snap.Tier];
+            var color = FogColor(s);
+            snap.AppliedColor = color;
+            var inner = MakeFogMaterial(source, snap, color, s.Alpha, out var innerVertexAlpha);
+            Material outer = null;
+            var outerVertexAlpha = 0f;
+            if (s.OuterEnabled && s.OuterAlphaFactor > 0f && s.OuterRateFactor > 0f)
+                outer = MakeFogMaterial(source, snap, color, Mathf.Clamp01(s.Alpha * s.OuterAlphaFactor), out outerVertexAlpha);
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -307,17 +346,74 @@ namespace InvisibilityPotion.Visuals
                     if (_missingBoneWarned.Add(a.Name)) Plugin.Log.LogWarning($"veil fog: bone for anchor '{a.Name}' not found; anchor skipped");
                     continue;
                 }
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Radius, new Vector3(a.X, a.Y, a.Z), density, startColor, mat));
+                var offset = new Vector3(a.X, a.Y, a.Z);
+                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, false, a.Radius, offset, s.Rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
+                if (outer != null && Array.IndexOf(FogSettings.OuterAnchorNames, a.Name) >= 0)
+                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, a.Radius * s.OuterRadiusMultiplier, offset, s.Rate * s.OuterRateFactor,
+                                              s.Size * s.OuterSizeFactor, color, outerVertexAlpha, outer, s, snap.MaterialHasColor));
             }
             // No animator at all: one emitter at chest height so the fog does not silently disappear.
             if (animator == null && anyEnabled)
-                snap.Fog.Add(SpawnEmitter(p.transform, p.transform, 0.4f, new Vector3(0f, 1f, 0f), density, startColor, mat));
+                snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", false, 0.4f, new Vector3(0f, 1f, 0f), s.Rate, s.Size, color, innerVertexAlpha, inner, s, snap.MaterialHasColor));
         }
 
-        private static GameObject SpawnEmitter(Transform root, Transform bone, float radius, Vector3 offset, float density, Color startColor, Material mat)
+        /// <summary>Per-veil copy of the borrowed material with the layer's alpha split between material and particle colour.</summary>
+        private static Material MakeFogMaterial(Material source, Snapshot snap, Color color, float alpha, out float vertexAlpha)
         {
-            var s = Fog;
-            var go = new GameObject(FogObjectName);
+            var mat = new Material(source) { name = "ip_fog_mat" };   // never mutate the vanilla shared material
+            var materialHasColor = mat.HasProperty(ColorId);
+            float matAlpha;
+            if (!materialHasColor || AlphaMode == FogAlphaMode.Vertex) { matAlpha = 1f; vertexAlpha = alpha; }
+            else if (AlphaMode == FogAlphaMode.Material) { matAlpha = alpha; vertexAlpha = 1f; }
+            else { matAlpha = vertexAlpha = Mathf.Sqrt(alpha); }   // Both: the product of the two is the target alpha
+            if (materialHasColor) mat.SetColor(ColorId, new Color(color.r, color.g, color.b, matAlpha));
+            if (mat.HasProperty(EmissionColorId)) mat.SetColor(EmissionColorId, Color.black);
+            snap.MaterialHasColor = materialHasColor;
+            snap.FogMaterials.Add(mat);
+            return mat;
+        }
+
+        /// <summary>The tier's fog colour; with DynamicColor blended 50/50 with the environment fog colour (EnvMan sets RenderSettings.fogColor).</summary>
+        private static Color FogColor(FogSettings s)
+        {
+            if (!s.DynamicColor) return new Color(s.R, s.G, s.B);
+            var env = RenderSettings.fogColor;
+            var c = FogRgb.Blend(s.Color, new FogRgb(env.r, env.g, env.b), DynamicColorBlend);
+            return new Color(c.R, c.G, c.B);
+        }
+
+        /// <summary>Follows the environment colour on the idempotent Apply path (every refresh) without rebuilding the emitters.</summary>
+        private static void UpdateFogColor(Snapshot snap)
+        {
+            if (snap.Fog.Count == 0) return;
+            var s = Fog[snap.Tier];
+            if (!s.DynamicColor) return;
+            var c = FogColor(s);
+            var d = snap.AppliedColor;
+            if (Mathf.Abs(c.r - d.r) + Mathf.Abs(c.g - d.g) + Mathf.Abs(c.b - d.b) < 0.01f) return;
+            snap.AppliedColor = c;
+            if (snap.MaterialHasColor)
+            {
+                foreach (var m in snap.FogMaterials)
+                {
+                    if (m == null) continue;
+                    var a = m.GetColor(ColorId).a;
+                    m.SetColor(ColorId, new Color(c.r, c.g, c.b, a));
+                }
+                return;
+            }
+            foreach (var e in snap.Fog)
+            {
+                if (e.Ps == null) continue;
+                var main = e.Ps.main;
+                main.startColor = new Color(c.r, c.g, c.b, e.VertexAlpha);
+            }
+        }
+
+        private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, bool outerLayer, float radius, Vector3 offset, float rate, float size,
+                                               Color color, float vertexAlpha, Material mat, FogSettings s, bool materialHasColor)
+        {
+            var go = new GameObject(outerLayer ? OuterObjectName : FogObjectName);
             go.SetActive(false);   // configure before the system starts playing
             go.transform.SetParent(root, false);   // destroyed with the player; position driven by the follower
             var follower = go.AddComponent<FogAnchorFollower>();
@@ -334,24 +430,26 @@ namespace InvisibilityPotion.Visuals
             main.scalingMode = ParticleSystemScalingMode.Local;
             main.startLifetime = new ParticleSystem.MinMaxCurve(s.Lifetime * 0.8f, s.Lifetime * 1.2f);
             main.startSpeed = s.Speed;
-            main.startSize = new ParticleSystem.MinMaxCurve(s.Size * 0.6f, s.Size * 1.25f);
+            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.6f, size * 1.25f);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-            main.startColor = startColor;
+            // With a material colour the tint lives there (it can follow the environment); else in the particle colour.
+            main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
             main.gravityModifier = 0f;
-            main.maxParticles = 64;
+            main.maxParticles = s.MaxParticles(rate);
 
             var emission = ps.emission;
             emission.enabled = true;
-            emission.rateOverTime = Mathf.Max(0f, s.Rate * density);
+            emission.rateOverTime = Mathf.Max(0f, rate);
 
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Sphere;
             shape.radius = Mathf.Max(0.001f, radius);
+            shape.scale = new Vector3(s.SpreadX, s.SpreadY, s.SpreadZ);   // follower rotation = player rotation, so y is up
 
             var vel = ps.velocityOverLifetime;
-            vel.enabled = true;
-            vel.space = ParticleSystemSimulationSpace.World;   // drift is "up" regardless of bone rotation
+            vel.enabled = Mathf.Abs(s.Drift) > 0.0001f;
+            vel.space = ParticleSystemSimulationSpace.World;   // drift is vertical regardless of bone rotation
             vel.x = new ParticleSystem.MinMaxCurve(0f);
             vel.y = new ParticleSystem.MinMaxCurve(s.Drift);
             vel.z = new ParticleSystem.MinMaxCurve(0f);
@@ -373,8 +471,19 @@ namespace InvisibilityPotion.Visuals
 
             go.SetActive(true);
             ps.Play();
-            return go;
+            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = vertexAlpha };
         }
+
+        /// <summary>Live particle count per emitter of a player's veil (tuning window readout). Empty when the player has no veil.</summary>
+        public void CollectParticleCounts(Player p, List<KeyValuePair<string, int>> into)
+        {
+            into.Clear();
+            if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
+            foreach (var e in snap.Fog)
+                if (e.Ps != null) into.Add(new KeyValuePair<string, int>(e.Outer ? e.Anchor + " (outer)" : e.Anchor, e.Ps.particleCount));
+        }
+
+        public bool HasVeil(Player p) => p != null && _snapshots.ContainsKey(p);
 
         private static Material _fogMaterial;
 
@@ -488,43 +597,50 @@ namespace InvisibilityPotion.Visuals
             if (m.HasProperty(EmissionColorId)) m.SetColor(EmissionColorId, _ghostSourceEmission * GhostEmission);
         }
 
-        private static Material _distortionInstance;
+        private static readonly Material[] _distortionInstances = new Material[4];
+        private static Material _distortionSource;
         private static bool _distortionSearched;
+        private static bool _distortionLogged;
 
-        /// <summary>Copy of a vanilla Custom/Distortion material (prefers one with a normal map) with DistortionColor/Strength; else a bare one.</summary>
-        private static Material DistortionInstance()
+        /// <summary>
+        /// Per-tier copy of a vanilla Custom/Distortion material (prefers one with a normal map) tuned with the tier's
+        /// DistortionStrength/DistortionColor; a bare one when no vanilla material uses the shader.
+        /// </summary>
+        private static Material DistortionInstance(int tier)
         {
-            if (_distortionInstance != null) return _distortionInstance;
-            if (_distortionSearched && Shader.Find(DistortionShaderName) == null) return null;
-            _distortionSearched = true;
-            Material source = null;
-            foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
+            if (tier < 1 || tier > 3) return null;
+            if (_distortionInstances[tier] != null) return _distortionInstances[tier];
+            if (_distortionSource == null && !_distortionSearched)
             {
-                if (m == null || m.shader == null || m.shader.name != DistortionShaderName) continue;
-                if (source == null || m.name == PreferredDistortionMaterial) source = m;
-                if (m.name == PreferredDistortionMaterial) break;
+                _distortionSearched = true;
+                foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
+                {
+                    if (m == null || m.shader == null || m.shader.name != DistortionShaderName) continue;
+                    if (_distortionSource == null || m.name == PreferredDistortionMaterial) _distortionSource = m;
+                    if (m.name == PreferredDistortionMaterial) break;
+                }
+                if (_distortionSource != null) Plugin.Log.LogInfo($"veil distortion: borrowed material '{_distortionSource.name}'");
             }
-            if (source != null)
-            {
-                Plugin.Log.LogInfo($"veil distortion: borrowed material '{source.name}'");
-                _distortionInstance = new Material(source) { name = "ip_distortion" };
-            }
+            Material instance;
+            if (_distortionSource != null) instance = new Material(_distortionSource) { name = $"ip_distortion_t{tier}" };
             else
             {
                 var shader = Shader.Find(DistortionShaderName);
                 if (shader == null) return null;
-                _distortionInstance = new Material(shader) { name = "ip_distortion" };
+                instance = new Material(shader) { name = $"ip_distortion_t{tier}" };
                 Plugin.Log.LogInfo("veil distortion: no vanilla material uses the shader; created a bare one (no normal map, refraction may be invisible)");
             }
-            LogProperties("distortion (before tuning)", _distortionInstance);
-            ApplyDistortionLook(_distortionInstance);
-            return _distortionInstance;
+            if (!_distortionLogged) { _distortionLogged = true; LogProperties("distortion (before tuning)", instance); }
+            ApplyDistortionLook(instance, tier);
+            _distortionInstances[tier] = instance;
+            return instance;
         }
 
-        private static void ApplyDistortionLook(Material m)
+        private static void ApplyDistortionLook(Material m, int tier)
         {
-            if (m.HasProperty(ColorId)) m.SetColor(ColorId, DistortionColor);
-            if (m.HasProperty(RefractionId)) m.SetFloat(RefractionId, DistortionStrength);
+            var s = Fog[tier];
+            if (m.HasProperty(ColorId)) m.SetColor(ColorId, new Color(s.DR, s.DG, s.DB, s.DA));
+            if (m.HasProperty(RefractionId)) m.SetFloat(RefractionId, s.DistortionStrength);
             // Specular reflections of the sky made the body read as blue glass.
             if (m.HasProperty(GlossinessId)) m.SetFloat(GlossinessId, 0f);
             if (m.HasProperty(MetallicId)) m.SetFloat(MetallicId, 0f);
@@ -546,28 +662,68 @@ namespace InvisibilityPotion.Visuals
             }
         }
 
+        /// <summary>Restores the body and destroys the fog. Each restore step is isolated so one failure cannot leave the fog behind.</summary>
         public void Remove(Player p)
         {
             if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
-            foreach (var kv in snap.Cutoffs) if (kv.Key != null) kv.Key.SetFloat(CutoffId, kv.Value);
-            foreach (var kv in snap.Colors) if (kv.Key != null) kv.Key.SetColor(ColorId, kv.Value);
-            foreach (var kv in snap.SharedMaterials) if (kv.Key != null) kv.Key.sharedMaterials = kv.Value;
-            foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
-            DestroyFog(snap);
             _snapshots.Remove(p);
+            try
+            {
+                foreach (var kv in snap.Cutoffs) if (kv.Key != null) kv.Key.SetFloat(CutoffId, kv.Value);
+                foreach (var kv in snap.Colors) if (kv.Key != null) kv.Key.SetColor(ColorId, kv.Value);
+                foreach (var kv in snap.SharedMaterials) if (kv.Key != null) kv.Key.sharedMaterials = kv.Value;
+                foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"veil remove: restoring the body failed: {e}");
+            }
+            finally
+            {
+                DestroyFog(snap);
+            }
+        }
+
+        /// <summary>Removes every veil (look change from the console or the tuning window); the next Refresh re-applies from state.</summary>
+        public void RemoveAll()
+        {
+            foreach (var p in new List<Player>(_snapshots.Keys))
+            {
+                if (p == null) continue;
+                Remove(p);
+            }
+            PruneDead();
+        }
+
+        /// <summary>
+        /// Destroys any ip_fog* child of an unveiled player (safety net: fog must never outlive the veil, whatever path left it).
+        /// Only direct children are checked; the fog emitters are parented to the player root.
+        /// </summary>
+        public void SweepStrayFog(Player p)
+        {
+            if (p == null || _snapshots.ContainsKey(p)) return;
+            var root = p.transform;
+            for (var i = root.childCount - 1; i >= 0; i--)
+            {
+                var child = root.GetChild(i).gameObject;
+                if (!IsOurs(child) || !child.activeSelf) continue;
+                child.SetActive(false);
+                Object.Destroy(child);
+                Plugin.Log.LogWarning($"veil: destroyed stray fog object '{child.name}' on {p.GetPlayerName()} (no veil recorded)");
+            }
         }
 
         private static void DestroyFog(Snapshot snap)
         {
-            foreach (var go in snap.Fog)
+            foreach (var e in snap.Fog)
             {
-                if (go == null) continue;
-                go.SetActive(false);   // Destroy is deferred to the end of the frame; hide it now
-                Object.Destroy(go);
+                if (e.Go == null) continue;
+                e.Go.SetActive(false);   // Destroy is deferred to the end of the frame; hide it now
+                Object.Destroy(e.Go);
             }
             snap.Fog.Clear();
-            if (snap.FogMaterial != null) Object.Destroy(snap.FogMaterial);
-            snap.FogMaterial = null;
+            foreach (var m in snap.FogMaterials) if (m != null) Object.Destroy(m);
+            snap.FogMaterials.Clear();
         }
     }
 
