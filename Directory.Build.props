@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Imported by MSBuild before NuGet package props. JotunnLib's Paths.props needs $(SolutionDir) to find
+     Environment.props and DoPrebuild.props; when a csproj is built directly (make build) it is empty. -->
+<Project>
+  <PropertyGroup>
+    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)</SolutionDir>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,22 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InvisibilityPotion", "InvisibilityPotion\InvisibilityPotion.csproj", "{7A1C4F2E-3B6D-4E8A-9C0F-1D2E3F4A5B6C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InvisibilityPotion.Tests", "InvisibilityPotion.Tests\InvisibilityPotion.Tests.csproj", "{9B2D5E3F-4C7E-4F9B-AD1A-2E3F4A5B6C7D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7A1C4F2E-3B6D-4E8A-9C0F-1D2E3F4A5B6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A1C4F2E-3B6D-4E8A-9C0F-1D2E3F4A5B6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A1C4F2E-3B6D-4E8A-9C0F-1D2E3F4A5B6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A1C4F2E-3B6D-4E8A-9C0F-1D2E3F4A5B6C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B2D5E3F-4C7E-4F9B-AD1A-2E3F4A5B6C7D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B2D5E3F-4C7E-4F9B-AD1A-2E3F4A5B6C7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B2D5E3F-4C7E-4F9B-AD1A-2E3F4A5B6C7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B2D5E3F-4C7E-4F9B-AD1A-2E3F4A5B6C7D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

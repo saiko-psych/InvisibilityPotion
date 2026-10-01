@@ -6,7 +6,7 @@
 
 **Architecture:** SDK-style `net48` C# project derived from JotunnModStub. Jötunn's NuGet package supplies the game/BepInEx references and a prebuild publicizer. A Makefile wraps `dotnet build`, game launch, log tailing, decompile and tests. Dev-only code (auto-join, console commands) is compiled only in Debug builds.
 
-**Tech Stack:** .NET SDK 8.0 (`dotnet`), JotunnLib 2.30.2, BepInEx 5.4.23.5, HarmonyX, ilspycmd 11.x, xunit, GNU make, Unity Hub + Unity 6000.0.75f1 (installed now, used in a later plan).
+**Tech Stack:** .NET SDK 8.0 (`dotnet`), JotunnLib 2.30.2, BepInEx 5.4.23.5, HarmonyX, ilspycmd 9.1, xunit, GNU make, Unity Hub + Unity 6000.0.75f1 (installed now, used in a later plan).
 
 **Spec:** `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` (sections 3, 4, 5.1, 5.10, 6, build steps 1 and 2)
 
@@ -28,9 +28,10 @@
 
 | Path | Responsibility |
 |---|---|
-| `Makefile` | `setup`, `build`, `run`, `log`, `test`, `decompile`, `package` targets |
+| `Makefile` | `build`, `run`, `log`, `test`, `decompile`, `package` targets |
 | `Environment.props.example` | template for the gitignored `Environment.props` (VALHEIM_INSTALL) |
 | `DoPrebuild.props` | `ExecutePrebuild=true` so Jötunn publicizes game DLLs |
+| `Directory.Build.props` | sets `$(SolutionDir)` before NuGet props so Jötunn's props load when the csproj is built directly |
 | `InvisibilityPotion.sln` | solution so `$(SolutionDir)` resolves for Jötunn's props |
 | `scripts/publish.sh` | copies DLL/pdb to BepInEx/plugins (Debug) or zips the package (Release); from JotunnModStub (MIT-0) |
 | `InvisibilityPotion/InvisibilityPotion.csproj` | project: net48, JotunnLib reference, post-build publish |
@@ -73,9 +74,9 @@ Expected: one line starting with `8.0.` and `GNU Make 4.x`.
 
 - [ ] **Step 3: Install ilspycmd as a dotnet global tool**
 
-Run: `dotnet tool install --global ilspycmd --version 11.1.0.9782`
+Run: `dotnet tool install --global ilspycmd --version 9.1.0.7988`
 Then: `export PATH="$PATH:$HOME/.dotnet/tools" && ilspycmd --version`
-Expected: `ilspycmd: 11.1.0...`. Tell the user to add `export PATH="$PATH:$HOME/.dotnet/tools"` to their shell rc if it is not there yet (check with `grep -n dotnet/tools ~/.bashrc ~/.zshrc`).
+Expected: `ilspycmd: 9.1.0...`. Tell the user to add `export PATH="$PATH:$HOME/.dotnet/tools"` to their shell rc if it is not there yet (check with `grep -n dotnet/tools ~/.bashrc ~/.zshrc`).
 
 - [ ] **Step 4: Install Unity Editor 6000.0.75f1 through the Hub, headless**
 
@@ -458,23 +459,31 @@ git commit -m "feat: plugin skeleton that builds on Linux and deploys to BepInEx
 Append to `Makefile`:
 
 ```makefile
-.PHONY: run log
 GAME_ARGS ?= -console -screen-fullscreen 0 -screen-width 1600 -screen-height 900
-# World and character the Debug build auto-joins (see InvisibilityPotion/Dev/AutoJoin.cs). Empty = normal menu.
+STEAM_APPID := 892970
+# World and character the Debug build auto-joins (see InvisibilityPotion/Dev/AutoJoin.cs). Empty world = normal menu.
+# Written to BepInEx/config/InvisibilityPotion.autojoin because env vars do not reach a game started through Steam.
 IP_DEV_WORLD ?= testing
 IP_DEV_CHARACTER ?=
+AUTOJOIN_FILE := $(VALHEIM_INSTALL)/BepInEx/config/InvisibilityPotion.autojoin
+BEPINEX_LOG := $(VALHEIM_INSTALL)/BepInEx/LogOutput.log
 
-run: build ## Build, then start Valheim with BepInEx, console enabled, windowed. Steam must be running.
+run: build ## Build, launch Valheim through Steam (needs launch option "./start_game_bepinex.sh %command%"), then follow the BepInEx log
 	@pgrep -x steam > /dev/null || { echo "Steam is not running. Start Steam first."; exit 1; }
-	cd "$(VALHEIM_INSTALL)" && IP_DEV_WORLD="$(IP_DEV_WORLD)" IP_DEV_CHARACTER="$(IP_DEV_CHARACTER)" ./start_game_bepinex.sh $(GAME_ARGS)
+	@mkdir -p "$(dir $(AUTOJOIN_FILE))"
+	@printf 'world=%s\ncharacter=%s\n' "$(IP_DEV_WORLD)" "$(IP_DEV_CHARACTER)" > "$(AUTOJOIN_FILE)"
+	@: > "$(BEPINEX_LOG)"
+	steam -applaunch $(STEAM_APPID) $(GAME_ARGS)
+	@echo "Game starting via Steam. Following $(BEPINEX_LOG) (Ctrl-C stops following, not the game)."
+	@tail -n +1 -f "$(BEPINEX_LOG)"
 
 log: ## Follow the BepInEx log
-	tail -n 50 -f "$(VALHEIM_INSTALL)/BepInEx/LogOutput.log"
+	tail -n 50 -f "$(BEPINEX_LOG)"
 ```
 
 - [ ] **Step 2: Launch and verify the load line**
 
-Ask the user to run `make run` in their own terminal (the game needs a display; running it from the agent's shell may hang the session). Expected in the terminal and in `make log`:
+Ask the user to set the Steam launch options for Valheim once to `./start_game_bepinex.sh %command%`, then run `make run` in their own terminal. Expected in the terminal and in `make log`:
 
 ```
 [Info   :InvisibilityPotion] InvisibilityPotion 0.1.0 loaded
@@ -494,12 +503,11 @@ git commit -m "build: add run and log targets for the in-game test loop"
 ### Task 5: Dev auto-join into the test world (DEBUG only)
 
 **Files:**
-- Create: `InvisibilityPotion/Dev/AutoJoin.cs`
-- Modify: `InvisibilityPotion/Plugin.cs`
+- Create: `InvisibilityPotion/Dev/AutoJoin.cs`, `InvisibilityPotion/Dev/AutoJoinConfig.Core.cs`
 
 **Interfaces:**
-- Consumes: `FejdStartup` (menu controller), `PlayerProfile.GetAllPlayerProfiles()`, `SaveSystem.GetWorldList()`, `Game.SetProfile(...)`, `ZNet.SetServer(...)`, `ZNet.ResetServerHost()`, `FejdStartup.LoadMainScene()`. All exact signatures are read from the decompile in step 1.
-- Produces: env vars `IP_DEV_WORLD` and `IP_DEV_CHARACTER` (name of an existing local world/character). With `IP_DEV_WORLD` set, the game loads that world after the menu appears.
+- Consumes: `FejdStartup` (private `Start`, `m_profiles`, `m_profileIndex`, `m_startingWorld`, `TransitionToMainScene`), `SaveSystem.GetAllPlayerProfiles()`, `SaveSystem.GetWorldList()`, `Game.SetProfile(string, FileHelpers.FileSource)`, `ZNet.SetServer(bool, bool, bool, string, string, World)`, `ZNet.ResetServerHost()`. All confirmed in the decompile.
+- Produces: `InvisibilityPotion/Dev/AutoJoinConfig.Core.cs` (`AutoJoinConfig.Parse(fileContent, envWorld, envCharacter)` returning `(world, character)`, pure, unit-testable) and `AutoJoin` (patches `FejdStartup.Start`). Configuration is read from `BepInEx/config/InvisibilityPotion.autojoin` (`world=` / `character=` lines, written by `make run`); env vars `IP_DEV_WORLD` / `IP_DEV_CHARACTER` are only a fallback. With a world set, the game loads that local world after the menu appears; empty world means normal menu.
 
 - [ ] **Step 1: Read how vanilla starts a local world**
 
@@ -512,73 +520,27 @@ Then read `FejdStartup.OnWorldStart()` and `FejdStartup.OnStartGame()` (or whate
 Template (adjust parameter lists to what step 1 showed; keep the structure):
 
 ```csharp
-#if DEBUG
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using HarmonyLib;
-
-namespace InvisibilityPotion.Dev
+// InvisibilityPotion/Dev/AutoJoinConfig.Core.cs: see the file (pure key=value parser, env fallback).
+// InvisibilityPotion/Dev/AutoJoin.cs (abridged; the file is authoritative):
+[HarmonyPatch(typeof(FejdStartup), "Start")]   // Start is private, so patch by name
+internal static class AutoJoin
 {
-    /// <summary>
-    /// Debug-only: when IP_DEV_WORLD is set, skip the main menu and load that local world
-    /// with the character named by IP_DEV_CHARACTER (or the first character found).
-    /// </summary>
-    [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Start))]
-    internal static class AutoJoin
+    [HarmonyPostfix]
+    private static void Postfix(FejdStartup __instance)
     {
-        private static bool _done;
-
-        [HarmonyPostfix]
-        private static void Postfix(FejdStartup __instance)
-        {
-            if (_done) return;
-            var worldName = Environment.GetEnvironmentVariable("IP_DEV_WORLD");
-            if (string.IsNullOrEmpty(worldName)) return;
-            _done = true;
-            __instance.StartCoroutine(JoinNextFrame(__instance, worldName,
-                Environment.GetEnvironmentVariable("IP_DEV_CHARACTER")));
-        }
-
-        private static System.Collections.IEnumerator JoinNextFrame(FejdStartup startup, string worldName, string characterName)
-        {
-            // Give FejdStartup one frame to finish its own initialisation (profiles, world list).
-            yield return null;
-            try
-            {
-                var profiles = PlayerProfile.GetAllPlayerProfiles();
-                var profile = string.IsNullOrEmpty(characterName)
-                    ? profiles.FirstOrDefault()
-                    : profiles.FirstOrDefault(p => string.Equals(p.GetName(), characterName, StringComparison.OrdinalIgnoreCase));
-                if (profile == null)
-                {
-                    Plugin.Log.LogError($"AutoJoin: character '{characterName}' not found. Available: {string.Join(", ", profiles.Select(p => p.GetName()))}");
-                    yield break;
-                }
-
-                var worlds = SaveSystem.GetWorldList();
-                var world = worlds.FirstOrDefault(w => string.Equals(w.m_name, worldName, StringComparison.OrdinalIgnoreCase));
-                if (world == null)
-                {
-                    Plugin.Log.LogError($"AutoJoin: world '{worldName}' not found. Available: {string.Join(", ", worlds.Select(w => w.m_name))}");
-                    yield break;
-                }
-
-                Plugin.Log.LogInfo($"AutoJoin: loading world '{world.m_name}' as '{profile.GetName()}'");
-                // Mirror FejdStartup.OnWorldStart: select profile, configure a local (non-public) server, load main scene.
-                Game.SetProfile(profile.GetFilename(), profile.m_fileSource);
-                ZNet.SetServer(true, false, false, world.m_name, "", world);
-                ZNet.ResetServerHost();
-                startup.LoadMainScene();
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"AutoJoin failed: {e}");
-            }
-        }
+        // read Paths.ConfigPath/InvisibilityPotion.autojoin (null if missing) -> AutoJoinConfig.Parse(...)
+        // empty world: return; else StartCoroutine(JoinWhenMenuReady(...))
     }
+
+    // waits one frame + until CinematicsManager.IsStartedPlaying() is false (30 s cap), then Join(...)
+    // Join (try/catch, logs available names on error), mirroring FejdStartup.OnCharacterStart + OnWorldStart:
+    //   startup.m_profileIndex = index; PlatformPrefs.SetString("profile", filename); Game.SetProfile(filename, profile.m_fileSource);
+    //   Game.m_serverOptionsSummary = ""; PlatformPrefs.SetString("world", world.m_name);
+    //   ZNet.m_onlineBackend = OnlineBackendType.Steamworks; ZSteamMatchmaking.instance.StopServerListing();
+    //   startup.m_startingWorld = true;
+    //   ZNet.SetServer(server: true, openServer: false, publicServer: false, world.m_name, "", world);
+    //   ZNet.ResetServerHost(); startup.TransitionToMainScene();   // private methods are usable: game assembly is publicized
 }
-#endif
 ```
 
 The `try/catch` cannot wrap a `yield`; if the compiler complains, move the body into a separate `static void Join(...)` method called after `yield return null` and wrap that call in `try/catch`.
@@ -591,8 +553,8 @@ Ask the user to run `make run`. Expected: the game boots straight into the `test
 - [ ] **Step 4: Commit**
 
 ```bash
-git add InvisibilityPotion/Dev/AutoJoin.cs
-git commit -m "feat(dev): auto-join a local world from IP_DEV_WORLD in Debug builds"
+git add InvisibilityPotion/Dev
+git commit -m "feat(dev): auto-join a local world from the autojoin config file in Debug builds"
 ```
 
 ---
@@ -879,11 +841,18 @@ test: ## Run unit tests (pure logic, no game DLLs)
 	dotnet test InvisibilityPotion.Tests -nologo -v quiet
 ```
 
-Add `test` to `.PHONY`. Because the csproj is built directly, `$(SolutionDir)` is empty; Jötunn's `Paths.props` then imports `Environment.props` from two folders above the package, which is wrong. Fix by adding to the csproj's first `<PropertyGroup>`:
+Add `test` to `.PHONY`. Because the csproj is built directly, `$(SolutionDir)` is empty; Jötunn's `Paths.props` (evaluated from NuGet package props, before the csproj body) then finds neither `Environment.props` nor `DoPrebuild.props`, and the prebuild is silently skipped. A fallback inside the csproj is set too late. Fix by creating `Directory.Build.props` at the repo root (MSBuild imports it before NuGet package props):
 
 ```xml
-    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildProjectDirectory)/../</SolutionDir>
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)</SolutionDir>
+  </PropertyGroup>
+</Project>
 ```
+
+Verify: `make build` prints "Executing Jotunn Prebuild Task" (not "Skipping").
 
 - [ ] **Step 9: Build, test, and verify in-game**
 
@@ -894,7 +863,7 @@ Ask the user to `make run`, press F5 in-game, type `ip_state`. Expected console 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add InvisibilityPotion.Tests InvisibilityPotion/PatchHealth.Core.cs InvisibilityPotion/PatchHealth.cs InvisibilityPotion/Dev/DevCommands.cs InvisibilityPotion/Plugin.cs InvisibilityPotion.sln Makefile InvisibilityPotion/InvisibilityPotion.csproj
+git add InvisibilityPotion.Tests InvisibilityPotion/PatchHealth.Core.cs InvisibilityPotion/PatchHealth.cs InvisibilityPotion/Dev/DevCommands.cs InvisibilityPotion/Plugin.cs InvisibilityPotion.sln Makefile Directory.Build.props
 git commit -m "feat: patch health check with unit tests and ip_state dev command"
 ```
 
@@ -1044,8 +1013,8 @@ Linux, CLI only. Install `dotnet-sdk-8.0`, then `make help`. See `CLAUDE.md` for
 
 - [ ] **Step 4: Verify the Release build strips dev code**
 
-Run: `make package 2>&1 | tail -3 && strings InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'`
-Expected: `Package ready: ...` and `0`.
+Run: `make package 2>&1 | tail -3 && strings InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'; strings -el InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll | grep -c 'ip_state\|AutoJoin'`
+Expected: `Package ready: ...` and `0` for both (ASCII and UTF-16).
 
 - [ ] **Step 5: Commit**
 
@@ -1058,7 +1027,7 @@ git commit -m "docs: add project conventions, testing checklist and dev section"
 
 ## Self-review
 
-**Spec coverage (plan 1 scope: build steps 1 and 2, spec §3, §4, §5.1, §5.10, §6):** toolchain (Task 1), decompile (Task 2), csproj/skeleton/`NetworkCompatibility`/publish (Task 3), `make run`/`log` (Task 4), auto-join env vars (Task 5), patch health check + unit test project + `ip_state` (Task 6), hook verification and spec marker cleanup (Task 7), CLAUDE.md/testing.md (Task 8). `ip_give` and `ip_spawn` from §5.10 need the status effect and belong to plan 2. `make deploy-server` belongs to plan 3. Unity Editor install is started in Task 1 but used in plan 4.
+**Spec coverage (plan 1 scope: build steps 1 and 2, spec §3, §4, §5.1, §5.10, §6):** toolchain (Task 1), decompile (Task 2), csproj/skeleton/`NetworkCompatibility`/publish (Task 3), `make run`/`log` (Task 4), auto-join via config file (Task 5), patch health check + unit test project + `ip_state` (Task 6), hook verification and spec marker cleanup (Task 7), CLAUDE.md/testing.md (Task 8). `ip_give` and `ip_spawn` from §5.10 need the status effect and belong to plan 2. `make deploy-server` belongs to plan 3. Unity Editor install is started in Task 1 but used in plan 4.
 
 **Placeholders:** none. The auto-join code is a template whose parameter lists are confirmed in Task 5 step 1, which is an explicit investigation step with commands.
 

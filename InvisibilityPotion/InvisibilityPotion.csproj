@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>InvisibilityPotion</RootNamespace>
+    <AssemblyName>InvisibilityPotion</AssemblyName>
+    <Version>0.1.0</Version>
+    <LangVersion>10</LangVersion>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- portable is the only pdb kind the Linux SDK can emit; BepInEx reads it for stack traces -->
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <WarningLevel>4</WarningLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Supplies game, BepInEx, Harmony and Unity references from $(VALHEIM_INSTALL) and the publicizer prebuild task -->
+    <PackageReference Include="JotunnLib" Version="2.30.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Package\**" />
+  </ItemGroup>
+
+  <Target Name="PublishToGame" AfterTargets="Build" Condition=" '$(OS)' == 'Unix' ">
+    <Exec Command="sh &quot;$(SolutionDir)scripts/publish.sh&quot; --target &quot;$(Configuration)&quot; --target-path &quot;$(TargetDir)&quot; --target-assembly &quot;$(TargetFileName)&quot; --valheim-path &quot;$(VALHEIM_INSTALL)&quot; --deploy-path &quot;$(MOD_DEPLOYPATH)&quot; --project-path &quot;$(ProjectDir)&quot;" />
+  </Target>
+</Project>
