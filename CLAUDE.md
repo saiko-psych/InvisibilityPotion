@@ -3,7 +3,7 @@
 Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in files is English.
 
 ## Commands (`make help` lists them)
-- `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/` (via `scripts/publish.sh`)
+- `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`)
 - `make run` – build, launch Valheim through Steam (windowed, console), auto-join world `$IP_DEV_WORLD` (default `testing`, character `$IP_DEV_CHARACTER`, empty = first), then tail the BepInEx log
 - `make log` – follow `BepInEx/LogOutput.log`
 - `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0)
@@ -26,7 +26,7 @@ See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans
 ## Environment
 - Game: `~/.local/share/Steam/steamapps/common/Valheim` (BepInEx installed directly, no mod manager profile)
 - One-time Steam launch option on Valheim: `./start_game_bepinex.sh %command%`. Starting the game binary directly from a terminal does not work here; always use `make run`.
-- Dev auto-join reads `<game>/BepInEx/config/InvisibilityPotion.autojoin` (`world=`, `character=`), written by `make run`; env vars are only a fallback.
+- Dev auto-join reads `<game>/BepInEx/config/InvisibilityPotion.autojoin` (`world=`, `character=`). `make run` writes that file from the Makefile variables `IP_DEV_WORLD` (default `testing`) and `IP_DEV_CHARACTER` (default empty = first character), overridable as `make run IP_DEV_WORLD=other`. The plugin falls back to the env vars of the same names only when the file or a key is missing (env vars do not reach a game started through Steam).
 - Local test world: `testing`
 - `Environment.props` (gitignored) holds `VALHEIM_INSTALL`; root `Directory.Build.props` sets `SolutionDir` so Jötunn's props load when building the csproj directly.
 - `InvisibilityPotion/Package/plugins/` and `*.zip` are build output (gitignored).
