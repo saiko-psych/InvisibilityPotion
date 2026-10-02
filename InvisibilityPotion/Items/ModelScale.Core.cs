@@ -14,8 +14,10 @@ namespace InvisibilityPotion.Items
         public const float Bowl = 2.4f;
         public const float Plant = 1.5f;
         public const float Goggles = 1f;
+        /// <summary>Ingredient pickups (Ingredient_T1..3, items) grow like the plants they come from.</summary>
+        public const float Ingredient = 1.5f;
 
-        /// <summary>Factor for a bundle prefab name (MeadBottle_*, MeadBowl_*, Plant_*, Goggles_*); 1 for anything else.</summary>
+        /// <summary>Factor for a bundle prefab name (MeadBottle_*, MeadBowl_*, Plant_*, Goggles_*, Ingredient_*); 1 for anything else.</summary>
         public static float For(string bundlePrefab)
         {
             var n = bundlePrefab ?? "";
@@ -23,6 +25,7 @@ namespace InvisibilityPotion.Items
             if (n.StartsWith("MeadBowl_", StringComparison.Ordinal)) return Bowl;
             if (n.StartsWith("Plant_", StringComparison.Ordinal)) return Plant;
             if (n.StartsWith("Goggles_", StringComparison.Ordinal)) return Goggles;
+            if (n.StartsWith("Ingredient_", StringComparison.Ordinal)) return Ingredient;
             return 1f;
         }
 

@@ -386,19 +386,22 @@ namespace InvisibilityPotion.Dev
         private class GiveCommand : ConsoleCommand
         {
             public override string Name => "ip_give";
-            public override string Help => "ip_give <1|2|3>: apply the invisibility tier effect to yourself | ip_give goggles <1|2|3>: put the veil goggles of that tier into your inventory";
+            public override string Help => "ip_give <1|2|3>: apply the invisibility tier effect to yourself | ip_give goggles <1|2|3>: put the veil goggles of that tier into your inventory | " +
+                                           "ip_give ingredient <1|2|3> [amount]: put that tier's veil ingredient into your inventory";
 
             public override void Run(string[] args)
             {
                 var p = Player.m_localPlayer;
                 if (p == null) { Say("no local player"); return; }
-                if (args.Length >= 2 && args[0].ToLowerInvariant() == "goggles")
+                var kind = args.Length >= 2 ? args[0].ToLowerInvariant() : "";
+                if (kind == "goggles" || kind == "ingredient")
                 {
                     if (!int.TryParse(args[1], out var gt) || gt < 1 || gt > 3) { Say(Help); return; }
-                    var name = Items.GoggleItems.ItemName(gt);
+                    var name = kind == "goggles" ? Items.GoggleItems.ItemName(gt) : Items.IngredientItems.ItemName(gt);
+                    var amount = kind == "goggles" ? 1 : args.Length >= 3 && int.TryParse(args[2], out var a) && a > 0 ? a : 1;
                     var prefab = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(name) : null;
                     if (prefab == null) { Say($"{name} is not registered (see the assets: lines in the log)"); return; }
-                    Say(p.GetInventory().AddItem(prefab, 1) ? $"added {name}" : $"{name} not added (inventory full?)");
+                    Say(p.GetInventory().AddItem(prefab, amount) ? $"added {amount} x {name}" : $"{name} not added (inventory full?)");
                     return;
                 }
                 if (args.Length < 1 || !int.TryParse(args[0], out var tier) || tier < 1 || tier > 3) { Say(Help); return; }

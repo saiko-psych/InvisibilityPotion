@@ -27,5 +27,11 @@
   "item_veilgoggles_t2": "Mimir's Glass",
   "item_veilgoggles_t2_description": "Pale crystal lenses in silver. Their sight is not yet awake.",
   "item_veilgoggles_t3": "Allfather's Eye",
-  "item_veilgoggles_t3_description": "Obsidian lenses in a flametal mask. Their sight is not yet awake."
+  "item_veilgoggles_t3_description": "Obsidian lenses in a flametal mask. Their sight is not yet awake.",
+  "item_veilingredient_t1": "Huldra's Hair",
+  "item_veilingredient_t1_description": "A tuft of pale lichen, tied with twine. It shivers when nobody looks.",
+  "item_veilingredient_t2": "Baldr's Tear",
+  "item_veilingredient_t2_description": "A pale blossom with a faintly glowing heart, cool to the touch.",
+  "item_veilingredient_t3": "Hel's Ember Spore",
+  "item_veilingredient_t3_description": "A black frond dusted with spores that still smoulder."
 }

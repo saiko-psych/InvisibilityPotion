@@ -15,7 +15,7 @@ using UnityEngine;
 //   3. Create or update one Assets/Materials/<name>.mat per material name (shared across FBX files) with a JVLmock_ stump
 //      shader (see ShaderFor), then remap the FBX materials to those .mat files by name and reimport.
 //   4. Prefab Assets/Prefabs/<PrefabName>.prefab:
-//        items (bottle_, bowl_, goggles_):  root -> attach -> model (FBX hierarchy, anchors as imported)
+//        items (bottle_, bowl_, goggles_, ingredient_):  root -> attach -> model (FBX hierarchy, anchors as imported)
 //        plants:                            root -> model
 //      Valheim shows only the direct child named "attach" of an item prefab (VisEquipment.AttachItem, ItemStand.SetVisualItem),
 //      placed with an identity local transform at the joint; so the model sits inside it, shifted so that the FBX's own
@@ -234,13 +234,15 @@ public static class AssetSetup
     // ---------- prefabs ----------
 
     static bool IsItem(string file) =>
-        file.StartsWith("bottle_", StringComparison.Ordinal) || file.StartsWith("bowl_", StringComparison.Ordinal) || file.StartsWith("goggles_", StringComparison.Ordinal);
+        file.StartsWith("bottle_", StringComparison.Ordinal) || file.StartsWith("bowl_", StringComparison.Ordinal) || file.StartsWith("goggles_", StringComparison.Ordinal) ||
+        file.StartsWith("ingredient_", StringComparison.Ordinal);
 
-    /// <summary>bottle_t1 -> MeadBottle_T1, bowl_t2 -> MeadBowl_T2, goggles_t3 -> Goggles_T3, plant_t1_flat_a -> Plant_T1_Flat_a, plant_t2_picked -> Plant_T2_picked.</summary>
+    /// <summary>bottle_t1 -> MeadBottle_T1, bowl_t2 -> MeadBowl_T2, goggles_t3 -> Goggles_T3, ingredient_t1 -> Ingredient_T1, plant_t1_flat_a -> Plant_T1_Flat_a, plant_t2_picked -> Plant_T2_picked.</summary>
     public static string PrefabName(string file)
     {
         var parts = file.Split('_');
-        var head = parts[0] == "bottle" ? "MeadBottle" : parts[0] == "bowl" ? "MeadBowl" : parts[0] == "goggles" ? "Goggles" : parts[0] == "plant" ? "Plant" : null;
+        var head = parts[0] == "bottle" ? "MeadBottle" : parts[0] == "bowl" ? "MeadBowl" : parts[0] == "goggles" ? "Goggles" :
+                   parts[0] == "ingredient" ? "Ingredient" : parts[0] == "plant" ? "Plant" : null;
         if (head == null) throw new Exception("No prefab name rule for " + file);
         var outParts = new List<string> { head };
         for (int i = 1; i < parts.Length; i++)
