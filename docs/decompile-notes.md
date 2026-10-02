@@ -384,6 +384,11 @@ Source research: `docs/ideas/2026-10-01-vanilla-concealment-effects.md`.
 - The ground field budget assumes a run speed of 7 m/s (`FogSettings.GroundBudgetSpeed`). Not read from the game: `Character.m_runSpeed` defaults to 20 (Character.cs:133) and the Player prefab overrides it with an asset value the decompile does not show. It only sizes `maxParticles` and the window's budget warning.
 - Unity only (no game members): the ground emitter uses `ParticleSystemRenderMode.HorizontalBillboard`, `EmissionModule.rateOverDistance` (effective in world simulation space only), `SizeOverLifetimeModule` (curve × multiplier, 1 → `GroundGrow`) and `VelocityOverLifetimeModule` in TwoConstants mode on all three axes (Unity rejects mixed curve modes).
 
+### Round I: matte fog, cleanup, stray scan (task 10i)
+- Unity only (no game members). The borrowed `swamp_mist` material (`Custom/LitParticles`, log of 2026-10-02) has `_Color` white 1,1,1,1, `_EmissionColor` black 0,0,0,1, `_NormalTex` wave-normal, `_BumpScale` 0.27, `_LightNormalFactor` 0, `_SkyMask` 0, `_AlphaChannel` 3. The fog copies keep every lighting-related value; only `_Color` (configured colour clamped to 0..1, alpha split), `_EmissionColor` (colour × Emission, black at 0) and the fades are set. The shader source is not in the decompile, so how it lights a particle (sun, ambient, normal map) is not known; the Debug dump prints these values and the shader keywords.
+- Cleanup uses `ParticleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear)` before `SetActive(false)` and `Object.Destroy`. A deactivated GameObject is not rendered and `Destroy` (end of frame) removes the system with its particles, world-space ones included; the explicit clear only makes that independent of deactivation.
+- The Debug stray scan uses `Resources.FindObjectsOfTypeAll<ParticleSystem>()` filtered by `gameObject.scene.IsValid()` (scene objects only, inactive ones included; prefabs/assets have no valid scene).
+
 ## Ghost mode (for reference)
 
 - `private bool m_ghostMode;` Player.cs:324. `public void SetGhostMode(bool ghostmode)` Player.cs:4464. `public override bool InGhostMode()` Player.cs:4469 (base `public virtual bool InGhostMode()` Character.cs:3848 returns false). Set only by the `ghost` console command (Terminal.cs:1768).

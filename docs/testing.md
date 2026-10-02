@@ -35,7 +35,7 @@ Two clients (pending, needs plan 3 server):
 
 ## Plan 2 – Round C: veil look tuning (Debug console)
 
-> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); fog look per tier in `[Fog.TierN]`, see Round H. The per-tier text below describes the state when this round ran.
+> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); fog look per tier in `[Fog.TierN]`, see Round I. The per-tier text below describes the state when this round ran.
 
 Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog dense (0.7); T3 body Distortion, no fog. Config: `[TierN] BodyVeilMode/FogEnabled/FogDensity` (admin), look in `[Fog]` and `[Veil]` (local, not synced).
 
@@ -50,7 +50,7 @@ Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog de
 
 ## Plan 2 – Round E: per-tier fog, tuning window (task 10d)
 
-> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); see Round H for the current fog defaults. The defaults below are those of round E.
+> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); see Round I for the current fog defaults. The defaults below are those of round E.
 
 Defaults: T1 body Off + light flattened fog (alpha 0.5, size 1.5, rate 4, life 5, no drift); T2 body Distortion (0.1, alpha 0.08) + two fog layers (dense thin inner, wide faint outer on head/chest/hips); T3 body Distortion (0.03, alpha 0.02), no fog. Look per tier in `[Fog.Tier1..3]` (local, not synced), `[Fog] FogAlphaMode` global, `[Veil]` ghost look only. `[TierN] BodyVeilMode` stays admin. Old keys (`[Fog] FogRate/Anchor.*`, `[TierN] FogEnabled/FogDensity`, `[Veil] Distortion*`, stray `[General]` keys) are removed on the first start; the log lists them. A tier II still on the old default Ghost is switched to Distortion once.
 
@@ -109,7 +109,26 @@ What to compare:
 - [ ] After `Close`, game keys work at once (no stuck text focus), the camera captures the mouse again
 - [ ] `ip_fog t2 outeranchors Chest,Hips` and `ip_fog t1 trail off` still work and show up in the window
 
+## Plan 2 – Round I: matte fog, tuned tier II, fog after expiry (task 10i)
+
+New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 4)` and lists every reset value; your saved tier II values are the new defaults, so only `Emission` changes there; tier III is untouched; `[Tier1] BodyVeilMode` is no longer touched by the migration):
+- All tiers: `Emission = 0` (matte, lit by the scene only; no glow at night). The material's `_Color` is the configured colour clamped to 0..1, `_EmissionColor` is black.
+- T1: alpha 0.18, colour 0.8,0.82,0.85 (greyer, fainter).
+- T2: your saved tuning: size 0.685, alpha 0.035, colour 0.775 grey, spread 1.125/1/1.025, drift -0.066 (sinks slightly); rate 12, life 2.5, speed 0.05, outer ring and ground field unchanged.
+- Cleanup: `Remove` now stops and clears every particle system before destroying it, sweeps stray `ip_fog*` children and logs `veil removed T<n> on <name>: N emitters destroyed, M strays swept` (plus the vanilla particle renderers shown again after a body-hiding mode, by name).
+- Diagnostics: `ip_fog strays` logs every veil particle system in the scene (name, three parents, active, particles, emitting, age, `tracked` / `NOT TRACKED`). `ip_fog dump` without a veil runs the stray scan. The dump's material line now also shows `_LightNormalFactor`, `_BumpScale`, `_SkyMask` and the shader keywords.
+
+What to compare:
+- [ ] Log: `Config migration (look defaults revision 4)` once (not on the second start)
+- [ ] T1 and T2 by day and at night: the fog reads as matte mist, rather barely visible than glowing. If it still glows, attach an `ip_fog dump` block (material line) from the log
+- [ ] **T2 active: run `ip_fog dump` standing and once walking** and attach the `fog dump` block
+- [ ] Let T2 expire normally (no window open): after `SE_Invisibility T2 cleaned up` the log shows `veil removed T2 ...: 15 emitters destroyed, 0 strays swept`. Wait 10 s, run **`ip_fog strays`**: expect `0 veil particle systems in the scene`. If fog is still visible, run it again while looking at it and attach both blocks plus the `veil removed` line
+- [ ] Repeat the expiry check once with `ip_fogui` open and tuning tier II while it runs out
+- [ ] Note what you see when T2 ends: if something reappears that was hidden during T2 (rain drips, torch flames, wet effect), compare it with the vanilla particle names in the `veil removed` line
+
 ## Plan 2 – Round H: ground fog field, tier I normal body, outer-layer diagnostics (task 10h)
+
+> Historical round record; current defaults in Round I (matte fog, tier I alpha 0.18, tier II = your saved tuning).
 
 New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 3)`, lists every reset value and `[Tier1] BodyVeilMode Distortion -> Off`; tier III is untouched):
 - New emitter kind **ground fog field** (`[Fog.TierN] Ground*` keys, window foldout "Fog ground field", console `ip_fog [tN] ground on|off`, `groundrate`, `grounddistance`, `groundsize`, `groundgrow`, `groundlife`, `groundalpha`, `groundradius`, `groundheight`, `grounddrift`): flat fog patches lying parallel to the ground at the feet (0.15 m up), in world space, so they stay where they were emitted and grow (0.8 m → 2.4 m over 7 s). They are emitted 4 per second plus 2 per metre walked, so walking lays a field of fog along the path. They fade in quickly and fade out over the last 40 % of their life.
@@ -129,7 +148,7 @@ What to compare:
 
 ## Plan 2 – Round G: tier I/II looks, outer disc, fog brightness, draggable sliders (task 10g)
 
-> Historical round record; current defaults in Round H.
+> Historical round record; current defaults in Round I.
 
 
 New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 2)`, lists every reset value and each obsolete key with its old value, e.g. `[Fog.Tier2] OuterRadiusMultiplier = 6 is obsolete … and removed`; tier III is untouched):
