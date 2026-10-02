@@ -11,11 +11,16 @@ Shader "JVLmock_Custom/Vegetation"
         _Metallic ("Metallic", Range(0,1)) = 0
         _BumpMap ("Normal", 2D) = "bump" {}
         _Cutoff ("Alpha cutoff", Range(0,1)) = 0.5
-        // Wind (items round L). _RippleDistance is a real vanilla vegetation property (Player.cs saves it from placement ghost
-        // materials and zeroes it to freeze them; Destructible.cs zeroes it on fragments); _RippleSpeed is a guess (?).
-        // Declared here so the material serializes the values; settle names and vanilla values with `ip_matdump Bush01`.
-        _RippleDistance ("Ripple distance (wind sway)", Float) = 0
-        _RippleSpeed ("Ripple speed (?)", Float) = 0
+        // Wind (plan 5 round N): the vanilla Custom/Vegetation sway properties (names and defaults read from the game's shader,
+        // see AssetSetup.Wind). Declared here so the material serializes the values; Jötunn swaps in the real shader at runtime.
+        _SwaySpeed ("SwaySpeed", Float) = 15
+        _SwayDistance ("SwayDistance", Float) = 0.5
+        _RippleSpeed ("Ripple speed", Float) = 100
+        _RippleDistance ("Ripple distance", Float) = 0.5
+        _RippleDeadzoneMin ("Ripple deadzone min", Range(0,10)) = 0.3
+        _RippleDeadzoneMax ("Ripple deadzone max", Range(0,10)) = 2
+        _PushDistance ("Push distance", Float) = 0
+        _Height ("Height", Float) = 15
     }
     SubShader
     {

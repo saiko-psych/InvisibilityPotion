@@ -71,14 +71,19 @@ public static class AssetSetup
 
     static readonly string[] FoliageWords = { "strand", "tip", "leaf", "petal", "frond" };
 
-    // Wind (items round L, ruling 4). Vanilla vegetation sways through the material float _RippleDistance (verified in the
-    // decompile: Player.cs zeroes it on placement ghosts, Destructible.cs on fragments, both to stop the sway) driven by the global
-    // _GlobalWind* vectors that EnvMan sets. Values and the speed property are assumptions (?) until `ip_matdump Bush01` shows the
-    // vanilla numbers. The fern (helfern_) does not sway: its fronds keep Custom/Vegetation (single-sided leaflets need the
-    // double-sided foliage shader) with both values 0.
-    const float WindRippleDistance = 0.1f;   // (?)
-    const float WindRippleSpeed = 1f;        // (?) property name unverified
-    static bool Swaying(string name) => !name.StartsWith("helfern_", StringComparison.Ordinal);
+    // Wind (plan 5 round N, ruling 5). Vanilla Custom/Vegetation sway properties and values, read from the game's shader and
+    // materials (decompressed SoftRef bundle c4210710, Valheim 1.0.16): the shader declares _SwaySpeed (default 15),
+    // _SwayDistance (0.5), _RippleSpeed (100), _RippleDistance (0.5), _RippleDeadzoneMin (0.3), _RippleDeadzoneMax (2),
+    // _PushDistance (0), _Height (15), driven by the global _GlobalWind* vectors that EnvMan sets. Materials: Bush01 ripple
+    // 0.5/150, sway 3/30, height 3, push 2; shrub ripple 3/200, sway 2/30, height 1, push 3; CarrotLeafMat (crop leaves, the size
+    // of our plants) ripple 0.3/100, deadzone 0.1/0.1, sway 0.5/20, height 2, push 0.3. Our foliage takes the CarrotLeafMat
+    // values. Every value is set explicitly: a property missing from the material would take the shader default (height 15,
+    // ripple 0.5 at speed 100) once Jötunn swaps the stub for the real shader. The fern fronds sway too (ruling 5: T2 and T3).
+    static readonly (string name, float value)[] Wind =
+    {
+        ("_RippleDistance", 0.3f), ("_RippleSpeed", 100f), ("_RippleDeadzoneMin", 0.1f), ("_RippleDeadzoneMax", 0.1f),
+        ("_SwayDistance", 0.5f), ("_SwaySpeed", 20f), ("_PushDistance", 0.3f), ("_Height", 2f),
+    };
 
     public static void Create()
     {
@@ -214,10 +219,12 @@ public static class AssetSetup
         var wind = "";
         if (vanilla == "Custom/Vegetation")
         {
-            var sway = Swaying(src.name);
-            mat.SetFloat("_RippleDistance", sway ? WindRippleDistance : 0f);
-            mat.SetFloat("_RippleSpeed", sway ? WindRippleSpeed : 0f);
-            wind = " wind _RippleDistance " + mat.GetFloat("_RippleDistance") + " _RippleSpeed " + mat.GetFloat("_RippleSpeed");
+            foreach (var (prop, value) in Wind)
+            {
+                if (!mat.HasProperty(prop)) throw new Exception("Stub shader lacks wind property " + prop + " (Assets/Shaders/JVLmock_Custom_Vegetation.shader)");
+                mat.SetFloat(prop, value);
+            }
+            wind = " wind " + string.Join(" ", Wind.Select(w => w.name + " " + mat.GetFloat(w.name)));
         }
         EditorUtility.SetDirty(mat);
         Debug.Log("[AssetSetup]   material " + src.name + " -> JVLmock_" + vanilla + " color " + Fmt(color) + " (alpha: " + alphaSource +
