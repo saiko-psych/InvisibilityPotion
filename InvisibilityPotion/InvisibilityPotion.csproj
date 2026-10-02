@@ -33,6 +33,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Items\English.json" />
+    <!-- Unity asset bundle, built by `make bundle` (committed so `make build` works without Unity) -->
+    <EmbeddedResource Include="Assets\ip_assets" />
   </ItemGroup>
 
   <ItemGroup>
