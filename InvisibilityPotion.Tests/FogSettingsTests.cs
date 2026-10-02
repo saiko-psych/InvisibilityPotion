@@ -380,3 +380,16 @@ public class FogSettingsTests
         Assert.Equal(0.25f, g.SpiritStrength, 5);
     }
 }
+
+public class FloatListNonFiniteTests
+{
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    public void TryParseOne_RejectsNonFinite(string text)
+    {
+        Assert.False(FloatList.TryParseOne(text, out _));
+        Assert.False(FloatList.TryParse("1," + text, 2, out _));
+    }
+}

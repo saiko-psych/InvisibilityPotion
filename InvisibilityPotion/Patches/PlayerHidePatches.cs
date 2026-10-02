@@ -70,6 +70,7 @@ namespace InvisibilityPotion.Patches
 
         private static readonly MethodInfo GetPositionMethod = AccessTools.Method(typeof(ZDO), nameof(ZDO.GetPosition));
         private static readonly MethodInfo WriteVector3Method = AccessTools.Method(typeof(ZPackage), nameof(ZPackage.Write), new[] { typeof(Vector3) });
+        private static readonly int PlayerPrefabHash = "Player".GetStableHashCode();
         private static readonly MethodInfo HeaderPositionMethod = AccessTools.Method(typeof(PlayerHidePatches), nameof(HeaderPosition));
 
         /// <summary>
@@ -114,7 +115,7 @@ namespace InvisibilityPotion.Patches
         public static Vector3 HeaderPosition(ZDO zdo, object zdoPeer)
         {
             var real = zdo.GetPosition();
-            if (zdoPeer == null || !HiddenState.IsHiddenFromPlayers(zdo)) return real;
+            if (zdoPeer == null || zdo.GetPrefab() != PlayerPrefabHash || !HiddenState.IsHiddenFromPlayers(zdo)) return real;
             var znet = ZNet.instance;
             if (znet == null || !znet.IsServer()) return real;
             var peer = PeerOf(zdoPeer);

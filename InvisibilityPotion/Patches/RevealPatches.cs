@@ -22,6 +22,14 @@ namespace InvisibilityPotion.Patches
         private static void Prefix(Character __instance, HitData hit)
         {
             if (__instance == null || hit == null) return;
+            // Damage-over-time ticks (SE_Burning.cs:45, SE_Poison.cs:37) must not re-reveal a re-hidden player.
+            switch (hit.m_hitType)
+            {
+                case HitData.HitType.Burning:
+                case HitData.HitType.Freezing:
+                case HitData.HitType.Poisoned:
+                    return;
+            }
             var attacker = hit.GetAttacker() as Player;
             if (attacker == null || attacker == __instance) return;
             Reveal.Mark(attacker, RevealReason.DamageDealt);

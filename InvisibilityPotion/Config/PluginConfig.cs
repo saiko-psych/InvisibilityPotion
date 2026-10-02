@@ -89,7 +89,7 @@ namespace InvisibilityPotion.Config
                 ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", 0.5f, "Stamina regeneration multiplier after revealing"),
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
-                ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount"),
+                ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount. Read once at startup from the local file; applies locally and is not server-controlled yet"),
                 ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
                                         $"How the hidden player's body is drawn. Exactly one of (case-sensitive, an unknown value falls back to the default): Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",
                                         ModeValues(bodyMode)),

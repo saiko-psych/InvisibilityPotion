@@ -486,8 +486,12 @@ namespace InvisibilityPotion.Visuals
     /// <summary>Comma-separated floats in invariant culture ("1,1,1,0.15").</summary>
     public static class FloatList
     {
-        public static bool TryParseOne(string text, out float value) =>
-            float.TryParse((text ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        public static bool TryParseOne(string text, out float value)
+        {
+            if (!float.TryParse((text ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return false;
+            if (float.IsNaN(value) || float.IsInfinity(value)) { value = 0f; return false; }
+            return true;
+        }
 
         public static bool TryParse(string text, int count, out float[] values)
         {

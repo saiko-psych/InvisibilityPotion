@@ -185,6 +185,7 @@ namespace InvisibilityPotion.Visuals
         private readonly Dictionary<Player, Snapshot> _snapshots = new Dictionary<Player, Snapshot>();
 
         private static readonly List<Material> MatBuf = new List<Material>();
+        private static readonly List<Renderer> RendererBuf = new List<Renderer>();
 
         /// <param name="forceHide">Remote player hidden from players (tier III): draw nothing, no fog, whatever the tier's look.</param>
         public void Apply(Player p, int tier, bool isLocal, bool forceHide)
@@ -259,7 +260,8 @@ namespace InvisibilityPotion.Visuals
             // declares _SnowCover, and Custom/Creature (Ghost) uses it as intended. So the block is left alone: clearing it would
             // be undone by MaterialMan's next UpdateBlock anyway, and restoring it on Remove would race with MaterialMan.
 
-            foreach (var r in p.GetComponentsInChildren<Renderer>(true))
+            p.GetComponentsInChildren(true, RendererBuf);
+            foreach (var r in RendererBuf)
             {
                 // Skips the current fog and a previous one whose deferred Destroy has not run yet (ForceRefresh re-applies in the same frame).
                 if (r == null || IsOurs(r.gameObject)) continue;

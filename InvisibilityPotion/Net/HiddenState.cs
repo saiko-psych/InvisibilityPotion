@@ -32,7 +32,7 @@ namespace InvisibilityPotion.Net
         public static int HiddenTier(Character c)
         {
             var (tier, hidden) = Get(c);
-            return hidden ? tier : 0;
+            return hidden ? TierRange.Clamp(tier) : 0; // out-of-range tiers (crafted ZDO, newer mod version) count as not hidden
         }
 
         public static bool IsIgnoredByEnemies(Character c)
@@ -53,7 +53,7 @@ namespace InvisibilityPotion.Net
         {
             if (zdo == null || !PluginConfig.Global.AllowPvpInvisibility) return false;
             var tier = zdo.GetInt(HashTier, 0);
-            if (tier < 1 || tier > 3 || !zdo.GetBool(HashHidden, false)) return false;
+            if (!TierRange.IsValid(tier) || !zdo.GetBool(HashHidden, false)) return false;
             return PluginConfig.Tier(tier).HiddenFromPlayers;
         }
 

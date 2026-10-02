@@ -20,11 +20,13 @@ namespace InvisibilityPotion.Visuals
         private readonly HashSet<Player> _seen = new HashSet<Player>();
         private readonly HashSet<Player> _veiled = new HashSet<Player>();
         private readonly HashSet<string> _loggedErrors = new HashSet<string>();
+        private System.Predicate<Player> _removeUnseen;
         private float _timer;
 
         private void Awake()
         {
             _instance = this;
+            _removeUnseen = RemoveIfUnseen;
             FogVeil.LoadFromConfig();
             PluginConfig.Changed += OnConfigChanged;
         }
@@ -105,6 +107,13 @@ namespace InvisibilityPotion.Visuals
             _instance._veil.CollectParticleCounts(p, into);
         }
 
+        private bool RemoveIfUnseen(Player p)
+        {
+            if (p != null && _seen.Contains(p)) return false;
+            _veil.Remove(p);
+            return true;
+        }
+
         private void Refresh()
         {
             var seen = _seen;
@@ -115,7 +124,7 @@ namespace InvisibilityPotion.Visuals
                 if (p == null) continue;
                 seen.Add(p);
                 var tier = HiddenState.HiddenTier(p);
-                if (tier < 1 || tier > 3)
+                if (!TierRange.IsValid(tier))
                 {
                     // Keyed on the veil's own record, not on _veiled: a veil can never outlive its effect, whatever path built it.
                     _veiled.Remove(p);
@@ -140,7 +149,7 @@ namespace InvisibilityPotion.Visuals
                     _veiled.Remove(p);
                 }
             }
-            _veiled.RemoveWhere(p => { if (p == null || !seen.Contains(p)) { _veil.Remove(p); return true; } return false; });
+            _veiled.RemoveWhere(_removeUnseen);
             _veil.PruneDead();
         }
     }
