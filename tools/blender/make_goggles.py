@@ -12,10 +12,10 @@ Pivot = head centre so Unity can parent the model to the head bone. FBX is expor
 import bpy, math, os, random, sys
 from mathutils import Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import OUT, HERE, Builder as _Builder, mat, empty, export_fbx, tri_count, write_log, reset, \
+from common import OUT, HERE, Builder as _Builder, basis, mat, empty, export_fbx, tri_count, write_log, reset, \
     ground, light, camera, world, render
 
-PREVIEW = os.path.join(HERE, "preview-goggles-v2.png")
+PREVIEW = os.path.join(HERE, "preview-goggles-v3.png")
 
 # ==== KNOBS (metres) =========================================================
 SEED = 5
@@ -29,13 +29,13 @@ STRAP_A, STRAP_B = 0.117, 0.131   # strap ellipse half-axes x, y (just outside t
 MATS = {
     # Tier I
     "bronze":        ((0.42, 0.26, 0.12, 1), 0.55, 0.8, 0.0, 1.0),
-    "amber_lens":    ((0.62, 0.30, 0.04, 1), 0.2, 0.0, 0.0, 0.6),
+    "amber_lens":    ((0.88, 0.42, 0.02, 1), 0.15, 0.0, 0.0, 0.6),   # saturated resin amber
     "rough_leather": ((0.26, 0.16, 0.09, 1), 0.9, 0.0, 0.0, 1.0),
     "wood":          ((0.33, 0.22, 0.12, 1), 0.85, 0.0, 0.0, 1.0),
     "twine":         ((0.50, 0.42, 0.28, 1), 0.95, 0.0, 0.0, 1.0),
     # Tier II
     "silver":        ((0.72, 0.74, 0.78, 1), 0.22, 0.95, 0.0, 1.0),
-    "crystal_lens":  ((0.72, 0.86, 0.95, 1), 0.08, 0.0, 0.0, 0.35),
+    "crystal_lens":  ((0.30, 0.72, 1.00, 1), 0.08, 0.0, 0.0, 0.6),   # saturated ice-blue crystal
     "dark_leather":  ((0.12, 0.11, 0.11, 1), 0.75, 0.0, 0.0, 1.0),
     "wolf_pelt":     ((0.60, 0.58, 0.54, 1), 0.95, 0.0, 0.0, 1.0),
     "frost_crystal": ((0.62, 0.82, 0.95, 1), 0.15, 0.0, 0.35, 0.85),
@@ -48,9 +48,13 @@ MATS = {
     "chain":         ((0.20, 0.19, 0.20, 1), 0.4, 0.9, 0.0, 1.0),
 }
 
-T1 = dict(rim_segs=9, rim_r=(0.023, 0.030), rim_depth=0.016, jitter=0.06, strap_w=0.024, strap_th=0.004)
-T2 = dict(rim_segs=14, rim_r=(0.0245, 0.0285), rim_depth=0.011, bezel_r=0.0305, strap_w=0.018, strap_th=0.003,
-          fur_tufts=40, fur_len=0.022)
+T1 = dict(rim_segs=10, rim_r=(0.025, 0.0325), rim_depth=0.016, jitter=0.04, strap_w=0.024, strap_th=0.004,
+          lens_r=0.0285, lens_dome=0.0035, lens_back=0.0015, eye_dx=0.003,   # lens 0.057 m, 3.5 mm proud of the rim
+          clamps=(35, 150, 265), buckle_at=-7)                               # clamp angles (deg), buckle strap point
+T2 = dict(rim_segs=14, rim_r=(0.0255, 0.0315), rim_depth=0.012, bezel_r=0.0335, strap_w=0.018, strap_th=0.003,
+          fur_tufts=40, fur_len=0.022,
+          lens_r=0.0285, lens_dome=0.0035, lens_back=0.0015, eye_dx=0.003,
+          clamps=(60, 180, 300), buckle_at=-7)
 T3 = dict(mask_a=0.125, mask_b=0.142, mask_span=(-152, -28), mask_z=(-0.032, 0.042), mask_th=0.005,
           lens_r=0.030, strap_w=0.02, strap_th=0.004,
           plates=(6, 32, 58), plate_len=0.022, rivets=2,     # plate positions: degrees back from each mask edge
@@ -74,56 +78,96 @@ def strap_path(x_side, th0=-42, n=22, a=STRAP_A, b=STRAP_B, z=EYE_Z):
     pts.append(Vector((x_side, LENS_Y + 0.006, z)))
     return pts
 
+# ---------------------------------------------------------------- lenses, clamps, buckles
+def lens(B, c, fwd, r, dome, back, segs, m):
+    """Closed lens: domed front (centre `dome` in front of the edge) and a flatter back; edge plane at c."""
+    ax, u, w = basis(fwd); c = Vector(c)
+    rim = [B.v(c + r*(math.cos(2*math.pi*k/segs)*u + math.sin(2*math.pi*k/segs)*w)) for k in range(segs)]
+    front, rear = B.v(c + ax*dome), B.v(c - ax*back)
+    for k in range(segs):
+        j = (k+1) % segs
+        B.face([rim[k], rim[j], front], m); B.face([rim[j], rim[k], rear], m)
+
+def clamps(B, c, fwd, r_in, r_out, depth, angles, m, rivet_m, rng=None):
+    """Clamp straps over the rim front at the given angles, each with a domed rivet."""
+    ax, u, w = basis(fwd); c = Vector(c)
+    for a in angles:
+        d = math.cos(math.radians(a))*u + math.sin(math.radians(a))*w; tg = ax.cross(d)
+        mid = c + d*(r_in + r_out)/2 + ax*(depth/2 + 0.0012)
+        B.box(mid, d*(r_out - r_in + 0.004), tg*0.007, ax*0.0024, m)
+        B.disc(mid + ax*0.0012 + d*0.001, ax, 0.0022, 5, rivet_m, dome=0.0018)
+
+def buckle(B, pts, i, width, th, m):
+    """Rectangular buckle frame around the strap at point i, with a tongue across."""
+    p = pts[i]; tg = (pts[i+1] - pts[i-1]).normalized()
+    out = tg.cross(Vector((0, 0, 1))).normalized()
+    if out.dot(Vector((p.x, p.y, 0))) < 0: out = -out
+    up = Vector((0, 0, 1)); L = 0.016; H = width + 0.006; bw = 0.0025; c = p + out*(th/2 + 0.0015)
+    B.box(c + up*(H/2 - bw/2), tg*L, up*bw, out*0.003, m)
+    B.box(c - up*(H/2 - bw/2), tg*L, up*bw, out*0.003, m)
+    B.box(c + tg*(L/2 - bw/2), tg*bw, up*H, out*0.003, m)
+    B.box(c - tg*(L/2 - bw/2), tg*bw, up*H, out*0.003, m)
+    B.box(c + out*0.001, tg*L*0.9, up*0.0018, out*0.002, m)      # tongue
+
 # ---------------------------------------------------------------- Tier I
 def watchman(rng):
     t = T1; B = Builder(rng); fwd = Vector((0, -1, 0))
-    r_in, r_out = t["rim_r"]
+    r_in, r_out = t["rim_r"]; ex = EYE_X + t["eye_dx"]
     for sx in (-1, 1):
-        c = Vector((sx*EYE_X, LENS_Y, EYE_Z))
+        c = Vector((sx*ex, LENS_Y, EYE_Z))
         B.ring(c, fwd, r_in, r_out, t["rim_depth"], t["rim_segs"], "bronze", t["jitter"], rot=rng.uniform(0, 1))
-        B.disc(c + fwd*0.0, fwd, r_in + 0.001, t["rim_segs"], "amber_lens", dome=0.004)
+        lens(B, c + fwd*(t["rim_depth"]/2 + 0.0005), fwd, t["lens_r"], t["lens_dome"], t["lens_back"], t["rim_segs"], "amber_lens")
+        clamps(B, c, fwd, r_in, r_out, t["rim_depth"], [a if sx > 0 else 180 - a for a in t["clamps"]], "bronze", "bronze")
         # rough wood block at the temple, riveted between rim and strap
-        B.box(c + Vector((sx*(r_out + 0.007), 0.010, 0.0)), (0.016, 0, 0), (0, 0.03, 0), (0, 0, 0.026), "wood")
-        B.box(c + Vector((sx*(r_out + 0.007), -0.006, 0.0)), (0.006, 0, 0), (0, 0.004, 0), (0, 0, 0.006), "bronze")
-    # bronze nose bridge: low arch between the rims
-    B.tube([(-EYE_X + r_out*0.7, LENS_Y, EYE_Z + 0.012), (0, LENS_Y - 0.004, EYE_Z + 0.02),
-            (EYE_X - r_out*0.7, LENS_Y, EYE_Z + 0.012)], [0.0035]*3, 5, "bronze")
-    # leather strap around the head
-    xs = EYE_X + r_out + 0.014
+        B.box(c + Vector((sx*(r_out + 0.007), 0.010, 0.0)), (0.016, 0, 0), (0, 0.03, 0), (0, 0, 0.028), "wood")
+        B.box(c + Vector((sx*(r_out + 0.007), -0.006, 0.0)), (0.006, 0, 0), (0, 0.004, 0), (0, 0, 0.007), "bronze")
+    # bronze bridge: a flat riveted bar over the nose between the rims
+    bz = EYE_Z + 0.014; by = LENS_Y - t["rim_depth"]/2 - 0.001
+    B.box((0, by, bz), (2*(ex - r_out*0.75), 0, 0), (0, 0.005, 0), (0, 0, 0.007), "bronze")
+    for sx in (-1, 1):
+        B.disc((sx*(ex - r_out*0.95), by - 0.0025, bz), (0, -1, 0), 0.002, 5, "bronze", dome=0.0016)
+    B.tube([(-0.006, by - 0.003, bz + 0.0045), (0.0, by - 0.006, bz + 0.0015), (0.006, by - 0.003, bz + 0.0045)],
+           [0.0022]*3, 4, "twine")                                    # twine wrap on the bridge
+    # leather strap around the head with a bronze buckle on the right side
+    xs = ex + r_out + 0.014
     pts = strap_path(xs)
     pts[0] = Vector((-xs, LENS_Y + 0.024, EYE_Z)); pts[-1] = Vector((xs, LENS_Y + 0.024, EYE_Z))
     B.ribbon(pts, t["strap_w"], t["strap_th"], "rough_leather", jitter=0.15)
-    # twine wraps on the strap behind each block and around the bridge
-    for i in (2, 3, len(pts)-4, len(pts)-3):
+    buckle(B, pts, t["buckle_at"], t["strap_w"], t["strap_th"], "bronze")
+    # twine wraps on the strap behind each block
+    for i in (2, len(pts)-3):
         p = pts[i]; tng = (pts[i+1] - pts[i-1]).normalized()
         B.ribbon([p - tng*0.003, p + tng*0.003], t["strap_w"]*1.12, t["strap_th"]*2.2, "twine")
-    B.tube([(-0.006, LENS_Y - 0.003, EYE_Z + 0.022), (0.0, LENS_Y - 0.009, EYE_Z + 0.017),
-            (0.006, LENS_Y - 0.003, EYE_Z + 0.022)], [0.0025]*3, 4, "twine")
     return B.finish("goggles_t1")
 
 # ---------------------------------------------------------------- Tier II
 def mimir(rng):
     t = T2; B = Builder(rng); fwd = Vector((0, -1, 0))
     r_in, r_out = t["rim_r"]
+    ex = EYE_X + t["eye_dx"]
     for sx in (-1, 1):
-        c = Vector((sx*EYE_X, LENS_Y, EYE_Z))
+        c = Vector((sx*ex, LENS_Y, EYE_Z))
         B.ring(c, fwd, r_in, r_out, t["rim_depth"], t["rim_segs"], "silver")
         B.ring(c + fwd*0.004, fwd, r_out - 0.001, t["bezel_r"], 0.004, t["rim_segs"], "silver")   # raised bezel
-        B.disc(c + fwd*0.001, fwd, r_in + 0.001, t["rim_segs"], "crystal_lens", dome=0.004)
+        lens(B, c + fwd*(t["rim_depth"]/2 + 0.0005), fwd, t["lens_r"], t["lens_dome"], t["lens_back"], t["rim_segs"], "crystal_lens")
+        clamps(B, c, fwd, r_in, t["bezel_r"], t["rim_depth"], [a if sx > 0 else 180 - a for a in t["clamps"]], "silver", "frost_crystal")
         # silver temple arm from rim to strap, with a frost shard sweeping back and up
         side = Vector((sx*(r_out + 0.010), 0.004, 0.004))
         B.tube([c + Vector((sx*r_out*0.9, 0.0, 0.004)), c + side, c + Vector((sx*(r_out + 0.022), 0.018, 0.002))],
                [0.004, 0.0045, 0.004], 6, "silver")
         B.bipyramid(c + side + Vector((sx*0.004, 0.006, 0.012)), Vector((sx*0.35, 0.8, 0.75)), 0.006, 0.040, 0.008, 6, "frost_crystal")
         B.bipyramid(c + side + Vector((sx*0.006, 0.010, 0.004)), Vector((sx*0.6, 0.9, 0.2)), 0.004, 0.024, 0.006, 5, "frost_crystal")
-    # silver bridge: thin high arch
-    B.tube([(-EYE_X + r_out*0.85, LENS_Y, EYE_Z + 0.014), (0, LENS_Y - 0.002, EYE_Z + 0.026),
-            (EYE_X - r_out*0.85, LENS_Y, EYE_Z + 0.014)], [0.0022]*3, 6, "silver")
+    # silver bridge: a high arch with a small frost crystal set in the middle
+    by = LENS_Y - t["rim_depth"]/2
+    B.tube([(-ex + r_out*0.8, by, EYE_Z + 0.016), (0, by - 0.003, EYE_Z + 0.027),
+            (ex - r_out*0.8, by, EYE_Z + 0.016)], [0.0032, 0.0036, 0.0032], 6, "silver")
+    B.bipyramid((0, by - 0.006, EYE_Z + 0.027), (0, -1, 0), 0.004, 0.005, 0.002, 6, "frost_crystal")
     # dark leather strap with wolf-pelt trim along the top edge
-    xs = EYE_X + r_out + 0.022
+    xs = ex + r_out + 0.022
     pts = strap_path(xs)
     pts[0] = Vector((-xs, LENS_Y + 0.018, EYE_Z)); pts[-1] = Vector((xs, LENS_Y + 0.018, EYE_Z))
     B.ribbon(pts, t["strap_w"], t["strap_th"], "dark_leather")
+    buckle(B, pts, t["buckle_at"], t["strap_w"], t["strap_th"], "silver")
     # fur: short pelt band (ribbon) plus tufts (4-sided cones) leaning back
     fur_pts = [p + Vector((0, 0, t["strap_w"]*0.55)) for p in pts[2:-2]]
     B.ribbon(fur_pts, 0.010, t["strap_th"]*4.0, "wolf_pelt")

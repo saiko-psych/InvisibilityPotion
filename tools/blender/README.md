@@ -11,7 +11,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v5) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3_a/b/c`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v5.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_ingredients.py` (v1) | `ingredient_t1..3.fbx`, `ingredients.blend`, `ingredients.log` | `preview-ingredients-v1.png` | base centre (lying as dropped) | `attach` (bounding-box centre) |
-| `make_goggles.py` (v2) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v2.png` | head centre | `attach` (head centre) |
+| `make_goggles.py` (v3) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v3.png` | head centre | `attach` (head centre) |
 
 ## Shared conventions (`common.py`)
 
@@ -33,8 +33,8 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 
 | Tier | Bottle (incl. 80-tri mist mesh) | Bowl | Plant | Goggles |
 |---|---|---|---|---|
-| 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284; variants see below) | 490 |
-| 2 | 448 | 488 | 484 | 1112 |
+| 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284; variants see below) | 668 |
+| 2 | 448 | 488 | 484 | 1314 |
 | 3 | 560 | 488 | 1196 | 1216 |
 
 # Veil-mead flasks (v5): finished meads
@@ -166,24 +166,25 @@ Knobs at the top of `make_ingredients.py`: `SEED`, `MATS`, `T1` (`strands`, `len
 `T2` (`bell_len`, `bell_r`, `petals`, `stem_len`, `berry_r`), `T3` (`curl_r`, `turns`, `leaflets`, `leaflet_len`,
 `leaflet_base`, `capsule_r`). Preview placement, camera and lights at the end.
 
-# Veil goggles (v2)
+# Veil goggles (v3)
 
 Outputs `goggles_t1/t2/t3.fbx`, `preview-goggles.png`, `goggles.blend`; the preview is copied to
-`tools/blender/preview-goggles-v2.png` (grey reference heads 0.22 m wide, turned 30 degrees so the strap shows).
+`tools/blender/preview-goggles-v3.png` (grey reference heads 0.22 m wide, turned 30 degrees so the strap shows).
 Real scale for a ~1.8 m character. Pivot = head centre (parent to the head bone); each FBX has an `attach` empty there. In Blender the wearer faces -Y and
 the right eye is at -X; check the facing once after the Unity import (rotate the attach point 180 degrees if it is
 backwards). Eyes 0.065 m apart, lenses about 0.05 m, strap ellipse just outside the 0.22 x 0.25 m head.
 
 | Tier | Name | Biome | Look | Tris |
 |---|---|---|---|---|
-| 1 | Watchman's Glass | Black Forest | crude jittered bronze rims, resin-amber lenses (alpha), wood temple blocks, rough leather strap, twine wraps | 490 |
-| 2 | Mimir's Glass | Mountains | polished silver rims with bezels, pale crystal lenses (alpha), silver temple arms with frost-crystal shards, dark strap with wolf-pelt trim | 1112 |
+| 1 | Watchman's Glass | Black Forest | thick jittered bronze rims, 0.057 m saturated resin-amber lenses (alpha 0.6) domed 3.5 mm proud of the rims, 3 riveted bronze clamps per rim, riveted bronze bridge bar with a twine wrap, wood temple blocks, rough leather strap with a bronze buckle and twine wraps | 668 |
+| 2 | Mimir's Glass | Mountains | polished silver rims with raised bezels, 0.057 m saturated ice-blue crystal lenses (alpha 0.6) domed 3.5 mm proud, 3 silver clamps per rim with frost-crystal rivets, high silver bridge arch with a small frost crystal, silver temple arms with frost-crystal shards, dark strap with a silver buckle and wolf-pelt trim | 1314 |
 | 3 | Allfather's Eye | Ashlands | black flametal half-mask with brow V and cheek guards, two obsidian lenses in flametal bezels with ember rims, small crest plate in the brow V with an ember Ansuz mark, black leather strap starting under the mask edges with 3 riveted flametal plates per side | 1216 |
 
 Knobs at the top of `make_goggles.py`:
 1. Fit: `HEAD`, `EYE_Z`, `EYE_X`, `LENS_Y`, `STRAP_A`, `STRAP_B`.
 2. `MATS`: colour, roughness, metallic, emission, alpha (`bronze`, `amber_lens`, `silver`, `crystal_lens`, `flametal`, `obsidian_lens`, `ember_rim`, `rune_inlay` ...).
-3. `T1`: rim segments/radii/depth/`jitter`, strap size. `T2`: rims, `bezel_r`, strap, `fur_tufts`, `fur_len`.
+3. `T1`: rim segments/radii/depth/`jitter`, strap size, `lens_r`, `lens_dome`, `lens_back`, `eye_dx` (lens centres
+   moved out from `EYE_X`), `clamps` (angles), `buckle_at` (strap point). `T2`: the same plus `bezel_r`, `fur_tufts`, `fur_len`.
    `T3`: mask ellipse, `mask_span` (degrees), `mask_z`, thickness, `lens_r`, strap, `plates` (degrees back from each
    mask edge), `plate_len`, `rivets`, `rune_z`, `rune_h`, `crest_w`, `crest_h`.
 Preview-only: `HEAD_Z`, `SPACING`, `PREVIEW_TURN`, camera and lights near the end.
