@@ -518,7 +518,7 @@ Setup: game closed, `make build`, `make run`. Spawn real meads to drink: `ip_spa
 
 Config and log
 - [ ] `Config migration (look defaults revision 11): ...` once (tiers I/II reset, old values logged); `[Fog.Tier1/2] OuterFollowShare = 0.4` with the description "Share of the wide fog that moves with you; the rest stays behind as a trail", `OuterBurst` T1 40, T2 60
-- [ ] `Config migration (gameplay defaults revision 2): [TierN] DebuffStaminaRegenMultiplier 0.5 -> 0.25, DebuffDuration 20 -> 15, Cooldown 0 -> 90/180/240` once (values you changed yourself stay); `[General] DrainStaminaOnAttackReveal = true`
+- [ ] `Config migration (gameplay defaults revision 2): [TierN] DebuffStaminaRegenMultiplier 0.5 -> 0.25, DebuffDuration 20 -> 15, Cooldown 0 -> 30/60/90 (revision 3; files at the revision-2 values 90/180/240 move too)` once (values you changed yourself stay); `[General] DrainStaminaOnAttackReveal = true`
 - [ ] `cooldown reference: MeadHealthMinor -> ... category '...', ttl ..., cooldownIcon ..., healthOverTimeDuration ...` (the vanilla data the Veil Cooldown mirrors; paste it)
 
 Wide fog (tier II, then tier I)
@@ -541,7 +541,7 @@ Stamina drain and Veil Broken (tier II)
 Veil Cooldown
 - [ ] Drink tier II: "Veil Cooldown" appears in the status bar with the cooldown overlay and a 3:00 countdown (the clock icon), next to "Deep Veil"
 - [ ] During the cooldown, try tier I, II and III meads: each is refused with the vanilla "can't consume" message and stays in the inventory
-- [ ] `ip_state`: `cooldown: 1xx.xs of 180s left (config T1 90, T2 180, T3 240); veil broken: ...; stamina .../...`
+- [ ] `ip_state`: `cooldown: 1xx.xs of 180s left (config T1 30, T2 60, T3 90); veil broken: ...; stamina .../...`
 - [ ] After the cooldown runs out (shorten it: `[Tier2] Cooldown = 20`, `ip_reload_config`, drink again after the old one ends) any mead can be drunk again; an upgrade T1 -> T3 after the T1 cooldown works
 - [ ] `[TierN] Cooldown = 0`: no cooldown effect, drinking is only limited by the tier rules as before
 - [ ] Relog: the cooldown is gone (status effects are not saved, as for vanilla potions)

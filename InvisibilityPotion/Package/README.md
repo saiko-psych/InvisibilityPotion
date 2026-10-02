@@ -15,7 +15,7 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 - Brew the mead base at the **Mead Ketill** (honey, thistle, bloodbag for II/III, Ymir flesh for III, and 2 of the tier's veil ingredient), then ferment it.
 - A chasing enemy gives up after a short while once it loses you.
 - You cannot drink a weaker or equal mead while a stronger veil is active.
-- **Veil Cooldown**: drinking a veil mead starts one shared cooldown (tier I 90 s, II 180 s, III 240 s, counted from drinking) that blocks all three meads until it runs out. `[TierN] Cooldown`, 0 = off.
+- **Veil Cooldown**: drinking a veil mead starts one shared cooldown (tier I 30 s, II 60 s, III 90 s, counted from drinking) that blocks all three meads until it runs out; it is shorter than the veil itself, so a stronger mead can still replace a running veil once the cooldown has passed. `[TierN] Cooldown`, 0 = off.
 
 ### What reveals you
 

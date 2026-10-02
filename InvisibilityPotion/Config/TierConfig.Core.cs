@@ -56,23 +56,27 @@ namespace InvisibilityPotion.Config
     /// <summary>
     /// Revisions of the server-synced [TierN] gameplay defaults (pure; PluginConfig applies it once per file). A key still at its
     /// old default moves to the new one; a value the admin changed stays. Revision 1 (round Q): DebuffStaminaRegenMultiplier
-    /// 0.5 -> 0.25, DebuffDuration 20 -> 15. Revision 2 (round Q): Cooldown 0 (reserved, unused before) -> 90/180/240 s.
+    /// 0.5 -> 0.25, DebuffDuration 20 -> 15. Revision 2 (round Q): Cooldown 0 (reserved, unused before) -> 90/180/240 s. Revision 3 (user, 2026-10-02 23:20): 30/60/90 s, shorter than the
+    /// tier durations so a higher mead can still replace a running veil near its end (the upgrade stays possible).
     /// </summary>
     public static class GameplayDefaults
     {
-        public const int Revision = 2;
+        public const int Revision = 3;
 
         /// <summary>[TierN] Cooldown default: the shared Veil Cooldown started by drinking tier N (seconds).</summary>
         public static float Cooldown(int tier)
         {
             switch (tier)
             {
-                case 1: return 90f;
-                case 2: return 180f;
-                case 3: return 240f;
+                case 1: return 30f;
+                case 2: return 60f;
+                case 3: return 90f;
                 default: return 0f;
             }
         }
+
+        /// <summary>The revision-2 cooldown defaults (90/180/240), migrated to the revision-3 values when still untouched.</summary>
+        public static float Revision2Cooldown(int tier) => tier == 1 ? 90f : tier == 2 ? 180f : tier == 3 ? 240f : 0f;
 
         public const float DebuffStaminaRegenMultiplier = 0.25f;
         public const float DebuffDuration = 15f;
@@ -86,6 +90,7 @@ namespace InvisibilityPotion.Config
                 if (key == "DebuffDuration" && Same(current, 20f)) return DebuffDuration;
             }
             if (fromRevision < 2 && key == "Cooldown" && Same(current, 0f)) return Cooldown(tier);
+            if (fromRevision < 3 && key == "Cooldown" && Same(current, Revision2Cooldown(tier))) return Cooldown(tier);
             return current;
         }
 
