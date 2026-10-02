@@ -35,7 +35,7 @@ Two clients (pending, needs plan 3 server):
 
 ## Plan 2 – Round C: veil look tuning (Debug console)
 
-> Historical round record. Current defaults: body mode Distortion for all tiers (the `LookDefaultsRevision` migration moves an old T1 Off to Distortion); fog look per tier in `[Fog.TierN]`. The per-tier text below describes the state when this round ran.
+> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); fog look per tier in `[Fog.TierN]`, see Round H. The per-tier text below describes the state when this round ran.
 
 Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog dense (0.7); T3 body Distortion, no fog. Config: `[TierN] BodyVeilMode/FogEnabled/FogDensity` (admin), look in `[Fog]` and `[Veil]` (local, not synced).
 
@@ -50,7 +50,7 @@ Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog de
 
 ## Plan 2 – Round E: per-tier fog, tuning window (task 10d)
 
-> Historical round record. Current defaults: body mode Distortion for all tiers (the `LookDefaultsRevision` migration moves an old T1 Off to Distortion); see Round G for the current fog defaults. The defaults below are those of round E.
+> Historical round record. Current defaults: T1 body Off, T2/T3 Distortion (the `LookDefaultsRevision` 3 migration moves a T1 Distortion to Off); see Round H for the current fog defaults. The defaults below are those of round E.
 
 Defaults: T1 body Off + light flattened fog (alpha 0.5, size 1.5, rate 4, life 5, no drift); T2 body Distortion (0.1, alpha 0.08) + two fog layers (dense thin inner, wide faint outer on head/chest/hips); T3 body Distortion (0.03, alpha 0.02), no fog. Look per tier in `[Fog.Tier1..3]` (local, not synced), `[Fog] FogAlphaMode` global, `[Veil]` ghost look only. `[TierN] BodyVeilMode` stays admin. Old keys (`[Fog] FogRate/Anchor.*`, `[TierN] FogEnabled/FogDensity`, `[Veil] Distortion*`, stray `[General]` keys) are removed on the first start; the log lists them. A tier II still on the old default Ghost is switched to Distortion once.
 
@@ -109,7 +109,28 @@ What to compare:
 - [ ] After `Close`, game keys work at once (no stuck text focus), the camera captures the mouse again
 - [ ] `ip_fog t2 outeranchors Chest,Hips` and `ip_fog t1 trail off` still work and show up in the window
 
+## Plan 2 – Round H: ground fog field, tier I normal body, outer-layer diagnostics (task 10h)
+
+New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 3)`, lists every reset value and `[Tier1] BodyVeilMode Distortion -> Off`; tier III is untouched):
+- New emitter kind **ground fog field** (`[Fog.TierN] Ground*` keys, window foldout "Fog ground field", console `ip_fog [tN] ground on|off`, `groundrate`, `grounddistance`, `groundsize`, `groundgrow`, `groundlife`, `groundalpha`, `groundradius`, `groundheight`, `grounddrift`): flat fog patches lying parallel to the ground at the feet (0.15 m up), in world space, so they stay where they were emitted and grow (0.8 m → 2.4 m over 7 s). They are emitted 4 per second plus 2 per metre walked, so walking lays a field of fog along the path. They fade in quickly and fade out over the last 40 % of their life.
+- T1: the **normal player model** (`[Tier1] BodyVeilMode = Off`, no distortion) in a thin, close fog layer that follows the body (rate 5, size 0.45, life 2 s, alpha 0.22, `SpreadY 0.5`, `Trail = false`, emission 0.25), plus the ground field. No outer layer.
+- T2: inner cloud unchanged; ground field denser and wider (rate 6, 3 per metre, size 1.0, grow 3.5, alpha 0.3, radius 0.9). Outer ring kept on for the diagnostics, and its particles now lie flat (new key `OuterHorizontal = true`, window "Outer flat", console `ip_fog t2 outerflat on|off`): the camera-facing 1.1–2.3 m particles were each about four times taller than the 0.4 m thick disc, so the "flat ring" was drawn as a tall blob merging with the body cloud.
+- Diagnostics: `ip_fog dump` (and `ip_state` while veiled) logs every fog emitter of your veil: object, layer (Inner/Outer/Ground), playing, particle count/max, rate, sizes, lifetime, simulation space, render mode, material values (`_Color`, `_EmissionColor`, fades), renderer enabled/visible, bounds, emitter position vs. the player, camera distance, and the average alpha/size/height of the live particles. Every veil build also logs `veil fog spawned T<n> ...` with one line per emitter.
+
+What to compare:
+- [ ] Log: `Config migration (look defaults revision 3)` once (not on the second start), including `[Tier1] BodyVeilMode Distortion -> Off`
+- [ ] T1 standing: the normal character (armour, skin, no glass/shimmer) wrapped in a thin whitish fog; a small pool of fog forms at the feet
+- [ ] T1 walking/running: a field of flat fog patches stays on the ground along the path and spreads, fading within ~7 s; **no plume/exhaust trail** behind the body
+- [ ] T2 standing and walking: the inner cloud as in round G plus a denser, wider ground field along the path
+- [ ] T2 outer ring: a flat ring of fog around the hips, best seen with the camera looking down; compare `ip_fog t2 outerflat off` (old camera-facing look). Visible or not? Either way, with T2 active and the ring expected, run **`ip_fog dump`** while standing still, then once while walking, and attach the `fog dump` block from `BepInEx/LogOutput.log` (the lines starting with `ip_fog_outer` matter most)
+- [ ] Ground field on slopes and stairs: report patches that cut into the terrain or float; `ip_fog t1 groundheight 0.3` raises them
+- [ ] Window: the "Fog ground field" foldout changes the field live; `Solo outer` now hides the ground field too
+- [ ] T3 unchanged (Distortion 0.03, alpha 0.02, no fog)
+
 ## Plan 2 – Round G: tier I/II looks, outer disc, fog brightness, draggable sliders (task 10g)
+
+> Historical round record; current defaults in Round H.
+
 
 New defaults (the first start resets `[Fog.Tier1]` and `[Fog.Tier2]` once more; the log says `Config migration (look defaults revision 2)`, lists every reset value and each obsolete key with its old value, e.g. `[Fog.Tier2] OuterRadiusMultiplier = 6 is obsolete … and removed`; tier III is untouched):
 - All tiers: `DynamicColor = false` (the 50 % blend with the environment fog colour made the fog dark in rain and at night). New key `Emission` (0..1, T1/T2 0.25, T3 0): the fog glows with its own colour × Emission, so it stays whitish in the dark. The fog material also fades less near the camera and near surfaces (`_CameraFadeDistance` 0.3–1 m instead of 1–5 m, `_ZFadeDistance` 0.25 instead of 1).
