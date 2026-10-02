@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
+using InvisibilityPotion.Goggles;
 using InvisibilityPotion.Net;
 using UnityEngine;
 
@@ -15,13 +16,16 @@ namespace InvisibilityPotion.Patches
         /// <summary>Height of the spoofed header position: far above the world, same x/z so the sector column is unchanged.</summary>
         public const float SpoofHeight = 10000f;
 
-        /// <summary>Viewer side: no nameplate for a hidden player. EnemyHud.TestShow(Character c, bool isVisible) EnemyHud.cs:101.</summary>
+        /// <summary>
+        /// Viewer side: no nameplate for a hidden player, unless the viewer wears level III goggles and [Goggles] RevealHiddenPlayers
+        /// is on (plan 5 §3.5 part 1). EnemyHud.TestShow(Character c, bool isVisible) EnemyHud.cs:101.
+        /// </summary>
         [HarmonyPatch(typeof(EnemyHud), "TestShow")]
         [HarmonyPostfix]
         private static void TestShow_Postfix(Character c, ref bool __result)
         {
             if (!__result || c == null || !c.IsPlayer() || c == Player.m_localPlayer) return;
-            if (HiddenState.IsHiddenFromPlayers(c)) __result = false;
+            if (HiddenState.IsHiddenFromPlayers(c) && !GogglesLevel.LocalSeesHiddenPlayers) __result = false;
         }
 
         /// <summary>Server side (only SendPlayerList calls it, behind IsServer): clear the map position of hidden players. Covers peers and the listen host's own entry. ZNet.cs:2454.</summary>
@@ -111,7 +115,12 @@ namespace InvisibilityPotion.Patches
             return codes;
         }
 
-        /// <summary>Called from the patched SendZDOs for every ZDO header. Server only: a client's peer is the server, which must get the real position.</summary>
+        /// <summary>
+        /// Called from the patched SendZDOs for every ZDO header. Server only: a client's peer is the server, which must get the real
+        /// position. A peer whose own player ZDO claims level III goggles (IP_Goggles, written by GogglesLevel) also gets the real
+        /// position when [Goggles] RevealHiddenPlayers is on (plan 5 §3.5 part 3; ZNetPeer.m_characterID, ZNetPeer.cs:21). The
+        /// goggles key is read only for hidden player ZDOs, so the hot path for every other ZDO is unchanged.
+        /// </summary>
         public static Vector3 HeaderPosition(ZDO zdo, object zdoPeer)
         {
             var real = zdo.GetPosition();
@@ -119,8 +128,10 @@ namespace InvisibilityPotion.Patches
             var znet = ZNet.instance;
             if (znet == null || !znet.IsServer()) return real;
             var peer = PeerOf(zdoPeer);
-            if (peer == null || zdo.GetOwner() == peer.m_uid) return real; // the owner always gets its own real position
-            return new Vector3(real.x, SpoofHeight, real.z);
+            if (peer == null) return real;
+            var isOwner = zdo.GetOwner() == peer.m_uid; // the owner always gets its own real position
+            var goggles = isOwner ? 0 : GogglesLevel.Read(peer.m_characterID.IsNone() ? null : ZDOMan.instance?.GetZDO(peer.m_characterID));
+            return PlayerReveal.ShouldSpoof(true, isOwner, goggles, Config.PluginConfig.RevealHiddenPlayers) ? new Vector3(real.x, SpoofHeight, real.z) : real;
         }
     }
 }

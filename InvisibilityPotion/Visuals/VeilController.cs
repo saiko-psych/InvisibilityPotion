@@ -176,8 +176,8 @@ namespace InvisibilityPotion.Visuals
                 }
                 var isLocal = p == local;
                 // A remote player hidden from players must not be drawn here either (the listen host gets the real position,
-                // the position spoof only applies to forwarded packets).
-                var forceHide = !isLocal && HiddenState.IsHiddenFromPlayers(p);
+                // the position spoof only applies to forwarded packets). Level III goggles (plan 5) show the tier's veil look instead.
+                var forceHide = !isLocal && HiddenState.IsHiddenFromPlayers(p) && !Goggles.GogglesLevel.LocalSeesHiddenPlayers;
                 try
                 {
                     _veil.Apply(p, tier, isLocal, forceHide);
