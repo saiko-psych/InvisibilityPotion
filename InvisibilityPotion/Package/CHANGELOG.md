@@ -14,6 +14,7 @@
 - Harsher Veil Broken, lasting until the veil returns (tier II/III; tier I 15 s): stamina regeneration 15 %, eitr 25 %, health 50 %, movement 30 % slower (tier I 20 %); new `[TierN]` keys `DebuffSpeedModifier`, `DebuffEitrRegenMultiplier`, `DebuffHealthRegenMultiplier`.
 - Veil Broken harsher still (tier I lasts 20 s): stamina regeneration 10 %, eitr 15 %, health 35 %, movement 50 % slower (tier I 35 %), no sprinting. Unchanged old defaults are migrated automatically.
 - The fog veil is lighter (you stay visible to other players; the veil hides you from monsters, the fog is only a hint) and sits low: dense near the ground and near you, thinning with height and distance.
+- Requires Jötunn 2.30.0 and BepInExPack_Valheim 5.4.2350 (was 2.30.2 / 5.4.2351). Jötunn refuses a client whose Jötunn version differs from the server's, down to the patch number: use the same Jötunn version on the server and every client.
 
 ## 0.2.0
 

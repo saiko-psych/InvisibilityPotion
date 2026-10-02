@@ -8,6 +8,13 @@ Why the server needs the mod: `[NetworkCompatibility(EveryoneMustHaveMod, Minor)
 server and clients run the same 0.3.x, the server hides tier III positions (`ZDOMan.SendZDOs`) and map pins
 (`ZNet.UpdatePlayerList`), and the server's config values are pushed to every client (see `docs/compatibility.md` §4).
 
+**Jötunn version: server and clients must match exactly.** The mod is built against Jötunn 2.30.0 and BepInExPack_Valheim
+5.4.2350 (the versions the author's servers run). Jötunn checks its own version at connect with `VersionStrictness.Patch`
+(decompiled `Jotunn/Main.cs` and `Jotunn.Utils/ModCompatibility.cs`, 2.30.0 and 2.30.2 alike): a client with Jötunn 2.30.2 cannot
+join a server with 2.30.0 (`Mod version mismatch Jotunn: Server 2.30.0, Client 2.30.2`, the server disconnects the client), and
+vice versa. Install the same Jötunn version on the server and on every client. The BepInExPack version is not checked (5.4.2350
+and 5.4.2351 both ship BepInEx 5.4.23.5). Version matrix: `docs/compatibility.md` §7.
+
 ## Scripts
 
 | Script | Use |
@@ -23,7 +30,7 @@ remote home directory (no `~`). Nothing on the server is ever deleted.
 `server-setup.sh` in detail:
 
 1. Checks that `<server-path>/valheim_server.x86_64` exists.
-2. Downloads `denikson-BepInExPack_Valheim` (default 5.4.2351, `--bepinex`) and `ValheimModding-Jotunn` (default 2.30.2,
+2. Downloads `denikson-BepInExPack_Valheim` (default 5.4.2350, `--bepinex`) and `ValheimModding-Jotunn` (default 2.30.0,
    `--jotunn`) from `https://thunderstore.io/package/download/<namespace>/<name>/<version>/` into `build/server/` (cached,
    gitignored). Package layout checked on 2026-10-02: the pack's files live under `BepInExPack_Valheim/` in the zip
    (`start_server_bepinex.sh`, `doorstop_config.ini`, `.doorstop_version`, `doorstop_libs/`, `BepInEx/core/`,
@@ -83,7 +90,7 @@ ssh <ssh-host> "grep -E 'BepInEx|Jotunn|InvisibilityPotion|Patch health' <server
 
 Expected lines:
 
-- `Loading [Jotunn 2.30.2]` and `Loading [InvisibilityPotion 0.3.x]`
+- `Loading [Jotunn 2.30.0]` and `Loading [InvisibilityPotion 0.3.x]`
 - `Patch health: N targets patched, 0 missing` (Release builds list no Debug-only targets)
 - `InvisibilityPotion 0.3.x loaded`
 - No `SendZDOs transpiler: pattern not found` (that line means the tier III position spoof is off; patch health does not report

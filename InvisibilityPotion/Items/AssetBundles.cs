@@ -54,7 +54,7 @@ namespace InvisibilityPotion.Items
         }
 
         /// <summary>
-        /// Loads the embedded bundle from a byte copy. Jötunn's AssetUtils.LoadAssetBundleFromResources (2.30.2) uses
+        /// Loads the embedded bundle from a byte copy. Jötunn's AssetUtils.LoadAssetBundleFromResources (2.30.0 and 2.30.2) uses
         /// AssetBundle.LoadFromStream inside a using block: the stream is disposed right after the header is read, and the later
         /// asset reads fail with "ManagedStream object must be readable" plus mismatched-serialization errors (round I crash).
         /// </summary>

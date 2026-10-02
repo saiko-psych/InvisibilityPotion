@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <!-- Supplies game, BepInEx, Harmony and Unity references from $(VALHEIM_INSTALL) and the publicizer prebuild task -->
-    <PackageReference Include="JotunnLib" Version="2.30.2" />
+    <PackageReference Include="JotunnLib" Version="2.30.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 # InvisibilityPotion – project conventions
 
-Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in files is English.
+Valheim mod (BepInEx 5.4.23.5 from BepInExPack_Valheim 5.4.2350 + Jötunn 2.30.0, the versions of the dedicated servers; Jötunn refuses a client whose Jötunn patch version differs from the server, see `docs/compatibility.md` §7), C# net48, MIT. Everything in files is English.
 
 ## Commands (`make help` lists them)
 - `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`). `build`, `package` and `run` refuse while Valheim runs (overwriting the DLL crashes the game); `FORCE=1` overrides

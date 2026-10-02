@@ -2,7 +2,7 @@
 
 Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies notice you less (tier I) or lose you completely (tier II and III), and the strongest mead hides you from other players too. The ingredients grow on plants that nobody can see without veil goggles.
 
-**The mod must be installed on the server and on every client** (Jötunn refuses mismatched clients).
+**The mod must be installed on the server and on every client** (Jötunn refuses mismatched clients). Server and clients also need the **same Jötunn version** (built against 2.30.0; Jötunn compares its own version down to the patch number).
 
 ## The meads
 

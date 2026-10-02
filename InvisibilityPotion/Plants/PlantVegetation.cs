@@ -21,7 +21,7 @@ namespace InvisibilityPotion.Plants
         public const float GroundOffset = -0.03f;
         /// <summary>
         /// ZoneVegetation.m_chanceToUseGroundTilt (ZoneSystem.cs:54, :1534-1537): 1 = every plant is rotated onto the ground normal.
-        /// Jötunn 2.30.2's VegetationConfig has no property for it (ilspy), so it is set on CustomVegetation.Vegetation.
+        /// Jötunn 2.30.0's (and 2.30.2's) VegetationConfig has no property for it (ilspy), so it is set on CustomVegetation.Vegetation.
         /// </summary>
         public const float GroundTiltChance = 1f;
         /// <summary>

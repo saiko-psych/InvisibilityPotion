@@ -144,4 +144,4 @@ Open, settled in-game by the plan-4 checklist: S1 (Windows load), S2 (do the moc
 
 ### Loader pitfall (2026-10-02, round I crash)
 
-`AssetUtils.LoadAssetBundleFromResources` (Jötunn 2.30.2) calls `AssetBundle.LoadFromStream` inside a `using` block, so the stream is disposed right after the header is read; the first `LoadAllAssets` then fails with `ManagedStream object must be readable` and "Mismatched serialization in the builtin class 'Mesh'" errors, followed by a native crash (signal 5). `Items/AssetBundles.cs` therefore copies the resource into a byte array and uses `AssetBundle.LoadFromMemory`.
+`AssetUtils.LoadAssetBundleFromResources` (Jötunn 2.30.0 and 2.30.2) calls `AssetBundle.LoadFromStream` inside a `using` block, so the stream is disposed right after the header is read; the first `LoadAllAssets` then fails with `ManagedStream object must be readable` and "Mismatched serialization in the builtin class 'Mesh'" errors, followed by a native crash (signal 5). `Items/AssetBundles.cs` therefore copies the resource into a byte array and uses `AssetBundle.LoadFromMemory`.

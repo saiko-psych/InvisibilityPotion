@@ -16,7 +16,7 @@ Three potions that hide the player from enemies. Attacking reveals the player an
 
 ## Targets
 
-Valheim 1.0.16 · Unity 6000.0.75f1 · BepInEx 5.4.23.5 · Jötunn 2.30.2
+Valheim 1.0.16 · Unity 6000.0.75f1 · BepInEx 5.4.23.5 (BepInExPack_Valheim 5.4.2350) · Jötunn 2.30.0 (clients must run the same Jötunn patch version as the server, see [compatibility](docs/compatibility.md#7-version-matrix))
 
 ## Development
 

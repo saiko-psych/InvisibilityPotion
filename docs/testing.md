@@ -638,3 +638,14 @@ Item stands (vanilla behaviour, see decompile notes)
 - [ ] Horizontal item stand: a veil mead (hotbar key while looking at the stand) is placed, like a vanilla `MeadHealthMinor`
 - [ ] Wall item stand: a veil mead is refused ("can't attach"), exactly like a vanilla mead
 - [ ] Mead bases are refused by both stands, like vanilla mead bases
+
+## Jötunn 2.30.0 (2026-10-03)
+
+Setup: replace `BepInEx/plugins/Jotunn/Jotunn.dll` with the one from `ValheimModding-Jotunn-2.30.0` (Thunderstore) so the
+client matches the dedicated server; `make build`, `make run`.
+
+- [ ] Log: `Loading [Jotunn 2.30.0]`, `Patch health: N targets patched, 0 missing`, no `[Error  :InvisibilityPotion]` lines
+- [ ] Cultivator: Huldra's Hair, Baldr's Tear and Hel's Ember Fern sprouts appear in the same build menu tag as the vanilla crop
+  saplings, and selecting each one places that sprout (2.30.0 had a "wrong piece placed" bug, fixed in 2.30.1)
+- [ ] Join the dedicated server (Jötunn 2.30.0) with this client: accepted. Optional: with Jötunn 2.30.2 on the client the join is
+  refused with Jötunn's version mismatch window (`docs/compatibility.md` §7)

@@ -9,13 +9,13 @@
 #   --dry-run    download and stage locally, then show what rsync would copy; change nothing on the server
 #   --force      continue while valheim_server.x86_64 runs (restart it afterwards)
 #   --dll FILE   our DLL (default InvisibilityPotion/Package/plugins/InvisibilityPotion.dll from `make package`)
-#   --bepinex V  denikson-BepInExPack_Valheim version (default 5.4.2351, the manifest dependency)
-#   --jotunn V   ValheimModding-Jotunn version (default 2.30.2, the manifest dependency)
+#   --bepinex V  denikson-BepInExPack_Valheim version (default 5.4.2350, the manifest dependency)
+#   --jotunn V   ValheimModding-Jotunn version (default 2.30.0, the manifest dependency)
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 . "$repo/scripts/server-lib.sh"
 
-DRY_RUN=0; FORCE=0; dll="$repo/$RELEASE_DLL_DEFAULT"; bep_ver="5.4.2351"; jot_ver="2.30.2"; args=()
+DRY_RUN=0; FORCE=0; dll="$repo/$RELEASE_DLL_DEFAULT"; bep_ver="5.4.2350"; jot_ver="2.30.0"; args=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
