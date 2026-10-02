@@ -7,10 +7,11 @@ Lore: docs/ideas/2026-10-01-norse-lore-research.md section 3.
 """
 import bpy, bmesh, math, os, random, shutil
 from mathutils import Vector, Matrix
+from mathutils.bvhtree import BVHTree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")            # FBX, raw render, .blend (gitignored)
-PREVIEW = os.path.join(HERE, "preview-plants-v1.png")
+PREVIEW = os.path.join(HERE, "preview-plants-v2.png")
 os.makedirs(OUT, exist_ok=True)
 
 # ==== KNOBS (lengths in metres; Blender Z-up, FBX exported Y-up, 1 unit = 1 m, pivot at ground) ====
@@ -22,9 +23,10 @@ MATS = {
     "huldra_stone":  ((0.24, 0.24, 0.22, 1), 0.9, 0.0, 0.0),
     "huldra_moss":   ((0.17, 0.22, 0.10, 1), 0.95, 0.0, 0.0),
     "huldra_branch": ((0.20, 0.15, 0.11, 1), 0.9, 0.0, 0.0),
-    "huldra_strand": ((0.43, 0.49, 0.40, 1), 0.8, 0.0, 0.0),
-    "huldra_leaf":   ((0.40, 0.47, 0.36, 1), 0.85, 0.0, 0.0),
-    "huldra_glint":  ((0.30, 0.58, 0.64, 1), 0.5, 0.0, 0.9),   # cold shimmer at strand tips
+    "huldra_strand": ((0.55, 0.60, 0.50, 1), 0.85, 0.0, 0.0),   # pale grey-green lichen
+    "huldra_strand_shade": ((0.44, 0.49, 0.41, 1), 0.9, 0.0, 0.0),  # second shade for depth
+    "huldra_tuft":   ((0.24, 0.30, 0.14, 1), 0.95, 0.0, 0.0),
+    "huldra_glint":  ((0.40, 0.62, 0.66, 1), 0.5, 0.0, 0.7),   # cold shimmer at strand tips
     # Tier II: Baldr's Tear
     "baldr_snow":    ((0.72, 0.75, 0.81, 1), 0.7, 0.0, 0.0),
     "baldr_stem":    ((0.33, 0.43, 0.38, 1), 0.8, 0.0, 0.0),
@@ -41,15 +43,16 @@ MATS = {
     "helfern_ember":  ((1.00, 0.33, 0.04, 1), 0.5, 0.0, 2.5),   # ember dots
 }
 
-T1 = dict(  # Huldra's Hair, ~0.35 m
+T1 = dict(  # Huldra's Hair, ~0.3 m: a dense lichen beard on a stout dead branch over a mossy stone
     stone_size=(0.13, 0.10, 0.075), stone_sink=0.015,
-    branch=[(0.05, 0.035, 0.0), (0.045, 0.03, 0.12), (0.025, 0.02, 0.24), (0.0, 0.01, 0.315), (-0.015, 0.0, 0.33)],
-    branch_r=[0.020, 0.017, 0.013, 0.010, 0.006],
-    arm=[(0.035, 0.025, 0.21), (-0.04, 0.015, 0.255), (-0.11, 0.0, 0.265), (-0.15, -0.01, 0.255)],
-    arm_r=[0.011, 0.009, 0.006, 0.003],
-    strands=14, strand_len=(0.08, 0.19), strand_r=0.0028, strand_segs=4, strand_sides=3,
-    glint_segs=1,          # how many segments at each strand tip use huldra_glint
-    leaves=6, leaf_len=0.035,
+    branch=[(0.07, 0.04, 0.0), (0.065, 0.035, 0.13), (0.05, 0.02, 0.25), (0.035, 0.01, 0.31)],
+    branch_r=[0.028, 0.024, 0.019, 0.0],
+    arm=[(0.06, 0.025, 0.25), (-0.01, 0.012, 0.285), (-0.10, 0.0, 0.295), (-0.17, -0.005, 0.28)],
+    arm_r=[0.016, 0.014, 0.011, 0.0],
+    strands=38, strand_len=(0.09, 0.22), strand_w=(0.006, 0.014), strand_segs=3,
+    drapes=8, drape_w=(0.010, 0.020),    # strips spilling over the stone
+    glints=4,                            # strands whose last segment uses huldra_glint
+    tufts=8, tuft_len=0.03,              # small moss cards on the stone top
 )
 T2 = dict(  # Baldr's Tear, ~0.45 m
     mound_r=0.11, mound_h=0.035,
@@ -60,11 +63,11 @@ T2 = dict(  # Baldr's Tear, ~0.45 m
     berries=3, berry_r=0.013,
 )
 T3 = dict(  # Hel's Ember Fern, ~0.5 m
-    columns=6, fronds=7, frond_len=(0.54, 0.64), frond_angle=(82, 12),   # start/end elevation (deg)
+    columns=6, fronds=6, frond_len=(0.50, 0.58), frond_angle=(64, -18),  # start/end elevation (deg); no upright frond
     leaflets=11, leaflet_len=0.11,      # leaflets per side; length of the longest one
     leaflet_fwd=0.45, leaflet_droop=0.3,
-    spore_scale=0.45, spore_drop=0.002, embers=6,
-    ember_anchor_h=0.38,
+    spore_scale=0.32, spore_drop=0.002, spore_from=3, embers=6,   # spores only from leaflet spore_from on
+    ember_anchor_h=0.30,
 )
 # =============================================================================
 
@@ -181,47 +184,75 @@ def bezier(pts, n):
     return out
 
 # ---------------------------------------------------------------- Tier I
+def strip(B, pts, widths, side, mats):
+    """Flat ribbon along pts, width along the horizontal vector side (twisted a little per point)."""
+    rows = []
+    for i, p in enumerate(pts):
+        sd = side[i] if isinstance(side, list) else side
+        rows.append((p - sd*widths[i]/2, p + sd*widths[i]/2))
+    for i in range(len(rows) - 1):
+        (a0, a1), (b0, b1) = rows[i], rows[i+1]
+        B.face([a0, a1, b1, b0], mats[i])
+
 def huldra(rng):
     t = T1; B = Builder()
-    sx, sy, sz = t["stone_size"]
-    B.ico((0, 0, sz - t["stone_sink"]), (sx, sy, sz), "huldra_stone", 1, 0.12, rng, "huldra_moss", 0.55)
-    # second small stone for a less symmetric silhouette
+    sx, sy, sz = t["stone_size"]; sc = Vector((0, 0, sz - t["stone_sink"]))
+    B.ico(sc, (sx, sy, sz), "huldra_stone", 1, 0.10, rng, "huldra_moss", 0.55)
     B.ico((0.10, -0.06, 0.02), (0.05, 0.045, 0.035), "huldra_stone", 1, 0.15, rng, "huldra_moss", 0.6)
-    br = bezier(t["branch"], 7)
-    radii = [t["branch_r"][min(int(i/len(br)*len(t["branch_r"])), len(t["branch_r"])-1)] for i in range(len(br))]
-    radii[-1] = 0.0
-    B.tube(br, radii, 5, "huldra_branch")
+    B.bm.faces.ensure_lookup_table()
+    stones = BVHTree.FromBMesh(B.bm)                 # only the stones exist so far
+    def on_stone(direction, lift=0.003):
+        d = Vector(direction).normalized()
+        hit, nrm, _, _ = stones.ray_cast(sc + d*0.5, -d)
+        return (hit + nrm*lift, nrm) if hit else (sc + d*Vector((sx, sy, sz)).length, d)
+    def stone_floor(p):
+        hit, _, _, _ = stones.ray_cast(p, Vector((0, 0, -1)))
+        return hit.z if hit else 0.0
+    br = bezier(t["branch"], 6)
+    B.tube(br, [t["branch_r"][min(int(i*len(t["branch_r"])/len(br)), 3)] for i in range(len(br)-1)] + [0.0], 6, "huldra_branch")
     arm = bezier(t["arm"], 6)
-    B.tube(arm, [0.011, 0.009, 0.008, 0.006, 0.004, 0.0], 5, "huldra_branch")
-    # broken twig stub on the arm
-    B.tube([arm[3], arm[3] + Vector((0.01, -0.01, 0.045))], [0.004, 0.0], 4, "huldra_branch")
-    # hanging strands from arm + upper branch
-    hangs = arm[1:-1] + br[-3:-1]
+    B.tube(arm, [0.016, 0.015, 0.013, 0.011, 0.008, 0.0], 6, "huldra_branch")
+    # hanging beard: each clump is two crossed ribbons that start on top of the branch, wrap over it and hang down
+    hang = [(arm, 0.15, 0.95, 0.014)]
+    glint_ids = set(rng.sample(range(t["strands"]), t["glints"]))
     for i in range(t["strands"]):
-        a = hangs[i % len(hangs)] + Vector((rng.uniform(-0.012, 0.012), rng.uniform(-0.012, 0.012), -0.006))
-        L = rng.uniform(*t["strand_len"]); segs = t["strand_segs"]
-        sway = Vector((rng.uniform(-0.03, 0.03), rng.uniform(-0.03, 0.03), 0))
-        pts = [a + Vector((0, 0, -L*s/segs)) + sway*math.sin(math.pi*0.5*s/segs)
-               + (Vector((rng.uniform(-0.008, 0.008), rng.uniform(-0.008, 0.008), 0)) if s else Vector()) for s in range(segs+1)]
-        rad = [t["strand_r"]*(1 - 0.75*s/segs) for s in range(segs)] + [0.0]
-        mats = ["huldra_strand"]*(segs - t["glint_segs"]) + ["huldra_glint"]*t["glint_segs"]
-        B.tube(pts, rad, t["strand_sides"], mats)
-        # a flat lichen ribbon beside some strands for volume
-        if i % 2 == 0:
-            d = Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), 0)).normalized()*0.008
-            q = [a + d, a - d, a - d*0.4 + Vector((0, 0, -L*0.7)) + sway*0.8, a + d*0.4 + Vector((0, 0, -L*0.7)) + sway*0.8]
-            B.face(q, "huldra_strand")
-    # lichen lobes (leaf cards) on arm, branch and stone top
-    spots = [arm[1], arm[2], br[3], br[4], Vector((0.02, -0.02, 2*sz - t["stone_sink"] - 0.006)),
-             Vector((-0.05, 0.02, 2*sz - t["stone_sink"] - 0.02))]
-    for i in range(t["leaves"]):
-        c = spots[i % len(spots)]; L = t["leaf_len"]*rng.uniform(0.7, 1.2)
-        ang = rng.uniform(0, 2*math.pi); d = Vector((math.cos(ang), math.sin(ang), 0))
-        side = Vector((-d.y, d.x, 0))
-        tip = c + d*L + Vector((0, 0, rng.uniform(-0.01, 0.015)))
-        B.face([c, c + d*L*0.5 + side*L*0.35, tip, c + d*L*0.5 - side*L*0.35], "huldra_leaf")
+        path, u0, u1, r = hang[0]
+        u = rng.uniform(u0, u1)*(len(path) - 1); j = min(int(u), len(path) - 2)
+        c = path[j].lerp(path[j+1], u - j)
+        tng = (path[j+1] - path[j]).normalized()
+        out = tng.cross(Vector((0, 0, 1))).normalized()*(1 if i % 2 else -1)
+        top = c + Vector((0, 0, r*1.05)); a = c + out*r*1.1 - Vector((0, 0, r*0.3))
+        L = rng.uniform(*t["strand_len"])
+        L = max(0.04, min(L, a.z - stone_floor(a) - 0.012))
+        segs = t["strand_segs"]; sway = rng.uniform(0.008, 0.02)
+        pts = [top] + [a + Vector((0, 0, -L*s/segs)) + out*sway*math.sin(2*math.pi*s/segs) for s in range(segs + 1)]
+        w = rng.uniform(*t["strand_w"])
+        widths = [w*0.8, w] + [w*(1 - 0.4*s/segs) for s in range(1, segs)] + [w*0.45]   # ragged, not pointed
+        m = "huldra_strand" if i % 3 else "huldra_strand_shade"
+        mats = [m]*segs + ["huldra_glint" if i in glint_ids else m]
+        strip(B, pts, widths, tng, mats)
+        if i % 2 == 0:   # crossed second ribbon so the clump never reads edge-on
+            strip(B, pts[1:], widths[1:], out, mats[1:])
+    # strips spilling over the stone, following its surface outwards and down
+    for i in range(t["drapes"]):
+        th = math.pi + math.radians(rng.uniform(-120, 120))     # mostly under the beard (arm reaches to -X)
+        p0, p1 = rng.uniform(55, 80), rng.uniform(-5, 30)
+        pts = [on_stone((math.cos(ph)*math.cos(th)*sx, math.cos(ph)*math.sin(th)*sy, math.sin(ph)*sz), 0.008)[0]
+               for ph in (math.radians(p0 + (p1 - p0)*k/4) for k in range(5))]
+        side = Vector((-math.sin(th), math.cos(th), 0))
+        w = rng.uniform(*t["drape_w"])
+        strip(B, pts, [w, w*1.1, w*0.9, w*0.7, w*0.45], side, ["huldra_strand_shade" if i % 2 else "huldra_strand"]*4)
+    # moss tufts: three splayed little cards on the stone top
+    for i in range(t["tufts"]):
+        th = rng.uniform(0, 2*math.pi); ph = math.radians(rng.uniform(35, 75))
+        c, nrm = on_stone((math.cos(ph)*math.cos(th)*sx, math.cos(ph)*math.sin(th)*sy, math.sin(ph)*sz), 0.0)
+        for k in range(3):
+            aa = th + 2*math.pi*k/3 + rng.uniform(-0.3, 0.3)
+            d = (Vector((math.cos(aa), math.sin(aa), 0)) + nrm*1.2).normalized()*t["tuft_len"]*rng.uniform(0.7, 1.2)
+            sd = Vector((-math.sin(aa), math.cos(aa), 0))*0.007
+            B.face([c - sd, c + sd, c + d], "huldra_tuft")
     ob = B.finish("plant_t1")
-    pick = empty("PickAnchor", arm[2] + Vector((0, 0, -0.04)), ob)
+    pick = empty("PickAnchor", arm[2] + Vector((0, 0, -0.05)), ob)
     return ob, [pick]
 
 # ---------------------------------------------------------------- Tier II
@@ -325,7 +356,7 @@ def helfern(rng):
         az = 2*math.pi*f/n + rng.uniform(-0.25, 0.25)
         d = Vector((math.cos(az), math.sin(az), 0))
         L = rng.uniform(*t["frond_len"])
-        a0, a1 = map(math.radians, t["frond_angle"]); a0 += rng.uniform(-6, 6)/57.3
+        a0, a1 = map(math.radians, t["frond_angle"]); a0 -= rng.uniform(0, 10)/57.3
         segs = 6; p = Vector((0, 0, 0.05)) + d*0.012; pts = [p.copy()]
         for s in range(segs):
             a = a0 + (a1 - a0)*(s + 0.5)/segs
@@ -346,6 +377,7 @@ def helfern(rng):
                 tipv = (qa + qb)/2 + out*ll
                 B.face([qa, tipv, qb], "helfern_frond")
                 # spore dust (sori) on the underside: smaller glowing triangle just behind the leaflet
+                if i < t["spore_from"]: leaf_tips.append(tipv); continue
                 c = (qa + qb + tipv)/3 + out*ll*0.12; back = -nf*t["spore_drop"]
                 B.face([c + (v - c)*t["spore_scale"] + back for v in (qa, tipv, qb)], "helfern_spore")
                 leaf_tips.append(tipv)
@@ -380,7 +412,7 @@ for k, (ob, kids) in plants.items():
         object_types={'MESH', 'EMPTY'}, use_mesh_modifiers=True)
     for a in kids: a.name = f"{a.name}_{k}"
 
-POS = {"t1": (-0.70, 0.0), "t2": (0.0, 0.0), "t3": (0.70, 0.1)}
+POS = {"t1": (-0.64, 0.0), "t2": (0.0, 0.0), "t3": (0.70, 0.1)}
 ROT = {"t1": 0.0, "t2": -1.0, "t3": 0.75}      # preview only (export happened above)
 for k, (ob, kids) in plants.items():
     ob.location = POS[k] + (0,); ob.rotation_euler.z = ROT[k]
@@ -396,7 +428,7 @@ R = Builder()
 for i in range(5):
     R.prism((0, 0, 0), 0.012, 0.1*(i+1), 4, "ruler_a" if i % 2 == 0 else "ruler_b", rot=math.pi/4, z0=0.1*i)
 MATS["ruler_a"] = ((0.85, 0.85, 0.82, 1), 0.6, 0.0, 0.0); MATS["ruler_b"] = ((0.05, 0.05, 0.05, 1), 0.6, 0.0, 0.0)
-ruler = R.finish("ruler_0.5m"); ruler.location = (-0.35, 0.12, 0)
+ruler = R.finish("ruler_0.5m"); ruler.location = (-0.32, 0.12, 0)
 
 def light(name, kind, loc, energy, color, size=1.0, target=(0, 0, 0.2)):
     l = bpy.data.lights.new(name, kind); l.energy = energy; l.color = color

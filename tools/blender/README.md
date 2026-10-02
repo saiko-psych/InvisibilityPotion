@@ -16,27 +16,27 @@ Knobs at the top of `make_bottle.py`:
 2. Mist: `MIST_FILL`, `MIST_INSET`, `MIST_DENSITY`, `MIST_ANISOTROPY`, per-tier `mist_emit`.
 3. Colours: per-tier `glass`, the `MATS` table (cork, twine, iron, silver, crystal), `GLASS_ALPHA`, `GLASS_ROUGH`, `BASE_DARKEN`.
 
-# Ingredient plants (v1)
+# Ingredient plants (v2)
 
 Run from the repo root: `blender -b --python tools/blender/make_plants.py` (about 1 s). Outputs in `tools/blender/out/`
 (gitignored): `plant_t1/t2/t3.fbx` (Y-up, 1 unit = 1 m, pivot at ground level), `preview-plants.png`, `plants.blend`.
-The preview is copied to `tools/blender/preview-plants-v1.png` (1280x720, Eevee, 0.5 m ruler in 0.1 m bands).
+The preview is copied to `tools/blender/preview-plants-v2.png` (1280x720, Eevee, 0.5 m ruler in 0.1 m bands).
 Each FBX is one mesh with named materials plus an empty `PickAnchor` (where a hand grabs it); tier 3 also has
-`EmberAnchor` (0.38 m above the centre) for a spark particle system. Stones and the snow mound sink about 1 cm below 0.
+`EmberAnchor` (0.30 m above the centre) for a spark particle system. Stones and the snow mound sink about 1 cm below 0.
 Leaf cards and strands are single-sided quads: they need a double-sided (cull off) shader in Unity.
 
 | Tier | Name | Biome | Height | Look | Tris |
 |---|---|---|---|---|---|
-| 1 | Huldra's Hair (Huldrelokk) | Black Forest | 0.33 m | pale grey-green lichen strands hanging from a dead branch over a mossy stone, cold glint at the tips | 464 |
+| 1 | Huldra's Hair (Huldrelokk) | Black Forest | 0.31 m | dense lichen beard: 38 flat ribbon clumps (half of them crossed pairs) wrapping over a stout dead branch, strips spilling over a mossy stone, moss tufts, 4 faint tip glints | 654 |
 | 2 | Baldr's Tear (Baldrsgrat) | Mountains | 0.44 m | nodding white snowdrop-like bell with a glowing blue cup and teardrop, closed bud, frosted leaves, 3 white mistletoe berries, snow mound | 484 |
-| 3 | Hel's Ember Fern (Helfern) | Ashlands | 0.49 m | 7 charcoal fronds with sawtooth leaflets, ember spore patches on the leaflet undersides, ember dots, hex basalt columns over glowing cracks | 705 |
+| 3 | Hel's Ember Fern (Helfern) | Ashlands | 0.25 m (about 1 m across) | 6 charcoal fronds arching outwards (none upright), sawtooth leaflets, small ember spore patches on the outer leaflet undersides, ember dots, hex basalt columns over glowing cracks | 592 |
 
 Knobs at the top of `make_plants.py`:
 1. `MATS`: colour, roughness, metallic, emission per material (`huldra_*`, `baldr_*`, `helfern_*`).
-2. `T1`: stone size, branch/arm control points and radii, strand count/length/radius/segments, `glint_segs`, leaf cards.
+2. `T1`: stone size, branch/arm control points and radii, `strands`, `strand_len`, `strand_w`, `strand_segs`, `drapes`, `drape_w`, `glints`, `tufts`, `tuft_len`.
 3. `T2`: mound size, `stem_h`, `nod` (how far the head bends over), bell length/radius/petals, bud stem, leaves, berries.
 4. `T3`: basalt `columns`, `fronds`, `frond_len`, `frond_angle` (start/end elevation), `leaflets` per side,
-   `leaflet_len`, `leaflet_fwd`, `leaflet_droop`, `spore_scale`, `embers`, `ember_anchor_h`. `SEED` for all.
+   `leaflet_len`, `leaflet_fwd`, `leaflet_droop`, `spore_scale`, `spore_from` (first leaflet with spores), `embers`, `ember_anchor_h`. `SEED` for all.
 Preview-only placement: `POS`, `ROT` (turn the flower toward the camera), camera and lights near the end.
 
 # Veil goggles (v1)
