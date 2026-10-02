@@ -34,6 +34,17 @@ namespace InvisibilityPotion.Effects
             if (float.IsNaN(current) || float.IsNaN(staminaRate) || current <= 0f || staminaRate <= 0f) return 0f;
             return current / staminaRate + 1f;
         }
+
+        /// <summary>
+        /// Round R ruling B: lifetime of the Veil Broken debuff (SE_Revealed m_ttl) for a reveal by <paramref name="tier"/>. A tier
+        /// that re-hides keeps it exactly until the veil returns (RehideDelay, restarted with the debuff on every reveal); a tier
+        /// that ends on reveal (tier I) uses DebuffDuration. DebuffDuration 0 is the off switch for every tier (0 = no debuff).
+        /// </summary>
+        public static float DebuffSeconds(TierConfig tier)
+        {
+            if (tier == null || !(tier.DebuffDuration > 0f)) return 0f;
+            return tier.EndsOnReveal ? tier.DebuffDuration : tier.RehideDelay;
+        }
     }
 
     /// <summary>Phase and timer logic of one invisibility effect. Pure: the game side calls MarkRevealed from hooks and Tick from UpdateStatusEffect and acts on the returned flags.</summary>

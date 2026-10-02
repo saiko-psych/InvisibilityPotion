@@ -85,12 +85,21 @@ namespace InvisibilityPotion.Effects
                     Plugin.Log.LogInfo($"T{Tier} veil broken by an own action: stamina emptied");
                 }
             }
-            if (r.ApplyDebuff && Cfg.DebuffDuration > 0f)   // m_ttl 0 would make SE_Revealed permanent (IsDone needs m_ttl > 0)
+            if (r.ApplyDebuff)
             {
+                // Round R ruling B: Veil Broken lasts until the veil returns (RehideDelay) for tiers that re-hide, DebuffDuration
+                // for tier I. m_ttl 0 would make SE_Revealed permanent (IsDone needs m_ttl > 0), so 0 adds nothing.
                 var cfg = Cfg;
-                SE_Revealed.NextMultiplier = cfg.DebuffStaminaRegenMultiplier;
-                SE_Revealed.NextDuration = cfg.DebuffDuration;
-                Owner.GetSEMan().AddStatusEffect(StatusEffects.RevealedHash, resetTime: true);   // add is safe inside SEMan.Update
+                var seconds = RevealPenalty.DebuffSeconds(cfg);
+                if (seconds > 0f)
+                {
+                    SE_Revealed.Next = new SE_Revealed.Values
+                    {
+                        StaminaRegen = cfg.DebuffStaminaRegenMultiplier, EitrRegen = cfg.DebuffEitrRegenMultiplier,
+                        HealthRegen = cfg.DebuffHealthRegenMultiplier, Speed = cfg.DebuffSpeedModifier, Duration = seconds,
+                    };
+                    Owner.GetSEMan().AddStatusEffect(StatusEffects.RevealedHash, resetTime: true);   // add is safe inside SEMan.Update
+                }
             }
             if (r.End)
             {

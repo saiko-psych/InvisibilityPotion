@@ -15,6 +15,12 @@ namespace InvisibilityPotion.Config
         public float AggroLossTime;
         public float RehideDelay;            // <= 0: an attack ends the effect
         public float DebuffStaminaRegenMultiplier = 1f;
+        /// <summary>Veil Broken: SE_Stats.m_speedModifier, additive fraction of the base speed (-0.3 = 30 % slower); 0 = none.</summary>
+        public float DebuffSpeedModifier;
+        /// <summary>Veil Broken: SE_Stats.m_eitrRegenMultiplier (multiplies at or below 1); 1 = none.</summary>
+        public float DebuffEitrRegenMultiplier = 1f;
+        /// <summary>Veil Broken: SE_Stats.m_healthRegenMultiplier (multiplies at or below 1); 1 = none.</summary>
+        public float DebuffHealthRegenMultiplier = 1f;
         public float DebuffDuration;
         public float Cooldown;
         public string Recipe = "";
@@ -29,8 +35,20 @@ namespace InvisibilityPotion.Config
             if (Duration <= 0f) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be > 0");
             if (AggroLossTime < 0f) throw new ArgumentOutOfRangeException(nameof(AggroLossTime));
             if (DebuffDuration < 0f) throw new ArgumentOutOfRangeException(nameof(DebuffDuration));
+            CheckMultiplier(nameof(DebuffStaminaRegenMultiplier), DebuffStaminaRegenMultiplier);
+            CheckMultiplier(nameof(DebuffEitrRegenMultiplier), DebuffEitrRegenMultiplier);
+            CheckMultiplier(nameof(DebuffHealthRegenMultiplier), DebuffHealthRegenMultiplier);
+            if (!(DebuffSpeedModifier >= GameplayDefaults.DebuffSpeedMin && DebuffSpeedModifier <= GameplayDefaults.DebuffSpeedMax))
+                throw new ArgumentOutOfRangeException(nameof(DebuffSpeedModifier), DebuffSpeedModifier,
+                    $"speed modifier must be {GameplayDefaults.DebuffSpeedMin}..{GameplayDefaults.DebuffSpeedMax}");
             if (!(CarryWeightMultiplier >= 0f && CarryWeightMultiplier <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(CarryWeightMultiplier), CarryWeightMultiplier, "carry weight multiplier must be 0..1");
+        }
+
+        private static void CheckMultiplier(string name, float value)
+        {
+            if (!(value >= 0f && value <= GameplayDefaults.DebuffMultiplierMax))
+                throw new ArgumentOutOfRangeException(name, value, $"multiplier must be 0..{GameplayDefaults.DebuffMultiplierMax}");
         }
     }
 
@@ -57,11 +75,13 @@ namespace InvisibilityPotion.Config
     /// Revisions of the server-synced [TierN] gameplay defaults (pure; PluginConfig applies it once per file). A key still at its
     /// old default moves to the new one; a value the admin changed stays. Revision 1 (round Q): DebuffStaminaRegenMultiplier
     /// 0.5 -> 0.25, DebuffDuration 20 -> 15. Revision 2 (round Q): Cooldown 0 (reserved, unused before) -> 90/180/240 s. Revision 3 (user, 2026-10-02 23:20): 30/60/90 s, shorter than the
-    /// tier durations so a higher mead can still replace a running veil near its end (the upgrade stays possible).
+    /// tier durations so a higher mead can still replace a running veil near its end (the upgrade stays possible). Revision 4
+    /// (user, 2026-10-02 23:32, round R): a harsher Veil Broken: DebuffStaminaRegenMultiplier 0.25 -> 0.15; the new keys
+    /// DebuffSpeedModifier, DebuffEitrRegenMultiplier and DebuffHealthRegenMultiplier need no migration (absent keys get their default).
     /// </summary>
     public static class GameplayDefaults
     {
-        public const int Revision = 3;
+        public const int Revision = 4;
 
         /// <summary>[TierN] Cooldown default: the shared Veil Cooldown started by drinking tier N (seconds).</summary>
         public static float Cooldown(int tier)
@@ -78,19 +98,33 @@ namespace InvisibilityPotion.Config
         /// <summary>The revision-2 cooldown defaults (90/180/240), migrated to the revision-3 values when still untouched.</summary>
         public static float Revision2Cooldown(int tier) => tier == 1 ? 90f : tier == 2 ? 180f : tier == 3 ? 240f : 0f;
 
-        public const float DebuffStaminaRegenMultiplier = 0.25f;
+        public const float DebuffStaminaRegenMultiplier = 0.15f;
+        /// <summary>The revision 1..3 default of DebuffStaminaRegenMultiplier, migrated to the revision-4 value when still untouched.</summary>
+        public const float Revision3DebuffStaminaRegenMultiplier = 0.25f;
+        public const float DebuffEitrRegenMultiplier = 0.25f;
+        public const float DebuffHealthRegenMultiplier = 0.5f;
         public const float DebuffDuration = 15f;
+        /// <summary>Allowed range of the Veil Broken regen multipliers (config and Validate).</summary>
+        public const float DebuffMultiplierMax = 5f;
+        /// <summary>Allowed range of DebuffSpeedModifier (additive fraction; -0.9 = 90 % slower).</summary>
+        public const float DebuffSpeedMin = -0.9f;
+        public const float DebuffSpeedMax = 1f;
+
+        /// <summary>[TierN] DebuffSpeedModifier default: tier I -0.2, tier II/III -0.3.</summary>
+        public static float DebuffSpeedModifier(int tier) => tier == 1 ? -0.2f : -0.3f;
 
         /// <summary>The value of [Tier<paramref name="tier"/>] <paramref name="key"/> after migrating a file from <paramref name="fromRevision"/>.</summary>
         public static float Migrate(string key, int tier, float current, int fromRevision)
         {
+            // Steps run in order, so an old file moves through every revision (0.5 -> 0.25 -> 0.15).
             if (fromRevision < 1)
             {
-                if (key == "DebuffStaminaRegenMultiplier" && Same(current, 0.5f)) return DebuffStaminaRegenMultiplier;
-                if (key == "DebuffDuration" && Same(current, 20f)) return DebuffDuration;
+                if (key == "DebuffStaminaRegenMultiplier" && Same(current, 0.5f)) current = Revision3DebuffStaminaRegenMultiplier;
+                if (key == "DebuffDuration" && Same(current, 20f)) current = DebuffDuration;
             }
             if (fromRevision < 2 && key == "Cooldown" && Same(current, 0f)) return Cooldown(tier);
             if (fromRevision < 3 && key == "Cooldown" && Same(current, Revision2Cooldown(tier))) return Cooldown(tier);
+            if (fromRevision < 4 && key == "DebuffStaminaRegenMultiplier" && Same(current, Revision3DebuffStaminaRegenMultiplier)) return DebuffStaminaRegenMultiplier;
             return current;
         }
 

@@ -483,8 +483,18 @@ namespace InvisibilityPotion.Dev
                     // Round Q: shared Veil Cooldown and the Veil Broken debuff.
                     var cd = p.GetSEMan().GetStatusEffect(Effects.StatusEffects.CooldownHash);
                     var rev = p.GetSEMan().GetStatusEffect(Effects.StatusEffects.RevealedHash) as SE_Stats;
+                    var revText = rev == null ? "none"
+                        : $"{rev.GetRemaningTime():F1}s of {rev.m_ttl:F0}s left, stamina regen x{rev.m_staminaRegenMultiplier:F2}, eitr regen x{rev.m_eitrRegenMultiplier:F2}, " +
+                          $"health regen x{rev.m_healthRegenMultiplier:F2}, speed {rev.m_speedModifier:+0.00;-0.00}";
                     Say($"cooldown: {(cd == null ? "none" : $"{cd.GetRemaningTime():F1}s of {cd.m_ttl:F0}s left")} (config T1 {Cfg.PluginConfig.Tier(1).Cooldown:F0}, T2 {Cfg.PluginConfig.Tier(2).Cooldown:F0}, T3 {Cfg.PluginConfig.Tier(3).Cooldown:F0}); " +
-                        $"veil broken: {(rev == null ? "none" : $"{rev.GetRemaningTime():F1}s of {rev.m_ttl:F0}s left, stamina regen x{rev.m_staminaRegenMultiplier:F2}")}; stamina {p.GetStamina():F0}/{p.GetMaxStamina():F0}");
+                        $"veil broken: {revText}; stamina {p.GetStamina():F0}/{p.GetMaxStamina():F0}");
+                    // Round R: the Veil Broken config per tier (lifetime = RevealPenalty.DebuffSeconds: RehideDelay for re-hiding tiers).
+                    for (var t = 1; t <= 3; t++)
+                    {
+                        var tc = Cfg.PluginConfig.Tier(t);
+                        Say($"veil broken config T{t}: {Effects.RevealPenalty.DebuffSeconds(tc):F0}s (DebuffDuration {tc.DebuffDuration:F0}, RehideDelay {tc.RehideDelay:F0}), " +
+                            $"stamina regen x{tc.DebuffStaminaRegenMultiplier:F2}, eitr regen x{tc.DebuffEitrRegenMultiplier:F2}, health regen x{tc.DebuffHealthRegenMultiplier:F2}, speed {tc.DebuffSpeedModifier:+0.00;-0.00}");
+                    }
                     var mine = ZDOMan.GetSessionID();
                     foreach (var c in Character.GetAllCharacters())
                     {

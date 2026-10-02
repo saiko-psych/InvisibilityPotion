@@ -97,9 +97,19 @@ namespace InvisibilityPotion.Config
                 ["AggroLossTime"] = Bind(section, "AggroLossTime", aggroLoss, "Seconds a chasing enemy keeps searching before it gives up. Values above 30 have no effect (vanilla's own limit); lower values make enemies give up sooner"),
                 ["RehideDelay"] = Bind(section, "RehideDelay", rehide, "Seconds without attacking until hidden again; 0 = an attack ends the effect"),
                 ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", GameplayDefaults.DebuffStaminaRegenMultiplier,
-                                                        "Veil Broken debuff: stamina regeneration multiplier after being revealed (0.25 = a quarter of the normal regeneration)"),
+                                                        "Veil Broken debuff: stamina regeneration multiplier after being revealed (0.15 = 15 % of the normal regeneration, 1 = no penalty)",
+                                                        DebuffMultiplierRange()),
+                ["DebuffEitrRegenMultiplier"] = Bind(section, "DebuffEitrRegenMultiplier", GameplayDefaults.DebuffEitrRegenMultiplier,
+                                                     "Veil Broken debuff: eitr regeneration multiplier (0.25 = a quarter of the normal regeneration, 1 = no penalty)",
+                                                     DebuffMultiplierRange()),
+                ["DebuffHealthRegenMultiplier"] = Bind(section, "DebuffHealthRegenMultiplier", GameplayDefaults.DebuffHealthRegenMultiplier,
+                                                       "Veil Broken debuff: health regeneration multiplier (0.5 = half the normal regeneration, 1 = no penalty)",
+                                                       DebuffMultiplierRange()),
+                ["DebuffSpeedModifier"] = Bind(section, "DebuffSpeedModifier", GameplayDefaults.DebuffSpeedModifier(tier),
+                                               "Veil Broken debuff: movement speed change as a fraction of the normal speed (-0.3 = 30 % slower, 0 = no penalty)",
+                                               new AcceptableValueRange<float>(GameplayDefaults.DebuffSpeedMin, GameplayDefaults.DebuffSpeedMax)),
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", GameplayDefaults.DebuffDuration,
-                                          "Veil Broken debuff: duration in seconds, restarted on every reveal; shown in the status bar. 0 = no debuff"),
+                                          "Veil Broken debuff: duration in seconds, restarted on every reveal; shown in the status bar. For tiers that re-hide, the Veil Broken debuff lasts until the veil returns (RehideDelay); DebuffDuration applies to tier I (RehideDelay 0). 0 = no debuff (any tier)"),
                 ["CarryWeightMultiplier"] = Bind(section, "CarryWeightMultiplier", carry,
                                                  "Max carry weight while the effect is active, as a fraction of the normal limit (Megingjord and world settings included). 1 = no penalty. Being over the limit slows the player as in vanilla",
                                                  new AcceptableValueRange<float>(0f, 1f)),
@@ -322,6 +332,8 @@ namespace InvisibilityPotion.Config
         private static ConfigEntry<T> Bind<T>(string section, string key, T value, string description, AcceptableValueBase acceptable = null) =>
             _file.Bind(section, key, value, new ConfigDescription(description, acceptable, new ConfigurationManagerAttributes { IsAdminOnly = true }));
 
+        private static AcceptableValueRange<float> DebuffMultiplierRange() => new AcceptableValueRange<float>(0f, GameplayDefaults.DebuffMultiplierMax);
+
         private static readonly string[] BodyVeilModes = { "Off", "Cutoff", "Hide", "Tint", "Ghost", "Distortion", "Shadow", "Spirit" };
 
         /// <summary>The mode names with the tier's default first: BepInEx clamps an unlisted value to the first entry, i.e. the default.</summary>
@@ -354,6 +366,9 @@ namespace InvisibilityPotion.Config
                 AggroLossTime = V<float>("AggroLossTime"),
                 RehideDelay = V<float>("RehideDelay"),
                 DebuffStaminaRegenMultiplier = V<float>("DebuffStaminaRegenMultiplier"),
+                DebuffEitrRegenMultiplier = V<float>("DebuffEitrRegenMultiplier"),
+                DebuffHealthRegenMultiplier = V<float>("DebuffHealthRegenMultiplier"),
+                DebuffSpeedModifier = V<float>("DebuffSpeedModifier"),
                 DebuffDuration = V<float>("DebuffDuration"),
                 CarryWeightMultiplier = V<float>("CarryWeightMultiplier"),
                 Cooldown = V<float>("Cooldown"),

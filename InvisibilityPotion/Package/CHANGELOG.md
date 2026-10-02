@@ -11,6 +11,7 @@
 - Carry weight is reduced while a veil is active (tier I 75 %, tier II 60 %, tier III 50 %).
 - Tool use reveals you: axe and pickaxe swings, building with the hammer, hoe and cultivator (config `RevealOnToolUse`).
 - Veil Cooldown: one shared cooldown after drinking (30/60/90 s by tier, shorter than the veil so a stronger mead can still replace a running one). The reveal debuff is now "Veil Broken": stamina regeneration 25 % for 15 s. Breaking the veil by your own action empties the stamina bar. Unchanged old defaults in the config are migrated automatically.
+- Harsher Veil Broken, lasting until the veil returns (tier II/III; tier I 15 s): stamina regeneration 15 %, eitr 25 %, health 50 %, movement 30 % slower (tier I 20 %); new `[TierN]` keys `DebuffSpeedModifier`, `DebuffEitrRegenMultiplier`, `DebuffHealthRegenMultiplier`.
 
 ## 0.2.0
 

@@ -21,7 +21,7 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 - Dealing damage, taking damage, blocking or parrying, drawing a bow, casting with a staff.
 - Tool use: swinging an axe or pickaxe (at anything, even air), building with the hammer, using the hoe or the cultivator. Picking plants by hand does not reveal you.
-- A reveal gives the **Veil Broken** debuff: stamina regenerates at a quarter of the usual speed for 15 s (restarted on every reveal).
+- A reveal gives the **Veil Broken** debuff until the veil returns (tier II/III: `RehideDelay`, tier I: 15 s, restarted on every reveal): stamina regeneration 15 %, eitr regeneration 25 %, health regeneration 50 %, movement 30 % slower (tier I 20 %).
 - Breaking your own veil by acting (hitting, drawing a bow, casting, using a tool) also empties your stamina bar (`DrainStaminaOnAttackReveal`). Taking damage or blocking does not.
 
 Each trigger can be switched off in the config (`RevealOnDamage`, `RevealOnBlock`, `RevealOnBowDraw`, `RevealOnToolUse`).
@@ -60,7 +60,7 @@ Sprouts are veil plants too: you need goggles to see them grow.
 
 Highlights:
 
-- `[TierN]` `Duration`, `Cooldown`, `RehideDelay`, `AggroLossTime`, `CarryWeightMultiplier`, `DebuffStaminaRegenMultiplier`, `DebuffDuration`, `Recipe`.
+- `[TierN]` `Duration`, `Cooldown`, `RehideDelay`, `AggroLossTime`, `CarryWeightMultiplier`, `DebuffStaminaRegenMultiplier`, `DebuffEitrRegenMultiplier`, `DebuffHealthRegenMultiplier`, `DebuffSpeedModifier`, `DebuffDuration`, `Recipe`.
 - `[General]` the reveal switches above, `DrainStaminaOnAttackReveal`, `AllowPvpInvisibility` (server switch for tier III hiding from players).
 - `[Goggles]` `RecipeT1..3`, `RevealHiddenPlayers`.
 - `[Plants]` lichen chance per tree, zone chances for the ground plants, growth and regrowth times, yields.

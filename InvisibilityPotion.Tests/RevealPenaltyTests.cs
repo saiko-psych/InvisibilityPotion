@@ -115,7 +115,8 @@ public class GameplayDefaultsTests
     public void Revision1_MovesOnlyUntouchedOldDebuffDefaults()
     {
         Assert.True(GameplayDefaults.Revision >= 1);
-        Assert.Equal(0.25f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.5f, 0));
+        // A revision-0 file at 0.5 moves through 0.25 (revision 1) to 0.15 (revision 4).
+        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.5f, 0));
         Assert.Equal(15f, GameplayDefaults.Migrate("DebuffDuration", 2, 20f, 0));
         // A value the admin changed stays.
         Assert.Equal(0.7f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.7f, 0));
@@ -124,5 +125,90 @@ public class GameplayDefaultsTests
         Assert.Equal(0.5f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.5f, 1));
         // Unknown keys are untouched.
         Assert.Equal(60f, GameplayDefaults.Migrate("Duration", 1, 60f, 0));
+    }
+}
+
+public class VeilBrokenTests
+{
+    private static TierConfig Tier(int t, float rehide, float debuff) =>
+        new TierConfig { Tier = t, Duration = 60f, RehideDelay = rehide, DebuffDuration = debuff };
+
+    [Fact]
+    public void DebuffSeconds_ReHidingTiersLastUntilTheVeilReturns()
+    {
+        // Round R ruling B: Veil Broken ends exactly when the veil comes back.
+        Assert.Equal(12f, RevealPenalty.DebuffSeconds(Tier(2, 12f, 15f)));
+        Assert.Equal(8f, RevealPenalty.DebuffSeconds(Tier(3, 8f, 15f)));
+        Assert.Equal(30f, RevealPenalty.DebuffSeconds(Tier(2, 30f, 15f)));
+        // Tier I (the effect ends on reveal) keeps DebuffDuration.
+        Assert.Equal(15f, RevealPenalty.DebuffSeconds(Tier(1, 0f, 15f)));
+        Assert.Equal(15f, RevealPenalty.DebuffSeconds(Tier(2, -1f, 15f)));
+        // DebuffDuration 0 stays the off switch for every tier.
+        Assert.Equal(0f, RevealPenalty.DebuffSeconds(Tier(1, 0f, 0f)));
+        Assert.Equal(0f, RevealPenalty.DebuffSeconds(Tier(2, 12f, 0f)));
+        Assert.Equal(0f, RevealPenalty.DebuffSeconds(null));
+    }
+
+    [Fact]
+    public void Defaults_HarsherDebuff()
+    {
+        Assert.Equal(0.15f, GameplayDefaults.DebuffStaminaRegenMultiplier, 5);
+        Assert.Equal(-0.2f, GameplayDefaults.DebuffSpeedModifier(1), 5);
+        Assert.Equal(-0.3f, GameplayDefaults.DebuffSpeedModifier(2), 5);
+        Assert.Equal(-0.3f, GameplayDefaults.DebuffSpeedModifier(3), 5);
+        Assert.Equal(0.25f, GameplayDefaults.DebuffEitrRegenMultiplier, 5);
+        Assert.Equal(0.5f, GameplayDefaults.DebuffHealthRegenMultiplier, 5);
+        var c = new TierConfig();
+        Assert.Equal(0f, c.DebuffSpeedModifier);
+        Assert.Equal(1f, c.DebuffEitrRegenMultiplier);
+        Assert.Equal(1f, c.DebuffHealthRegenMultiplier);
+    }
+
+    [Fact]
+    public void Revision4_MovesOnlyAnUntouchedStaminaRegenMultiplier()
+    {
+        Assert.Equal(4, GameplayDefaults.Revision);
+        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.25f, 3));
+        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 1, 0.25f, 1));
+        Assert.Equal(0.4f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.4f, 3));   // admin value stays
+        Assert.Equal(0.25f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.25f, 4)); // already migrated
+        // Revision 4 does not touch the cooldown chain.
+        Assert.Equal(60f, GameplayDefaults.Migrate("Cooldown", 2, 60f, 3));
+    }
+
+    [Theory]
+    [InlineData("DebuffStaminaRegenMultiplier", -0.1f)]
+    [InlineData("DebuffStaminaRegenMultiplier", 5.1f)]
+    [InlineData("DebuffEitrRegenMultiplier", -0.1f)]
+    [InlineData("DebuffEitrRegenMultiplier", 6f)]
+    [InlineData("DebuffHealthRegenMultiplier", -1f)]
+    [InlineData("DebuffHealthRegenMultiplier", float.NaN)]
+    [InlineData("DebuffSpeedModifier", -0.95f)]
+    [InlineData("DebuffSpeedModifier", 1.5f)]
+    public void Validate_RejectsDebuffValuesOutOfRange(string key, float value)
+    {
+        var c = Tier(2, 12f, 15f);
+        switch (key)
+        {
+            case "DebuffStaminaRegenMultiplier": c.DebuffStaminaRegenMultiplier = value; break;
+            case "DebuffEitrRegenMultiplier": c.DebuffEitrRegenMultiplier = value; break;
+            case "DebuffHealthRegenMultiplier": c.DebuffHealthRegenMultiplier = value; break;
+            case "DebuffSpeedModifier": c.DebuffSpeedModifier = value; break;
+        }
+        var ex = Assert.Throws<System.ArgumentOutOfRangeException>(() => c.Validate());
+        Assert.Equal(key, ex.ParamName);
+    }
+
+    [Fact]
+    public void Validate_AcceptsTheRangeEnds()
+    {
+        var c = Tier(2, 12f, 15f);
+        c.DebuffStaminaRegenMultiplier = 0f; c.DebuffEitrRegenMultiplier = 5f; c.DebuffHealthRegenMultiplier = 1f; c.DebuffSpeedModifier = -0.9f;
+        c.Validate();
+        c.DebuffSpeedModifier = 1f;
+        c.Validate();
+        Assert.Equal(GameplayDefaults.DebuffMultiplierMax, 5f);
+        Assert.Equal(GameplayDefaults.DebuffSpeedMin, -0.9f);
+        Assert.Equal(GameplayDefaults.DebuffSpeedMax, 1f);
     }
 }

@@ -37,7 +37,7 @@ public class VeilCooldownTests
     [Fact]
     public void Revision2_MovesTheReservedCooldownZeroToTheTierDefault()
     {
-        Assert.Equal(3, GameplayDefaults.Revision);
+        Assert.True(GameplayDefaults.Revision >= 3);
         Assert.Equal(30f, GameplayDefaults.Migrate("Cooldown", 1, 0f, 0));
         Assert.Equal(60f, GameplayDefaults.Migrate("Cooldown", 2, 180f, 2));   // revision-2 default moves to revision 3
         Assert.Equal(200f, GameplayDefaults.Migrate("Cooldown", 2, 200f, 2));  // an admin value stays

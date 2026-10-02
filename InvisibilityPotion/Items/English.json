@@ -20,7 +20,7 @@
   "ip_se_start": "The veil settles over you",
   "ip_se_stop": "The veil fades",
   "ip_se_revealed_name": "Veil Broken",
-  "ip_se_revealed_tooltip": "Your veil was broken. Stamina regenerates slowly.",
+  "ip_se_revealed_tooltip": "Your veil was broken: you move slower and regenerate stamina, eitr and health slowly until the veil returns.",
   "ip_se_cooldown_name": "Veil Cooldown",
   "ip_se_cooldown_tooltip": "No veil mead can be drunk until this runs out.",
   "ip_msg_lower_tier": "A stronger veil is already active",
