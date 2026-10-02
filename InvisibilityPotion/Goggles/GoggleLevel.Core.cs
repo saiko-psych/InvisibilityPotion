@@ -44,6 +44,11 @@ namespace InvisibilityPotion.Goggles
         /// <summary>Crafting station prefab name: forge for I and II, blackforge (Galdr table's forge, Mistlands) for III.</summary>
         public static string Station(int tier) => CheckTier(tier) == 3 ? "blackforge" : "forge";
 
+        private static readonly int[] StationLevels = { 0, 1, 3, 2 };
+
+        /// <summary>Minimum station level (round N ruling 1): I forge 1, II forge 3, III blackforge 2.</summary>
+        public static int StationLevel(int tier) => StationLevels[CheckTier(tier)];
+
         private static int CheckTier(int tier)
         {
             if (tier < 1 || tier > Max) throw new ArgumentOutOfRangeException(nameof(tier));

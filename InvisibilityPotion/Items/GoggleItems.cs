@@ -9,8 +9,8 @@ using Jotunn.Managers;
 namespace InvisibilityPotion.Items
 {
     /// <summary>
-    /// The veil goggles (bundle Goggles_T1..3) as helmet items: armour 2/4/6, recipes from [Goggles] RecipeT1..3 at the forge (I, II)
-    /// and the black forge (III), each upgrade consuming the previous goggles (plan 5 §3.5). No status effect: the level is read
+    /// The veil goggles (bundle Goggles_T1..3) as helmet items: armour 2/4/6, recipes from [Goggles] RecipeT1..3 at the forge (I level 1, II level 3)
+    /// and the black forge (III level 2), each upgrade consuming the previous goggles (plan 5 §3.5). No status effect: the level is read
     /// from the helmet slot by Goggles.GogglesLevel.
     /// Data template HelmetLeather; set bonus, equip effect and hair hiding are cleared. Shown on the head through the prefab's
     /// direct child "attach" (VisEquipment.SetHelmetEquipped -> AttachItem on the helmet joint).
@@ -56,13 +56,13 @@ namespace InvisibilityPotion.Items
                 Description = $"$item_veilgoggles_t{t}_description",
                 Enabled = requirements != null,
                 CraftingStation = GoggleLevel.Station(t),
-                MinStationLevel = 1,
+                MinStationLevel = GoggleLevel.StationLevel(t),
                 Requirements = requirements ?? new RequirementConfig[0],
             }));
             var sprite = RenderManager.Instance.Render(go, RenderManager.IsometricRotation);
             if (sprite != null) shared.m_icons = new[] { sprite };
             Plugin.Log.LogInfo($"assets: goggles {ItemName(t)} registered (helmet, armour {shared.m_armor}, icon {(sprite != null ? "rendered" : "missing")}, " +
-                               $"recipe {(requirements == null ? "none" : string.Join(",", requirements.Select(r => $"{r.Item}:{r.Amount}")))} at {GoggleLevel.Station(t)})");
+                               $"recipe {(requirements == null ? "none" : string.Join(",", requirements.Select(r => $"{r.Item}:{r.Amount}")))} at {GoggleLevel.Station(t)} level {GoggleLevel.StationLevel(t)})");
         }
 
         /// <summary>

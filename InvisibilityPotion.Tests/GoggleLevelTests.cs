@@ -54,4 +54,14 @@ public class GoggleLevelTests
         Assert.Equal("blackforge", GoggleLevel.Station(3));
         Assert.Throws<System.ArgumentOutOfRangeException>(() => GoggleLevel.DefaultRecipe(4));
     }
+
+    [Fact]
+    public void Station_levels_follow_ruling_n1()
+    {
+        Assert.Equal(1, GoggleLevel.StationLevel(1));
+        Assert.Equal(3, GoggleLevel.StationLevel(2));
+        Assert.Equal(2, GoggleLevel.StationLevel(3));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => GoggleLevel.StationLevel(0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => GoggleLevel.StationLevel(4));
+    }
 }
