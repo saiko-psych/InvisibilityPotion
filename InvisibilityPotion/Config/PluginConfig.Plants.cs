@@ -26,7 +26,7 @@ namespace InvisibilityPotion.Config
             _plantEntries["LichenRevealDistance"] = Bind(PlantsSection, "LichenRevealDistance", 40f,
                 "Metres within which goggles show the lichen on a tree (the tree's distant LOD does not carry it); 0 = no limit", new AcceptableValueRange<float>(0f, 1000f));
             _plantEntries["HuldraCultivable"] = Bind(PlantsSection, "HuldraCultivable", true,
-                "Huldra's Hair can be planted with the Cultivator on cultivated ground (costs 1 Huldra's Hair). Read at startup");
+                "Huldra's Hair can be planted with the Cultivator on the trunk of a fir or pine (within 1 m; costs 1 Huldra's Hair). Read at startup");
             _plantEntries["CultivateMinutes"] = Bind(PlantsSection, "CultivateMinutes", 240f,
                 "Minutes of world time (vanilla thistle: 240) until a planted Baldr's Tear or Hel's Ember Fern sprout is grown (Cultivator, cultivated ground in its own biome). Read at startup", new AcceptableValueRange<float>(1f, 100000f));
             _plantEntries["BaldrZoneChance"] = Bind(PlantsSection, "BaldrZoneChance", 0.167f,

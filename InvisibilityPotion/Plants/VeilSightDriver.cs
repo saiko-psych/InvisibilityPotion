@@ -42,6 +42,13 @@ namespace InvisibilityPotion.Plants
             }
         }
 
+        /// <summary>After every Update, so a queued sapling message replaces the vanilla one set in the same frame.</summary>
+        private void LateUpdate()
+        {
+            try { TreeSapling.FlushMessage(); }
+            catch (Exception e) { LogOnce("sapling message", e); }
+        }
+
         private void LogOnce(string where, Exception e)
         {
             if (_loggedErrors.Add(where + e.GetType().Name + e.Message)) Plugin.Log.LogError($"veil sight ({where}) failed: {e}");

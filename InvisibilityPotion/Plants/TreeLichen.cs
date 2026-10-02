@@ -19,7 +19,13 @@ namespace InvisibilityPotion.Plants
     public sealed class TreeLichen : MonoBehaviour
     {
         /// <summary>Tree prefabs that may carry lichen (S1: verified by the "plants: tree" startup lines; missing names are skipped).</summary>
-        public static readonly string[] EligibleTrees = { "FirTree", "Pinetree_01", "FirTree_big" };
+        public static readonly string[] EligibleTrees = TreeSaplingRule.EligibleTrees;
+        /// <summary>ZDO prefab hashes of <see cref="EligibleTrees"/> (ZNetScene.GetPrefabHash = name.GetStableHashCode, ZNetScene.cs:151).</summary>
+        public static readonly HashSet<int> EligibleHashes = new HashSet<int>(EligibleTrees.Select(n => n.GetStableHashCode()));
+        /// <summary>RPC to the tree's ZDO owner: plant Huldra's Hair here (sent by <see cref="TreeSapling"/>).</summary>
+        public const string RpcPlant = "IP_LichenPlant";
+        /// <summary>Seconds between the checks for an IP_LichenForce change made by another peer.</summary>
+        public const float PollInterval = 5f;
         /// <summary>Dumped at startup for the eligibility decision, never given the component.</summary>
         public static readonly string[] InspectOnly = { "FirTree_small", "FirTree_small_dead", "PineTree_01_dead", "Pine_tree_normal_small" };
 
@@ -38,6 +44,10 @@ namespace InvisibilityPotion.Plants
         private GameObject _lichen;
 
         public GameObject Lichen => _lichen;
+        public bool HasLichen => _lichen != null;
+        public ZNetView View => _nview;
+        /// <summary>ZDO prefab hash of this tree, 0 without a valid view.</summary>
+        public int PrefabHash => _nview != null && _nview.IsValid() ? _nview.GetZDO().GetPrefab() : 0;
         public string Decision { get; private set; } = "pending";
         public double LastRoll { get; private set; } = double.NaN;
         public Heightmap.Biome LastBiome { get; private set; }
@@ -49,6 +59,43 @@ namespace InvisibilityPotion.Plants
             All.Add(this);
             try { Evaluate(); }
             catch (Exception e) { LogOnce("eval" + e.GetType().Name, $"lichen: {PrefabName}: evaluation failed: {e}"); }
+            if (_nview == null || !_nview.IsValid()) return;
+            try { _nview.Register(RpcPlant, RPC_Plant); }
+            catch (ArgumentException e) { LogOnce("rpc", $"lichen: {PrefabName}: {RpcPlant} already registered ({e.Message})"); }
+            InvokeRepeating(nameof(Poll), UnityEngine.Random.Range(0.5f, PollInterval), PollInterval);
+        }
+
+        /// <summary>
+        /// Round N ruling 2: a planted sapling forces lichen through the tree's ZDO, written by the tree's owner; every other peer
+        /// notices the key here within <see cref="PollInterval"/> s. Cheap: one GetInt, Evaluate only on a mismatch.
+        /// </summary>
+        private void Poll()
+        {
+            try
+            {
+                if (_nview == null || !_nview.IsValid()) return;
+                var force = _nview.GetZDO().GetInt(ForceHash, 0);
+                if ((force > 0 && _lichen == null) || (force < 0 && _lichen != null)) Evaluate();
+            }
+            catch (Exception e) { LogOnce("poll" + e.GetType().Name, $"lichen: {PrefabName}: poll failed: {e}"); }
+        }
+
+        /// <summary>Asks the tree's ZDO owner to plant Huldra's Hair (InvokeRPC routes to the owner, ZNetView.cs:331).</summary>
+        public void RequestPlant()
+        {
+            if (_nview != null && _nview.IsValid()) _nview.InvokeRPC(RpcPlant);
+        }
+
+        /// <summary>Owner side: IP_LichenForce = 1, IP_LichenStage = 1 (S1), IP_LichenTime = now; the patch appears at once here.</summary>
+        private void RPC_Plant(long sender)
+        {
+            if (_nview == null || !_nview.IsValid() || !_nview.IsOwner()) return;
+            var zdo = _nview.GetZDO();
+            zdo.Set(ForceHash, 1);
+            zdo.Set(VeilHarvest.LichenStageHash, 1);
+            zdo.Set(VeilHarvest.LichenTimeHash, ZNet.instance.GetTime().Ticks);
+            Evaluate();
+            Plugin.Log.LogInfo($"lichen: planted on {PrefabName} at {transform.position:F1} for peer {sender}: force 1, stage 1 (S1), patch {(_lichen != null ? "created" : "missing")}");
         }
 
         private void OnDestroy() => All.Remove(this);

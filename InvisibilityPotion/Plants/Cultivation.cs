@@ -10,13 +10,11 @@ using UnityEngine;
 namespace InvisibilityPotion.Plants
 {
     /// <summary>
-    /// Huldra's Hair on cultivated ground (spec §3.4). The sapling IP_HuldraSapling is a clone of a vanilla crop sapling (Piece with
-    /// m_cultivatedGroundOnly, Plant, Destructible, ZNetView, place effects) whose four visual children are replaced by the flat
-    /// lichen at S1/S2 size; Plant swaps them with SetActive at 50 % (Plant.cs:152-159) and Grow instantiates one of
-    /// IP_HuldraGround_a/b/c and destroys the sapling (Plant.cs:181-213). The grown plant is a VeilHarvest with three stages and the
-    /// IP_PlantStage/IP_PlantTime keys: no keys = S3 ripe; after a pick it replays S1 -> S2 -> S3. Both carry VeilSight(1). The
-    /// piece goes into the Cultivator table (PieceTables.Cultivator = "_CultivatorPieceTable") and costs 1 VeilIngredient_T1.
-    /// Round N: IP_BaldrSapling / IP_FernSapling (<see cref="Crops"/>) grow the wild ground plants in their own biome.
+    /// Cultivator pieces (spec §3.4, round N rulings 2 and 3). IP_HuldraSapling is planted on a fir/pine trunk and turns into lichen
+    /// on that tree (<see cref="TreeSapling"/>); IP_BaldrSapling / IP_FernSapling (<see cref="Crops"/>) are vanilla-style crop
+    /// saplings on cultivated ground in their own biome that grow into the wild ground plants. All are clones of a vanilla crop
+    /// sapling and carry a VeilSight of their tier. IP_HuldraGround_a/b/c (the former flat ground lichen) stay registered so
+    /// objects in older worlds still load, but no sapling grows into them.
     /// </summary>
     public static class Cultivation
     {
@@ -42,8 +40,8 @@ namespace InvisibilityPotion.Plants
                 }
                 catch (Exception e) { Plugin.Log.LogError($"cultivation: {GroundPrefix}{v} failed: {e}"); }
             }
-            if (grown.Count == 0) Plugin.Log.LogError("cultivation: no grown prefab; Huldra sapling not registered");
-            else BuildSapling(grown.ToArray());
+            // Round N ruling 2: no ground lichen any more; IP_HuldraGround_* stay registered (old worlds) but nothing grows into them.
+            BuildTreeSapling(grown.ToArray());
             foreach (var c in Crops)
             {
                 try { BuildCropSapling(c); }
@@ -75,7 +73,7 @@ namespace InvisibilityPotion.Plants
         public static bool IsOurSapling(string name) =>
             name.StartsWith(SaplingName, StringComparison.Ordinal) || Crops.Any(c => name.StartsWith(c.Name, StringComparison.Ordinal));
 
-        /// <summary>Vanilla crop sapling clone (Piece, Plant, Destructible, ZNetView, place effects) as in <see cref="BuildSapling"/>.</summary>
+        /// <summary>Clone of the first vanilla crop sapling found (Piece, Plant, Destructible, ZNetView, place effects).</summary>
         private static (GameObject go, string source) CloneSource(string name)
         {
             foreach (var n in SaplingSources)
@@ -202,7 +200,7 @@ namespace InvisibilityPotion.Plants
             harvest.MaxStage = 3;
             harvest.OnTree = false;
             harvest.NameToken = PlantPrefabs.NameToken(1);
-            var destructible = root.AddComponent<Destructible>();   // Destructible.cs:5-45; effects copied from the sapling source in BuildSapling
+            var destructible = root.AddComponent<Destructible>();   // Destructible.cs:5-45; effects copied from the sapling source in BuildTreeSapling
             destructible.m_health = 1f;
             destructible.m_minToolTier = 0;
             destructible.m_spawnWhenDestroyed = null;
@@ -211,54 +209,26 @@ namespace InvisibilityPotion.Plants
             return root;
         }
 
-        private static void BuildSapling(GameObject[] grown)
+        /// <summary>
+        /// Round N ruling 2: IP_HuldraSapling is planted on a fir/pine trunk. A clone of a vanilla crop sapling (Piece, ZNetView,
+        /// Destructible, place effects) without its Plant: no ground or cultivated-ground rule (the ray may hit the trunk), a
+        /// <see cref="TreeSapling"/> that converts it into lichen on the tree, the flat lichen S1 as the ghost's look.
+        /// </summary>
+        private static void BuildTreeSapling(GameObject[] grownForDestructible)
         {
-            string source = null;
-            GameObject go = null;
-            foreach (var n in SaplingSources)
-            {
-                var src = PrefabManager.Instance.GetPrefab(n);
-                if (src == null || src.GetComponent<Plant>() == null || src.GetComponent<Piece>() == null) continue;
-                Plugin.Log.LogInfo($"cultivation: source {n}: {ModelPrefabs.ComponentList(src)}; children {string.Join(", ", src.transform.Cast<Transform>().Select(t => t.name))}; " +
-                                   $"colliders {string.Join(", ", src.GetComponentsInChildren<Collider>(true).Select(c => $"{c.GetType().Name} '{c.name}' layer {LayerMask.LayerToName(c.gameObject.layer)}"))}");
-                go = PrefabManager.Instance.CreateClonedPrefab(SaplingName, src);
-                source = n;
-                break;
-            }
-            if (go == null) { Plugin.Log.LogError($"cultivation: none of {string.Join(", ", SaplingSources)} found as a Plant piece; no sapling"); return; }
-
+            var (go, source) = CloneSource(SaplingName);
+            if (go == null) { Plugin.Log.LogError($"cultivation: none of {string.Join(", ", SaplingSources)} found as a Plant piece; no {SaplingName}"); return; }
             var plant = go.GetComponent<Plant>();
-            // Replace the vanilla visuals (the four Plant children) with the lichen; colliders elsewhere stay for placement and hover.
             var old = new[] { plant.m_healthy, plant.m_unhealthy, plant.m_healthyGrown, plant.m_unhealthyGrown }
                 .Where(o => o != null && o != go).Distinct().ToList();
             var layer = old.Count > 0 ? old[0].layer : go.layer;
             foreach (var o in old) UnityEngine.Object.DestroyImmediate(o);
-            var v = PlantPrefabs.Variants[0];
-            plant.m_healthy = FlatStage(v, go.transform, "healthy", StageSizes[0]);
-            plant.m_unhealthy = FlatStage(v, go.transform, "unhealthy", StageSizes[0]);       // separate objects: Plant SetActive's each one
-            plant.m_healthyGrown = FlatStage(v, go.transform, "healthyGrown", StageSizes[1]);
-            plant.m_unhealthyGrown = FlatStage(v, go.transform, "unhealthyGrown", StageSizes[1]);
-            foreach (var stage in new[] { plant.m_healthy, plant.m_unhealthy, plant.m_healthyGrown, plant.m_unhealthyGrown })
-                foreach (var t in stage.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
-            plant.m_unhealthy.SetActive(false);
-            plant.m_healthyGrown.SetActive(false);
-            plant.m_unhealthyGrown.SetActive(false);
-            var remaining = go.GetComponentsInChildren<Collider>(true);
-            var fallback = "none needed";
-            if (remaining.Length == 0)
-            {
-                // On the root itself: Plant.HaveGrowSpace takes GetComponent<Plant>() of every collider's own GameObject in its space
-                // mask (Plant.cs:389-401); a collider on a child would count as an obstacle and the sapling would never grow.
-                var b = ModelPrefabs.LocalMeshBounds(go);
-                var box = go.AddComponent<BoxCollider>();
-                box.center = b.center;
-                box.size = Vector3.Max(b.size, new Vector3(0.3f, 0.1f, 0.3f));
-                fallback = $"BoxCollider added on the root (layer {LayerMask.LayerToName(go.layer)}, size {box.size:F2})";
-            }
-            Plugin.Log.LogInfo($"cultivation: sapling visuals replaced ({old.Count} vanilla children removed, layer {LayerMask.LayerToName(layer)}); " +
-                               $"colliders kept {remaining.Length} ({string.Join(", ", remaining.Select(c => $"{c.GetType().Name} on {(c.gameObject == go ? "root" : c.name)}"))}); fallback: {fallback}");
+            UnityEngine.Object.DestroyImmediate(plant);
+            var look = FlatStage(PlantPrefabs.Variants[0], go.transform, "look", StageSizes[0]);
+            foreach (var t in look.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
+            var colliders = go.GetComponentsInChildren<Collider>(true);
             var srcDestructible = PrefabManager.Instance.GetPrefab(source)?.GetComponent<Destructible>();
-            foreach (var g in grown)
+            foreach (var g in grownForDestructible)
             {
                 var d = g.GetComponent<Destructible>();
                 if (d == null || srcDestructible == null) continue;
@@ -266,31 +236,16 @@ namespace InvisibilityPotion.Plants
                 d.m_hitEffect = srcDestructible.m_hitEffect;
             }
 
-            plant.m_name = "$piece_ip_huldrasapling";
-            var growSeconds = 2f * Config.PluginConfig.LichenStageMinutes * 60f;
-            plant.m_growTime = growSeconds;
-            plant.m_growTimeMax = growSeconds;
-            plant.m_grownPrefabs = grown;
-            plant.m_minScale = 1f;
-            plant.m_maxScale = 1f;
-            plant.m_growRadius = 0.5f;
-            plant.m_needCultivatedGround = true;
-            plant.m_destroyIfCantGrow = false;
-            plant.m_tolerateCold = true;
-            plant.m_tolerateHeat = true;
-            plant.m_biome = Heightmap.Biome.All;
-
             var piece = go.GetComponent<Piece>();
-            piece.m_cultivatedGroundOnly = true;
-            piece.m_groundOnly = true;
+            piece.m_cultivatedGroundOnly = false;
+            piece.m_groundOnly = false;
+            piece.m_vegetationGroundOnly = false;
             piece.m_onlyInBiome = Heightmap.Biome.None;
-
-            var sight = go.AddComponent<VeilSight>();
-            sight.RequiredLevel = 1;
+            go.AddComponent<TreeSapling>();
+            go.AddComponent<VeilSight>().RequiredLevel = 1;
             AssetBundles.Track(go);
 
-            var ingredient = PrefabManager.Instance.GetPrefab(IngredientItems.ItemName(1)) ?? ItemManager.Instance.GetItem(IngredientItems.ItemName(1))?.ItemPrefab;
-            var icon = ingredient != null ? ingredient.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_icons?.FirstOrDefault() : null;
+            var icon = IngredientIcon(1);
             var added = PieceManager.Instance.AddPiece(new CustomPiece(go, true, new PieceConfig
             {
                 Name = "$piece_ip_huldrasapling",
@@ -302,9 +257,10 @@ namespace InvisibilityPotion.Plants
                 Requirements = new[] { new RequirementConfig(IngredientItems.ItemName(1), 1, 0, true) },
             }));
             Sapling = go;
-            Plugin.Log.LogInfo($"cultivation: {SaplingName} cloned from {source}, piece table {PieceTables.Cultivator}, added {added}, enabled {Config.PluginConfig.HuldraCultivable}, " +
-                               $"grow {growSeconds / 60f:F0} min to {string.Join("/", grown.Select(g => g.name))}, icon {(icon != null ? "ingredient" : "none")}, " +
-                               $"cultivated only {piece.m_cultivatedGroundOnly}, needs cultivated {plant.m_needCultivatedGround}");
+            Plugin.Log.LogInfo($"cultivation: {SaplingName} cloned from {source} (Plant removed, {old.Count} vanilla visuals replaced by the flat lichen; colliders {colliders.Length}: " +
+                               $"{string.Join(", ", colliders.Select(c => $"{c.GetType().Name} on {(c.gameObject == go ? "root" : c.name)} layer {LayerMask.LayerToName(c.gameObject.layer)}"))}), " +
+                               $"piece table {PieceTables.Cultivator}, added {added}, enabled {Config.PluginConfig.HuldraCultivable}, tree sapling: within {TreeSaplingRule.TrunkRadius} m of " +
+                               $"{string.Join("/", TreeLichen.EligibleTrees)} (hashes {string.Join("/", TreeLichen.EligibleHashes)}), icon {(icon != null ? "ingredient" : "none")}");
         }
     }
 }
