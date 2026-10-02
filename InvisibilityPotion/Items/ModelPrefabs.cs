@@ -12,7 +12,7 @@ namespace InvisibilityPotion.Items
     /// <summary>
     /// Turns bundle prefabs (root -> attach -> model, see unity/.../Editor/AssetSetup.cs) into game objects: items get ZNetView,
     /// ZSyncTransform, Rigidbody, a BoxCollider and an ItemDrop whose shared data is copied from a vanilla template; plants get a
-    /// ZNetView only. The bundle prefab itself is never changed: every registered object is a Jötunn clone under its own name.
+    /// ZNetView only. Items are Jötunn clones under the item name (the bundle prefab stays untouched); plants are the bundle prefabs.
     /// </summary>
     public static class ModelPrefabs
     {
@@ -29,7 +29,8 @@ namespace InvisibilityPotion.Items
             var template = Template(templateName);
             var templateDrop = template.GetComponent<ItemDrop>();
 
-            var go = PrefabManager.Instance.CreateClonedPrefab(itemName, source);
+            var go = PrefabManager.Instance.CreateClonedPrefab(itemName, source)
+                     ?? throw new InvalidOperationException($"cloning {bundlePrefab} as {itemName} failed (name taken?)");
             SetLayer(go, template.layer);
 
             var tnv = template.GetComponent<ZNetView>();
@@ -87,12 +88,16 @@ namespace InvisibilityPotion.Items
             return go;
         }
 
-        /// <summary>Clone of a bundle prefab under the same name with a ZNetView (not persistent: look-check objects vanish with their zone).</summary>
+        /// <summary>
+        /// The bundle prefab itself (registered under its own name, so no clone: PrefabManager.CreateClonedPrefab refuses a name that
+        /// its cache already finds, and the loaded bundle asset carries that name) with a ZNetView, not persistent: look-check
+        /// objects vanish with their zone.
+        /// </summary>
         public static GameObject MakeProp(string bundlePrefab)
         {
-            var source = AssetBundles.Prefab(bundlePrefab) ?? throw new InvalidOperationException($"bundle prefab {bundlePrefab} missing");
-            var go = PrefabManager.Instance.CreateClonedPrefab(bundlePrefab, source);
-            var nv = go.AddComponent<ZNetView>();
+            var go = AssetBundles.Prefab(bundlePrefab) ?? throw new InvalidOperationException($"bundle prefab {bundlePrefab} missing");
+            var nv = go.GetComponent<ZNetView>();
+            if (nv == null) nv = go.AddComponent<ZNetView>();   // no ?? on Unity objects (fake null)
             nv.m_persistent = false;
             AssetBundles.Track(go);
             return go;
