@@ -195,5 +195,6 @@ Alpha-card textures for lichen/fern; wisps (visual or creature); PvP balance of 
 
 1. Lichen timing: 120 min per stage, so a pick (→ S1) is ripe again after 240 min, matching the user's regrowth decision.
 2. Baldr's Tear and Hel's Ember Fern are not cultivable in v1 (backlog; the wild spawn is the search mechanic the goggles are for).
-3. Yield 2 per pick for every plant; felling a lichen tree drops nothing (the lichen is lost with the tree).
+3. Yield per pick is a per-plant random range (lichen 1–2, Baldr's Tear 1, Hel's Ember Fern 2–4), scaled mildly by the plant's size; felling a lichen tree drops nothing (the lichen is lost with the tree).
+5. (user, 17:53) Hel's Ember Fern is rarer (1 in 15 zones) but grows in groups of 3–6 within 6 m; Baldr's Tear stays 1 in 6 zones with 1–2 plants. Ground plants get a random size (Baldr's Tear 0.8–1.3×, fern 0.7–1.6×) stored in the ZDO so every client sees the same, and the model variants a/b/c are mixed randomly.
 4. Lichen only on Black Forest trees; saplings and growing plants are invisible to players without goggles.
