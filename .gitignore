@@ -13,15 +13,18 @@ obj/
 # Decompiled game code (regenerate with `make decompile`)
 tools/decompiled/
 
-# Unity
-InvisibilityPotionUnity/Library/
-InvisibilityPotionUnity/Temp/
-InvisibilityPotionUnity/Logs/
-InvisibilityPotionUnity/UserSettings/
-InvisibilityPotionUnity/obj/
-InvisibilityPotionUnity/Assets/Assemblies/
-InvisibilityPotionUnity/*.csproj
-InvisibilityPotionUnity/*.sln
+# Unity (project-local .gitignore covers the rest)
+unity/InvisibilityPotionAssets/Library/
+unity/InvisibilityPotionAssets/Temp/
+unity/InvisibilityPotionAssets/Logs/
+unity/InvisibilityPotionAssets/UserSettings/
+unity/InvisibilityPotionAssets/obj/
+unity/InvisibilityPotionAssets/Build/
+unity/InvisibilityPotionAssets/*.csproj
+unity/InvisibilityPotionAssets/*.sln
+
+# Unity batch logs (make bundle, make unity-setup)
+/build/
 
 # Packaging
 *.nupkg

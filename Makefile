@@ -6,7 +6,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package test run play log
+.PHONY: help decompile build package test run play log bundle unity-setup
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -59,3 +59,29 @@ play: ## Launch Valheim through Steam (needs launch option "./start_game_bepinex
 
 log: ## Follow the BepInEx log
 	tail -n 50 -f "$(BEPINEX_LOG)"
+
+# Unity asset bundle (see docs/assets.md). Headless batch mode; the Personal licence comes from Unity Hub.
+UNITY ?= $(HOME)/Unity/Hub/Editor/6000.0.75f1/Editor/Unity
+UNITY_PROJECT := unity/InvisibilityPotionAssets
+TARGET ?= linux
+define guard_unity
+	@if [ -e "$(UNITY_PROJECT)/Temp/UnityLockfile" ]; then \
+		echo "$(UNITY_PROJECT) is open in a Unity editor (Temp/UnityLockfile exists): close it first."; exit 1; fi
+endef
+
+unity-setup: ## Create the spike assets (mesh, materials, prefabs) in the Unity project headless
+	$(guard_unity)
+	@mkdir -p build
+	"$(UNITY)" -batchmode -nographics -quit -projectPath "$(UNITY_PROJECT)" \
+		-executeMethod SpikeSetup.Create -logFile build/unity-setup.log
+	@echo "Log: build/unity-setup.log"
+
+bundle: ## Build the asset bundle headless (TARGET=linux|windows) and copy it to InvisibilityPotion/Assets
+	$(guard_unity)
+	@case "$(TARGET)" in linux|windows) ;; *) echo "TARGET must be linux or windows"; exit 1;; esac
+	@mkdir -p build InvisibilityPotion/Assets
+	"$(UNITY)" -batchmode -nographics -quit -projectPath "$(UNITY_PROJECT)" \
+		-executeMethod BundleBuilder.Build -target $(TARGET) -logFile build/unity-bundle-$(TARGET).log \
+		|| { echo "Unity failed, see build/unity-bundle-$(TARGET).log"; exit 1; }
+	@dest=InvisibilityPotion/Assets/ip_assets$(if $(filter windows,$(TARGET)),.windows,); \
+		cp "$(UNITY_PROJECT)/Build/Bundles/$(TARGET)/ip_assets" "$$dest" && ls -l "$$dest"
