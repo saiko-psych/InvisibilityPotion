@@ -37,6 +37,29 @@ namespace InvisibilityPotion.Visuals
             if (_instance == this) _instance = null;
         }
 
+#if DEBUG
+        /// <summary>
+        /// auto fog dump: the ip_fog dump output of the local veil, logged once FogVeil.AutoDumpDelay after a local veil build
+        /// (Plugin.Log only, no console spam). Debug builds only.
+        /// </summary>
+        private void AutoFogDump()
+        {
+            FogVeil.AutoDumpAt = -1f;
+            var p = Player.m_localPlayer;
+            var lines = new List<string>();
+            try { if (p != null) _veil.DumpFog(p, lines); }
+            catch (Exception e) { Plugin.Log.LogWarning($"auto fog dump failed: {e.Message}"); return; }
+            if (lines.Count == 0)
+            {
+                Plugin.Log.LogInfo($"auto fog dump at {Time.time:F1} s: the local veil built at {FogVeil.AutoDumpBuiltAt:F1} s is gone");
+                return;
+            }
+            Plugin.Log.LogInfo($"auto fog dump at {Time.time:F1} s ({FogVeil.AutoDumpDelay} s after the local veil build at {FogVeil.AutoDumpBuiltAt:F1} s):");
+            foreach (var l in lines) Plugin.Log.LogInfo(l);
+            Plugin.Log.LogInfo("auto fog dump end");
+        }
+#endif
+
         /// <summary>Startup, ip_reload_config, server sync: re-read the look and re-apply it.</summary>
         private static void OnConfigChanged()
         {
@@ -46,6 +69,9 @@ namespace InvisibilityPotion.Visuals
 
         private void Update()
         {
+#if DEBUG
+            if (FogVeil.AutoDumpAt >= 0f && Time.time >= FogVeil.AutoDumpAt) AutoFogDump();
+#endif
             _timer += Time.deltaTime;
             if (_timer < 0.25f) return;
             _timer = 0f;

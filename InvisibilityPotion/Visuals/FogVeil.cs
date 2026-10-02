@@ -222,7 +222,13 @@ namespace InvisibilityPotion.Visuals
             if (snap.FogWanted) SpawnFog(p, snap);
             if (snap.Fog.Count == 0) snap.FogWanted = false;   // nothing spawned (no material/bones): do not retry every tick
 #if DEBUG
-            if (isLocal) LogSpawn(snap);
+            if (isLocal)
+            {
+                LogSpawn(snap);
+                // auto fog dump: VeilController logs the full dump once, AutoDumpDelay after the latest local build.
+                AutoDumpAt = Time.time + AutoDumpDelay;
+                AutoDumpBuiltAt = snap.BuiltAt;
+            }
 #endif
             ApplyBody(p, snap);
             Plugin.Log.LogDebug($"veil T{tier} on {p.GetPlayerName()}: mode {snap.Requested} (effective {snap.Effective}){(forceHide ? " [hidden from players]" : "")}, " +
@@ -829,6 +835,16 @@ namespace InvisibilityPotion.Visuals
         // ---------- diagnostics (Debug only) ----------
 
         private static string _lastSpawnLog;
+
+        /// <summary>
+        /// auto fog dump (plan 4 fix round 2, ruling 6): Time.time at which <see cref="VeilController"/> logs the fog dump of the
+        /// local veil once (same output as ip_fog dump), so every test log carries the ring's particle counts, renderer visibility,
+        /// bounds and camera distances. Negative = nothing pending. Every local build re-arms it, so a burst of rebuilds (tuning
+        /// window) produces one dump, 2.5 s after the last build.
+        /// </summary>
+        public static float AutoDumpAt = -1f;
+        public static float AutoDumpBuiltAt;
+        public const float AutoDumpDelay = 2.5f;
         private static readonly ParticleSystem.Particle[] ParticleBuf = new ParticleSystem.Particle[FogSettings.ParticleHardCap];
 
         /// <summary>
