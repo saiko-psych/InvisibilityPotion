@@ -47,6 +47,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Player", "UpdatePlacementGhost"),
             PatchHealth.TargetKey("Player", "GetMaxCarryWeight"),
             PatchHealth.TargetKey("Player", "PlacePiece"),
+            PatchHealth.TargetKey("Player", "CheckRun"),   // round S: no sprinting while Veil Broken runs
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();

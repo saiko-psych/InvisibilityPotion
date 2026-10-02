@@ -25,7 +25,7 @@ namespace InvisibilityPotion.Effects
             EitrRegen = InvisibilityPotion.Config.GameplayDefaults.DebuffEitrRegenMultiplier,
             HealthRegen = InvisibilityPotion.Config.GameplayDefaults.DebuffHealthRegenMultiplier,
             Speed = InvisibilityPotion.Config.GameplayDefaults.DebuffSpeedModifier(2),
-            Duration = InvisibilityPotion.Config.GameplayDefaults.DebuffDuration,
+            Duration = InvisibilityPotion.Config.GameplayDefaults.DebuffDuration(2),
         };
 
         private void ApplyNext()

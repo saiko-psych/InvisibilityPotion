@@ -78,10 +78,14 @@ namespace InvisibilityPotion.Config
     /// tier durations so a higher mead can still replace a running veil near its end (the upgrade stays possible). Revision 4
     /// (user, 2026-10-02 23:32, round R): a harsher Veil Broken: DebuffStaminaRegenMultiplier 0.25 -> 0.15; the new keys
     /// DebuffSpeedModifier, DebuffEitrRegenMultiplier and DebuffHealthRegenMultiplier need no migration (absent keys get their default).
+    /// Revision 5 (user, 2026-10-02 23:45, round S): invisibility must not be a fighting tool, so Veil Broken is harsher still:
+    /// stamina regen 0.15 -> 0.1, eitr regen 0.25 -> 0.15, health regen 0.5 -> 0.35, speed T1 -0.2 -> -0.35, T2/T3 -0.3 -> -0.5,
+    /// tier I DebuffDuration 15 -> 20 s (tiers II/III keep 15; their debuff lasts RehideDelay). No sprinting while it runs
+    /// (Player.CheckRun prefix, VeilBrokenSprintPatch).
     /// </summary>
     public static class GameplayDefaults
     {
-        public const int Revision = 4;
+        public const int Revision = 5;
 
         /// <summary>[TierN] Cooldown default: the shared Veil Cooldown started by drinking tier N (seconds).</summary>
         public static float Cooldown(int tier)
@@ -98,33 +102,52 @@ namespace InvisibilityPotion.Config
         /// <summary>The revision-2 cooldown defaults (90/180/240), migrated to the revision-3 values when still untouched.</summary>
         public static float Revision2Cooldown(int tier) => tier == 1 ? 90f : tier == 2 ? 180f : tier == 3 ? 240f : 0f;
 
-        public const float DebuffStaminaRegenMultiplier = 0.15f;
+        public const float DebuffStaminaRegenMultiplier = 0.1f;
         /// <summary>The revision 1..3 default of DebuffStaminaRegenMultiplier, migrated to the revision-4 value when still untouched.</summary>
         public const float Revision3DebuffStaminaRegenMultiplier = 0.25f;
-        public const float DebuffEitrRegenMultiplier = 0.25f;
-        public const float DebuffHealthRegenMultiplier = 0.5f;
-        public const float DebuffDuration = 15f;
+        /// <summary>The revision-4 defaults, migrated to the revision-5 values when still untouched.</summary>
+        public const float Revision4DebuffStaminaRegenMultiplier = 0.15f;
+        public const float Revision4DebuffEitrRegenMultiplier = 0.25f;
+        public const float Revision4DebuffHealthRegenMultiplier = 0.5f;
+        public const float Revision4DebuffDuration = 15f;
+        public static float Revision4DebuffSpeedModifier(int tier) => tier == 1 ? -0.2f : -0.3f;
+        public const float DebuffEitrRegenMultiplier = 0.15f;
+        public const float DebuffHealthRegenMultiplier = 0.35f;
+
+        /// <summary>[TierN] DebuffDuration default (seconds): tier I 20 (round S), tiers II/III 15 (their debuff lasts RehideDelay anyway).</summary>
+        public static float DebuffDuration(int tier) => tier == 1 ? 20f : Revision4DebuffDuration;
         /// <summary>Allowed range of the Veil Broken regen multipliers (config and Validate).</summary>
         public const float DebuffMultiplierMax = 5f;
         /// <summary>Allowed range of DebuffSpeedModifier (additive fraction; -0.9 = 90 % slower).</summary>
         public const float DebuffSpeedMin = -0.9f;
         public const float DebuffSpeedMax = 1f;
 
-        /// <summary>[TierN] DebuffSpeedModifier default: tier I -0.2, tier II/III -0.3.</summary>
-        public static float DebuffSpeedModifier(int tier) => tier == 1 ? -0.2f : -0.3f;
+        /// <summary>[TierN] DebuffSpeedModifier default: tier I -0.35, tier II/III -0.5 (round S; was -0.2/-0.3).</summary>
+        public static float DebuffSpeedModifier(int tier) => tier == 1 ? -0.35f : -0.5f;
 
         /// <summary>The value of [Tier<paramref name="tier"/>] <paramref name="key"/> after migrating a file from <paramref name="fromRevision"/>.</summary>
         public static float Migrate(string key, int tier, float current, int fromRevision)
         {
-            // Steps run in order, so an old file moves through every revision (0.5 -> 0.25 -> 0.15).
+            // Steps run in order, so an old file moves through every revision (0.5 -> 0.25 -> 0.15 -> 0.1).
             if (fromRevision < 1)
             {
                 if (key == "DebuffStaminaRegenMultiplier" && Same(current, 0.5f)) current = Revision3DebuffStaminaRegenMultiplier;
-                if (key == "DebuffDuration" && Same(current, 20f)) current = DebuffDuration;
+                if (key == "DebuffDuration" && Same(current, 20f)) current = Revision4DebuffDuration;
             }
             if (fromRevision < 2 && key == "Cooldown" && Same(current, 0f)) return Cooldown(tier);
             if (fromRevision < 3 && key == "Cooldown" && Same(current, Revision2Cooldown(tier))) return Cooldown(tier);
-            if (fromRevision < 4 && key == "DebuffStaminaRegenMultiplier" && Same(current, Revision3DebuffStaminaRegenMultiplier)) return DebuffStaminaRegenMultiplier;
+            if (fromRevision < 4 && key == "DebuffStaminaRegenMultiplier" && Same(current, Revision3DebuffStaminaRegenMultiplier)) current = Revision4DebuffStaminaRegenMultiplier;
+            if (fromRevision < 5)
+            {
+                switch (key)
+                {
+                    case "DebuffStaminaRegenMultiplier": if (Same(current, Revision4DebuffStaminaRegenMultiplier)) current = DebuffStaminaRegenMultiplier; break;
+                    case "DebuffEitrRegenMultiplier": if (Same(current, Revision4DebuffEitrRegenMultiplier)) current = DebuffEitrRegenMultiplier; break;
+                    case "DebuffHealthRegenMultiplier": if (Same(current, Revision4DebuffHealthRegenMultiplier)) current = DebuffHealthRegenMultiplier; break;
+                    case "DebuffSpeedModifier": if (Same(current, Revision4DebuffSpeedModifier(tier))) current = DebuffSpeedModifier(tier); break;
+                    case "DebuffDuration": if (Same(current, Revision4DebuffDuration)) current = DebuffDuration(tier); break;
+                }
+            }
             return current;
         }
 

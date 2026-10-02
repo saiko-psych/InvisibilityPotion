@@ -115,9 +115,11 @@ public class GameplayDefaultsTests
     public void Revision1_MovesOnlyUntouchedOldDebuffDefaults()
     {
         Assert.True(GameplayDefaults.Revision >= 1);
-        // A revision-0 file at 0.5 moves through 0.25 (revision 1) to 0.15 (revision 4).
-        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.5f, 0));
+        // A revision-0 file at 0.5 moves through 0.25 (revision 1) and 0.15 (revision 4) to 0.1 (revision 5).
+        Assert.Equal(0.1f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.5f, 0));
         Assert.Equal(15f, GameplayDefaults.Migrate("DebuffDuration", 2, 20f, 0));
+        // Tier I: 20 -> 15 (revision 1) -> 20 (revision 5).
+        Assert.Equal(20f, GameplayDefaults.Migrate("DebuffDuration", 1, 20f, 0));
         // A value the admin changed stays.
         Assert.Equal(0.7f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.7f, 0));
         Assert.Equal(30f, GameplayDefaults.Migrate("DebuffDuration", 3, 30f, 0));
@@ -152,12 +154,16 @@ public class VeilBrokenTests
     [Fact]
     public void Defaults_HarsherDebuff()
     {
-        Assert.Equal(0.15f, GameplayDefaults.DebuffStaminaRegenMultiplier, 5);
-        Assert.Equal(-0.2f, GameplayDefaults.DebuffSpeedModifier(1), 5);
-        Assert.Equal(-0.3f, GameplayDefaults.DebuffSpeedModifier(2), 5);
-        Assert.Equal(-0.3f, GameplayDefaults.DebuffSpeedModifier(3), 5);
-        Assert.Equal(0.25f, GameplayDefaults.DebuffEitrRegenMultiplier, 5);
-        Assert.Equal(0.5f, GameplayDefaults.DebuffHealthRegenMultiplier, 5);
+        // Round S (gameplay defaults revision 5): harsher still.
+        Assert.Equal(0.1f, GameplayDefaults.DebuffStaminaRegenMultiplier, 5);
+        Assert.Equal(-0.35f, GameplayDefaults.DebuffSpeedModifier(1), 5);
+        Assert.Equal(-0.5f, GameplayDefaults.DebuffSpeedModifier(2), 5);
+        Assert.Equal(-0.5f, GameplayDefaults.DebuffSpeedModifier(3), 5);
+        Assert.Equal(0.15f, GameplayDefaults.DebuffEitrRegenMultiplier, 5);
+        Assert.Equal(0.35f, GameplayDefaults.DebuffHealthRegenMultiplier, 5);
+        Assert.Equal(20f, GameplayDefaults.DebuffDuration(1), 5);
+        Assert.Equal(15f, GameplayDefaults.DebuffDuration(2), 5);
+        Assert.Equal(15f, GameplayDefaults.DebuffDuration(3), 5);
         var c = new TierConfig();
         Assert.Equal(0f, c.DebuffSpeedModifier);
         Assert.Equal(1f, c.DebuffEitrRegenMultiplier);
@@ -167,13 +173,40 @@ public class VeilBrokenTests
     [Fact]
     public void Revision4_MovesOnlyAnUntouchedStaminaRegenMultiplier()
     {
-        Assert.Equal(4, GameplayDefaults.Revision);
-        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.25f, 3));
-        Assert.Equal(0.15f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 1, 0.25f, 1));
+        Assert.True(GameplayDefaults.Revision >= 4);
+        // 0.25 -> 0.15 (revision 4) -> 0.1 (revision 5).
+        Assert.Equal(0.1f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.25f, 3));
+        Assert.Equal(0.1f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 1, 0.25f, 1));
         Assert.Equal(0.4f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.4f, 3));   // admin value stays
         Assert.Equal(0.25f, GameplayDefaults.Migrate("DebuffStaminaRegenMultiplier", 2, 0.25f, 4)); // already migrated
         // Revision 4 does not touch the cooldown chain.
         Assert.Equal(60f, GameplayDefaults.Migrate("Cooldown", 2, 60f, 3));
+    }
+
+    [Theory]
+    [InlineData("DebuffStaminaRegenMultiplier", 1, 0.15f, 0.1f)]
+    [InlineData("DebuffEitrRegenMultiplier", 2, 0.25f, 0.15f)]
+    [InlineData("DebuffHealthRegenMultiplier", 3, 0.5f, 0.35f)]
+    [InlineData("DebuffSpeedModifier", 1, -0.2f, -0.35f)]
+    [InlineData("DebuffSpeedModifier", 2, -0.3f, -0.5f)]
+    [InlineData("DebuffSpeedModifier", 3, -0.3f, -0.5f)]
+    [InlineData("DebuffDuration", 1, 15f, 20f)]
+    public void Revision5_MovesUntouchedRevision4Defaults(string key, int tier, float old, float now)
+    {
+        Assert.Equal(5, GameplayDefaults.Revision);
+        Assert.Equal(now, GameplayDefaults.Migrate(key, tier, old, 4), 5);
+        Assert.Equal(now, GameplayDefaults.Migrate(key, tier, old, 3), 5);
+        // Already at revision 5, or a value the admin changed: untouched.
+        Assert.Equal(old, GameplayDefaults.Migrate(key, tier, old, 5), 5);
+        Assert.Equal(0.42f, GameplayDefaults.Migrate(key, tier, 0.42f, 4), 5);
+    }
+
+    [Fact]
+    public void Revision5_LeavesTier2And3DebuffDurationAlone()
+    {
+        // Tiers II/III re-hide, so their Veil Broken lasts RehideDelay; DebuffDuration stays 15 there.
+        Assert.Equal(15f, GameplayDefaults.Migrate("DebuffDuration", 2, 15f, 4));
+        Assert.Equal(15f, GameplayDefaults.Migrate("DebuffDuration", 3, 15f, 4));
     }
 
     [Theory]
