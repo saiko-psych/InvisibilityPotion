@@ -487,7 +487,7 @@ Members used by `Items/ModelPrefabs.cs`, `Items/GoggleItems.cs` and the plan-4 d
 
 ## Plan 5 – hidden plants and veil goggles
 
-Members used by `Goggles/*`, `Plants/*`, `Net/PlayerReveal.Core.cs`, the `PlayerHidePatches`/`VeilController` exceptions and `Dev/PlantCommands.cs` (all read, none newly patched: no new Harmony target). Mechanics background: `docs/ideas/2026-10-02-plan5-mechanics-research.md`.
+Members used by `Goggles/*`, `Plants/*`, `Net/PlayerReveal.Core.cs`, the `PlayerHidePatches`/`VeilController` exceptions and `Dev/PlantCommands.cs` (all read; the only Harmony target added in plan 5 is `Player.UpdatePlacementGhost`, round N, see below). Mechanics background: `docs/ideas/2026-10-02-plan5-mechanics-research.md`.
 
 - **Goggle level**: `Humanoid.m_helmetItem` – `protected ItemDrop.ItemData`, Humanoid.cs:85 (publicized); `ItemData.m_dropPrefab` ItemDrop.cs:450 (its `name` is the prefab name, `VeilGoggles_T1..3`). Polled every 0.5 s; no equip status effect (no HUD icon). `IP_Goggles` (int) on the local player's ZDO, written through `ZDO.Set(int, int)` ZDO.cs:394 by the owner only.
 - **Level III position exception**: `ZNetPeer.m_characterID` ZNetPeer.cs:21 (set at ZNet.cs:2113), `ZDOMan.GetZDO(ZDOID)` ZDOMan.cs:820, `ZDOID.IsNone` ZDOID.cs:143; read inside the existing `HeaderPosition` only for hidden player ZDOs. Nameplate: existing `EnemyHud.TestShow` postfix. Body: `VeilController.Refresh` `forceHide`. Map pin: unchanged (no pin, `SendPlayerList` sends one package to all peers, ZNet.cs:2517-2532).

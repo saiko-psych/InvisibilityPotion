@@ -75,18 +75,17 @@ New files: `Plants/VeilSight.cs`, `Plants/VeilHarvest.cs`, `Plants/HarvestStage.
   Placement checks can fail after the roll, so the real rate is below 1 in 6 (?): S6 samples zones in a new world (`ip_plants` counts) and tunes `ZoneChance`.
 - **Existing worlds**: only zones generated after installing the mod get wild T2/T3 plants (ZoneSystem.cs:1337, R §4.1); the dedicated server must run the mod. Retrofit for explored zones is out of scope (§9).
 
-### 3.4 Cultivation (Huldra's Hair on the ground)
+### 3.4 Cultivation (round N rulings 2 and 3; the ground lichen of the first slice is gone)
 
-- Sapling prefab `IP_HuldraSapling`: root with persistent `ZNetView`, `Piece` (`m_cultivatedGroundOnly = true`, `m_groundOnly = true`, no `m_onlyInBiome`; Piece.cs:145-147, 208), `Plant`, `Destructible` (`Plant.Destroy` needs an `IDestructible`, Plant.cs:365-374), `VeilSight(1)`.
-- `Plant` settings (Plant.cs:24-61): `m_growTime = m_growTimeMax = 2 × StageMinutes × 60` s, `m_healthy = m_unhealthy = Plant_T1_Flat` S1-sized child, `m_healthyGrown = m_unhealthyGrown` S2-sized child (Plant swaps at 50 %, Plant.cs:152-159), `m_grownPrefabs = [IP_HuldraGround_a/b/c]`, `m_needCultivatedGround = true`, `m_biome` = all biomes, `m_tolerateCold = m_tolerateHeat = true`, `m_growRadius` 0.5 m. `Plant` itself picks the visible child with `SetActive` (Plant.cs:152-159); the sapling's `VeilSight` has one stage group (all children) and only toggles `enabled` flags, so the two never fight.
-- `Grow` instantiates the grown prefab and destroys the sapling (Plant.cs:181-213). `IP_HuldraGround_a/b/c` = root `ZNetView` + `VeilHarvest(3 stages, keys IP_PlantStage/IP_PlantTime)` + `VeilSight(1)`; no keys = S3 ripe, so the chain is S1 → S2 (Plant) → S3 (harvest); after a pick it replays S1 → S2 → S3 inside `VeilHarvest` (same model as on trees).
-- Registration: Jötunn `CustomPiece` with `PieceConfig { PieceTable = "_CultivatorPieceTable", Category = "Misc", Requirements = [VeilIngredient_T1:1] }` (R §1.3; class/field names (?) S7 checks the DLL). Known-recipe rule (PieceTable.cs:75): the piece should become available once `VeilIngredient_T1` was picked up (?) S7.
-- Risks: `Plant.HaveRoof` reports NoSun under colliders on `Default/static_solid/piece` (Plant.cs:376-386); fine in a garden, S7 checks under forest canopy. A sapling is invisible to players without goggles (accepted: only goggle wearers get the ingredient).
-- Plants 2 and 3 are not cultivable in v1 (open question 2).
+- All Cultivator pieces are clones of a vanilla crop sapling (`sapling_carrot`, fallbacks turnip/onion/barley), in the Cultivator table (`_CultivatorPieceTable`, category Misc), with a `VeilSight` of their tier.
+- **Huldra's Hair** `IP_HuldraSapling` (cost 1 `VeilIngredient_T1`, `[Plants] HuldraCultivable`): no `Plant`, `Piece.m_groundOnly = m_cultivatedGroundOnly = false`, a `TreeSapling` component. The ghost is valid only within 1.0 m of the trunk of an eligible fir/pine (`FirTree`, `Pinetree_01`, `FirTree_big`, identified by the ZDO prefab hash) that has no lichen yet (pure rule `TreeSaplingRule`); otherwise red with `$ip_sapling_needs_tree` / `$ip_sapling_tree_taken`. Vanilla has no hook (`Piece.m_mustConnectTo` matches one name by substring), so one Harmony postfix on `Player.UpdatePlacementGhost` does the check. The placed sapling (owner = placer) asks the tree's owner (RPC `IP_LichenPlant`) to write `IP_LichenForce = 1`, `IP_LichenStage = 1`, `IP_LichenTime = now`; every peer's `TreeLichen` polls the force key every 5 s and creates the S1 patch, which then grows S1 → S2 → S3 like wild lichen. The sapling removes itself after 1.5 s; one that finds no tree (or an old ground sapling) refunds its cost.
+- `IP_HuldraGround_a/b/c` stay registered so old worlds load, nothing grows into them.
+- **Baldr's Tear / Hel's Ember Fern** `IP_BaldrSapling` (1 `VeilIngredient_T2`, Mountains, `m_tolerateCold`) and `IP_FernSapling` (1 `VeilIngredient_T3`, Ashlands, `m_tolerateHeat`): `Plant.m_biome` (wrong biome status) plus `Piece.m_onlyInBiome` (placement refused with `$msg_wrongbiome`), `m_needCultivatedGround`, `m_cultivatedGroundOnly`, grow time `[Plants] CultivateMinutes` (240), grown prefab = the wild mixed `IP_BaldrsTear` / `IP_HelsEmberFern` with the wild size range as `Plant.m_minScale/m_maxScale`. Visuals: the ripe variant a at 0.35× (sprout) and 0.6× (half grown).
+- Every ground plant (wild, `ip_spawn`, grown) turns its models by a yaw derived from its position (`LichenRoll.YawDegrees`), nothing stored.
 
 ### 3.5 Goggles
 
-- `GoggleItems` gets `ItemConfig { CraftingStation = "forge" | "blackforge", MinStationLevel = 1, Requirements = parsed }` from config strings (`RecipeParser`, same fallback-to-default behaviour as `PotionItems.RegisterTier`); `Enabled = true`. Item names, armour and hair settings stay as in plan 4. Descriptions change from "not yet awake" to what they reveal.
+- `GoggleItems` gets `ItemConfig { CraftingStation = "forge" | "blackforge", MinStationLevel = 1 / 3 / 2 (round N: forge 1, forge 3, black forge 2), Requirements = parsed }` from config strings (`RecipeParser`, same fallback-to-default behaviour as `PotionItems.RegisterTier`); `Enabled = true`. Item names, armour and hair settings stay as in plan 4. Descriptions change from "not yet awake" to what they reveal.
 - `GoggleLevel.Core.cs` (pure): `LevelOf(string dropPrefabName)` (`VeilGoggles_T1..3` → 1..3, else 0), `Reveals(int level, int required)`, `SeesHiddenPlayers(int level, bool configSwitch)` (level ≥ 3 && switch).
 - `GogglesLevel` (static service, ticked by `VeilSightDriver`): `Local = DevOverride ?? LevelOf(Player.m_localPlayer?.m_helmetItem?.m_dropPrefab?.name)` (`m_helmetItem` Humanoid.cs:85, publicized; `m_dropPrefab` ItemDrop.cs:450). On change: raise `Changed`, write `IP_Goggles` (int) on the local player's ZDO (owner write, same pattern as `HiddenState.Write`). Re-equip on login/respawn needs no hook because the poll reads the slot (?) S8 confirms the slot is filled before the first tick after spawn.
 - **Level III player reveal** (R §6), all gated by `[Goggles] RevealHiddenPlayers`:
@@ -103,7 +102,8 @@ New files: `Plants/VeilSight.cs`, `Plants/VeilHarvest.cs`, `Plants/HarvestStage.
 | `[Plants] LichenTreeChance` | 0.025 | per eligible tree |
 | `[Plants] LichenStageMinutes` | 120 | minutes of world time (vanilla thistle: 240); two transitions after a pick = 240 min |
 | `[Plants] LichenRevealDistance` | 40 | m, see §3.1 |
-| `[Plants] HuldraCultivable` | true | hides the Cultivator piece when false |
+| `[Plants] HuldraCultivable` | true | hides the Huldra's Hair Cultivator piece when false |
+| `[Plants] CultivateMinutes` | 240 | minutes of world time for a planted Baldr's Tear / Hel's Ember Fern sprout; read at startup |
 | `[Plants] BaldrZoneChance`, `HelFernZoneChance` | 0.167, 0.0667 | chance per new zone of the mixed prefab; read at registration (needs restart) |
 | `[Plants] GroundRegrowMinutes` | 240 | minutes of world time; T2/T3 picked → ripe |
 | `[Plants] YieldT1..T3` | `1-2` / `1-1` / `2-4` | min-max rolled per pick on the owner; ground plants: `round(roll × (0.75 + 0.5 × size position))`, ≥ 1 |

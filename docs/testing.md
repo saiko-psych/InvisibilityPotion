@@ -424,3 +424,37 @@ Meads:
 - [ ] Every mead base needs 2 of its tier's veil ingredient at the Mead ketill
 
 Two clients (pending, plan 3 server): goggles III wearer sees a tier-III-hidden player's nameplate and veiled body at the real position, a non-wearer does not; no map pin for either; a pick by client A updates client B within 5 s; a double pick yields once.
+
+## Plan 5 – round N (station levels, tree sapling, crop sprouts, yaw, wind)
+
+Setup: `make build` (Debug, game closed), `make run`. Paste every `cultivation:`, `lichen: planted`, `wind:` line and `Patch health`.
+
+Startup log:
+- [ ] `Patch health: N targets patched, 0 missing` (one more than before: `Player.UpdatePlacementGhost`)
+- [ ] `assets: goggles VeilGoggles_T1 registered (... at forge level 1)`, `T2 ... at forge level 3`, `T3 ... at blackforge level 2`
+- [ ] `cultivation: IP_HuldraSapling cloned from ... (Plant removed, ...; colliders N: ...), ..., tree sapling: within 1 m of FirTree/Pinetree_01/FirTree_big (hashes ...)`
+- [ ] `cultivation: IP_BaldrSapling cloned from ... biome Mountain, grow 240 min to IP_BaldrsTear (scale 0.8-1.3), cost 1 VeilIngredient_T2, VeilSight 2` and the same for `IP_FernSapling` (AshLands, IP_HelsEmberFern, 0.7-1.6, T3, VeilSight 3)
+- [ ] After loading the world: `wind:` lines for `Bush01`, `shrub_2`, `Pickable_Thistle`, `IP_BaldrsTear`, `IP_HelsEmberFern` (paste them; our foliage must show `_RippleDistance = 0.3`, `_RippleSpeed = 100`, `_SwayDistance = 0.5`, `_SwaySpeed = 20`, `_Height = 2` on shader `Custom/Vegetation`)
+
+Goggles:
+- [ ] Watchman's Glass needs a forge (level 1); Mimir's Glass is only listed at forge level 3 (two forge upgrades); Allfather's Eye only at black forge level 2 (one upgrade)
+
+Huldra's Hair on a tree:
+- [ ] Cultivator, `Huldra's Hair sprout`: the ghost is red on open ground and on birches/oaks/beeches, `Needs a fir or pine trunk` on click (centre message, not `Invalid placement`); green within about 1 m of a fir (`FirTree`), a pine (`Pinetree_01`) or a big fir (`FirTree_big`); aiming at the trunk itself works
+- [ ] On a tree that already carries lichen (goggles on, or `ip_lichen force` first): red, `Huldra's Hair already grows on this tree`
+- [ ] Place it: the sprout vanishes after about 1.5 s, the cost is used, `cultivation: IP_HuldraSapling at ... -> FirTree at ...: plant requested` and `lichen: planted on FirTree at ... : force 1, stage 1 (S1), patch created`; with goggles I the S1 patch sits on the trunk at once; `ip_plants` shows it at stage 1/3, next in 120 min; `ip_grow` → S2 → S3, pick works
+- [ ] Works outside the Black Forest too (a pine in the Mountains)
+- [ ] Without goggles the tree looks vanilla
+- [ ] Old world with a ground Huldra sprout from the first slice: on load it logs `...: NoTree; cost refunded, sapling removed` and drops 1 Huldra's Hair
+
+Baldr's Tear / Hel's Ember Fern sprouts:
+- [ ] With Baldr's Tear in the inventory the Cultivator lists `Baldr's Tear sprout`; outside the Mountains the placement says `$msg_wrongbiome` (wrong biome); on raw Mountains ground `needs cultivated ground`; on cultivated Mountains ground it places; invisible below goggles II
+- [ ] Hover with goggles II: vanilla plant status (no `too cold`); `ip_grow` → a grown `IP_BaldrsTear` (random variant and size, `ip_plants` shows scale/variant/yaw), pick works, regrows like a wild one
+- [ ] Same for `Hel's Ember Fern sprout` in the Ashlands (goggles III, no `too hot`, ember light on the grown fern)
+
+Yaw:
+- [ ] `ip_spawn IP_BaldrsTear_a 5` and `ip_spawn IP_HelsEmberFern 5`: the plants face different directions; `ip_plants` prints `yaw N` per plant, identical after a relog
+
+Wind:
+- [ ] Baldr's Tear leaves/petals, the fern fronds and Huldra's Hair strands sway gently in wind (compare with a nearby vanilla bush); no plant flies apart or sinks; stems stay still
+
