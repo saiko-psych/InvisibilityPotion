@@ -11,7 +11,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v5) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3_a/b/c`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v5.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_ingredients.py` (v1) | `ingredient_t1..3.fbx`, `ingredients.blend`, `ingredients.log` | `preview-ingredients-v1.png` | base centre (lying as dropped) | `attach` (bounding-box centre) |
-| `make_goggles.py` (v3) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v3.png` | head centre | `attach` (head centre) |
+| `make_goggles.py` (v4) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v4.png` | helmet joint `Helmet_attach` | `attach` (joint origin) |
 
 ## Shared conventions (`common.py`)
 
@@ -33,8 +33,8 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 
 | Tier | Bottle (incl. 80-tri mist mesh) | Bowl | Plant | Goggles |
 |---|---|---|---|---|
-| 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284; variants see below) | 668 |
-| 2 | 448 | 488 | 484 | 1314 |
+| 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284; variants see below) | 684 |
+| 2 | 448 | 488 | 484 | 1346 |
 | 3 | 560 | 488 | 1196 | 1216 |
 
 # Veil-mead flasks (v5): finished meads
@@ -166,28 +166,59 @@ Knobs at the top of `make_ingredients.py`: `SEED`, `MATS`, `T1` (`strands`, `len
 `T2` (`bell_len`, `bell_r`, `petals`, `stem_len`, `berry_r`), `T3` (`curl_r`, `turns`, `leaflets`, `leaflet_len`,
 `leaflet_base`, `capsule_r`). Preview placement, camera and lights at the end.
 
-# Veil goggles (v3)
+# Veil goggles (v4): fitted to the vanilla head
 
-Outputs `goggles_t1/t2/t3.fbx`, `preview-goggles.png`, `goggles.blend`; the preview is copied to
-`tools/blender/preview-goggles-v3.png` (grey reference heads 0.22 m wide, turned 30 degrees so the strap shows).
-Real scale for a ~1.8 m character. Pivot = head centre (parent to the head bone); each FBX has an `attach` empty there. In Blender the wearer faces -Y and
-the right eye is at -X; check the facing once after the Unity import (rotate the attach point 180 degrees if it is
-backwards). Eyes 0.065 m apart, lenses about 0.05 m, strap ellipse just outside the 0.22 x 0.25 m head.
+Outputs `goggles_t1/t2/t3.fbx`, `preview-goggles.png`, `goggles.blend`, `goggles.log`; the preview is copied to
+`tools/blender/preview-goggles-v4.png`: the three goggles on the exported player head (grey), front row and 3/4 row.
+Pivot = the vanilla helmet joint `Helmet_attach` (under the Head bone), so the vanilla attach places them on the head;
+each FBX has an `attach` empty at that origin. Blender frame: the wearer faces -Y, right eye at -X, Z up.
+
+## Head fit
+
+1. In game, `ip_exportmesh head` writes `head_body.obj` (the local player body, baked) and `head_HelmetLeather.obj`
+   (the vanilla leather helmet's `attach` mesh in joint space) to `BepInEx/export/`; copy them to `tools/blender/ref/`
+   (gitignored: vanilla-derived, used only to measure and for the preview, never exported or committed).
+2. Finding: the helmet OBJ is in joint space (metres), but the body OBJ came out in centimetres in the body's own
+   space (y 0..1.79 m standing, not around the joint). `REF_ALIGN` maps it into joint space: scale 0.0095 (cm x the
+   reported lossy scale 0.95) and offset (-0.129, -1.603, -0.115) m in OBJ axes, chosen so the eyes sit behind the
+   helmet's eye holes and the face just behind its face plate (checked in front and side renders; about 1 cm
+   uncertainty). The exporter should be fixed to bake into joint space; then set `REF_ALIGN` to scale 1, offset 0.
+3. With `ref/` present the script measures the aligned head and rewrites `head_fit.json` (committed): a polar radius
+   table around a vertical head axis (11 heights x 24 angles), a face depth grid (front-most face y over x/z) and the
+   helmet eye-hole centre. Without `ref/` it reads `head_fit.json`, so `make models` works anywhere (the preview then
+   uses a coarse proxy head built from the table).
+4. Placement: the lens rims are centred on the eyes with their back face `RIM_GAP` (4 mm) in front of the face inside
+   the rim disc (the brow ridge, which is 1.4 cm in front of the eye surface, decides it); the bridges rest on the nose
+   bridge; the straps run along the head surface (radius smoothed outwards over 15 deg / 1.2 cm so they bridge the
+   eye sockets and crevices) `STRAP_OFF` (2.5 mm) off it, from the temples (`STRAP_Z[0]` = 4 mm above the eyes) round
+   the back above the ears (`STRAP_Z[1]` = 3 cm above the eyes); the T3 half-mask follows the smoothed head surface
+   with `MASK_CLEAR` (5 mm) and its lenses are found on the mask at the eye x.
+
+Measured (joint space, Blender axes, metres; `goggles.log` prints them on every run):
+
+| Value | Measured |
+|---|---|
+| eye centres | x = +-0.040, z = +0.002 (eyes 0.080 apart; helmet eye holes at x +-0.040, z +0.014) |
+| eye surface | y = -0.077 |
+| brow ridge front | y = -0.091 (z +0.012) |
+| nose bridge | x 0, y = -0.098, z +0.012 |
+| head half-width at the temples | 0.071 (head axis at y -0.005) |
+| head radius at the back, strap height | 0.100; front at the brow 0.092 |
+| rim centre planes | T1 y = -0.109, T2 y = -0.107 |
 
 | Tier | Name | Biome | Look | Tris |
 |---|---|---|---|---|
-| 1 | Watchman's Glass | Black Forest | thick jittered bronze rims, 0.057 m saturated resin-amber lenses (alpha 0.6) domed 3.5 mm proud of the rims, 3 riveted bronze clamps per rim, riveted bronze bridge bar with a twine wrap, wood temple blocks, rough leather strap with a bronze buckle and twine wraps | 668 |
-| 2 | Mimir's Glass | Mountains | polished silver rims with raised bezels, 0.057 m saturated ice-blue crystal lenses (alpha 0.6) domed 3.5 mm proud, 3 silver clamps per rim with frost-crystal rivets, high silver bridge arch with a small frost crystal, silver temple arms with frost-crystal shards, dark strap with a silver buckle and wolf-pelt trim | 1314 |
+| 1 | Watchman's Glass | Black Forest | thick jittered bronze rims, 0.057 m saturated resin-amber lenses (alpha 0.6) domed 3.5 mm proud of the rims, 3 riveted bronze clamps per rim, riveted bronze bridge bar with a twine wrap, wood temple blocks, rough leather strap with a bronze buckle and twine wraps | 684 |
+| 2 | Mimir's Glass | Mountains | polished silver rims with raised bezels, 0.057 m saturated ice-blue crystal lenses (alpha 0.6) domed 3.5 mm proud, 3 silver clamps per rim with frost-crystal rivets, high silver bridge arch with a small frost crystal, silver temple arms with frost-crystal shards, dark strap with a silver buckle and wolf-pelt trim | 1346 |
 | 3 | Allfather's Eye | Ashlands | black flametal half-mask with brow V and cheek guards, two obsidian lenses in flametal bezels with ember rims, small crest plate in the brow V with an ember Ansuz mark, black leather strap starting under the mask edges with 3 riveted flametal plates per side | 1216 |
 
 Knobs at the top of `make_goggles.py`:
-1. Fit: `HEAD`, `EYE_Z`, `EYE_X`, `LENS_Y`, `STRAP_A`, `STRAP_B`.
+1. Fit: `REF_ALIGN`, `EYE`, `RIM_GAP`, `STRAP_OFF`, `STRAP_Z`, `MASK_CLEAR` (and `head_fit.json`).
 2. `MATS`: colour, roughness, metallic, emission, alpha (`bronze`, `amber_lens`, `silver`, `crystal_lens`, `flametal`, `obsidian_lens`, `ember_rim`, `rune_inlay` ...).
-3. `T1`: rim segments/radii/depth/`jitter`, strap size, `lens_r`, `lens_dome`, `lens_back`, `eye_dx` (lens centres
-   moved out from `EYE_X`), `clamps` (angles), `buckle_at` (strap point). `T2`: the same plus `bezel_r`, `fur_tufts`, `fur_len`.
-   `T3`: mask ellipse, `mask_span` (degrees), `mask_z`, thickness, `lens_r`, strap, `plates` (degrees back from each
+3. `T1`: rim segments/radii/depth/`jitter`, strap size, `lens_r`, `lens_dome`, `lens_back`, `clamps` (angles), `buckle_at` (strap point). `T2`: the same plus `bezel_r`, `fur_tufts`, `fur_len`.
+   `T3`: `mask_span` (degrees round the head), `mask_z` (relative to the eyes), thickness, `lens_r`, strap, `plates` (degrees back from each
    mask edge), `plate_len`, `rivets`, `rune_z`, `rune_h`, `crest_w`, `crest_h`.
-Preview-only: `HEAD_Z`, `SPACING`, `PREVIEW_TURN`, camera and lights near the end.
+Preview-only: cameras and lights near the end.
 
 # Known gaps
 
