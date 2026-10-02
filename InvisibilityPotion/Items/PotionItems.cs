@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using InvisibilityPotion.Config;
 using Jotunn.Configs;
 using Jotunn.Entities;
@@ -23,9 +24,9 @@ namespace InvisibilityPotion.Items
         /// <summary>Call from PrefabManager.OnVanillaPrefabsAvailable (unsubscribe after the first call).</summary>
         private static readonly string[] DefaultRecipes =
         {
-            "Honey:10,Thistle:5",
-            "Honey:10,Thistle:5,Bloodbag:3",
-            "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1",
+            MeadRecipes.NewDefault(1),   // plan 5: the base needs 2 of the tier's veil ingredient
+            MeadRecipes.NewDefault(2),
+            MeadRecipes.NewDefault(3),
         };
 
         public static void Register()
@@ -76,6 +77,12 @@ namespace InvisibilityPotion.Items
             {
                 Plugin.Log.LogError($"Tier {t} recipe '{cfg.Recipe}' is malformed ({e.Message}); using default '{DefaultRecipes[t - 1]}'");
                 parsed = new List<(string, int)>(RecipeParser.Parse(DefaultRecipes[t - 1]));
+            }
+            if (!AssetBundles.Loaded && parsed.Any(e => e.Item1.StartsWith("VeilIngredient_", System.StringComparison.Ordinal)))
+            {
+                // Without the bundle the ingredients do not exist; keeping them would make the mead uncraftable (spec §5).
+                parsed = new List<(string, int)>(MeadRecipes.WithoutIngredients(parsed));
+                Plugin.Log.LogError($"Tier {t} recipe: no asset bundle, so the veil ingredients do not exist; the base is registered without them");
             }
             var requirements = new List<RequirementConfig>();
             foreach (var (item, amount) in parsed)
