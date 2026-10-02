@@ -436,6 +436,7 @@ namespace InvisibilityPotion.Visuals
             {
                 Rate = s.Rate, Size = s.Size, Lifetime = s.Lifetime, SpreadX = s.SpreadX, SpreadY = s.SpreadY, SpreadZ = s.SpreadZ,
                 Trail = s.InnerTrailMode, VertexAlpha = innerVertexAlpha, Material = inner,
+                MaxParticles = s.InnerMaxParticles,   // round M ruling 2c: <= InnerParticleCap per anchor
             };
             // inner == null: inner layer off (alpha or rate 0, or solo outer).
             if (inner != null && !(s.EmitterMode == FogEmitterMode.Mesh && SpawnMeshFog(p, snap, s, color, innerLayer)))
@@ -470,6 +471,8 @@ namespace InvisibilityPotion.Visuals
             // OuterShape Volume (round L ruling 1): large soft sprites inside a flattened sphere of OuterRadius (height OuterSpreadY x
             // radius), size 0.8..1.2 x OuterSize, slow drift in a random direction, alpha fading in over 20 % and out to the end.
             // OuterShape Ring (round J ruling): Circle shape near the rim of OuterRadius, band height OuterSpreadY x radius.
+            // Round M ruling 1: with OuterTrail (world space) the volume is left behind; rateOverDistance lays it along the path,
+            // the sprites grow by OuterVolumeGrow over their life, and at most OuterVolumeParticleCap live per emitter.
             if (outer == null || animator == null) return;
             var volume = s.OuterShape == FogOuterShape.Volume;
             var outerLayer = new FogLayer
@@ -477,12 +480,14 @@ namespace InvisibilityPotion.Visuals
                 Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
                 Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
                 Ring = !volume, Volume = volume, Orbital = s.OuterOrbitalRadPerSecond,
+                RateDistance = s.OuterEffectiveRateDistance, MaxParticles = s.OuterMaxParticles,
             };
             if (volume)
             {
                 outerLayer.SizeMinFactor = FogSettings.OuterVolumeSizeMinFactor;
                 outerLayer.SizeMaxFactor = FogSettings.OuterVolumeSizeMaxFactor;
                 outerLayer.Speed = FogSettings.OuterVolumeSpeed;
+                outerLayer.Grow = FogSettings.OuterVolumeGrow;
             }
             foreach (var name in s.OuterAnchors)
             {
@@ -514,6 +519,9 @@ namespace InvisibilityPotion.Visuals
             public float SizeMinFactor = 0.6f, SizeMaxFactor = 1.25f;   // start size = random [min, max] x Size
             public float Speed = float.NaN;                              // start speed m/s; NaN = the tier's Speed
             public float Orbital;     // rad/s around the emitter's up axis (velocityOverLifetime.orbitalY); 0 = none
+            public float RateDistance;  // rateOverDistance, particles per metre moved (world space only); 0 = none
+            public float Grow = 1f;     // size at death = start size x Grow (linear sizeOverLifetime); 1 = constant size
+            public int MaxParticles;    // maxParticles; 0 = rate x lifetime budget (FogSettings.MaxParticles)
             public Material Material;
         }
 
@@ -766,7 +774,7 @@ namespace InvisibilityPotion.Visuals
             var layer = new FogLayer
             {
                 Rate = rate, Size = inner.Size, Lifetime = inner.Lifetime, SpreadX = inner.SpreadX, SpreadY = inner.SpreadY, SpreadZ = inner.SpreadZ, Trail = inner.Trail,
-                VertexAlpha = inner.VertexAlpha, Material = inner.Material,
+                VertexAlpha = inner.VertexAlpha, Material = inner.Material, MaxParticles = s.MeshMaxParticles(anchors),
             };
             snap.Fog.Add(SpawnMeshEmitter(p.transform, smr, s.MeshOffset, color, layer, s, snap.MaterialHasColor));
             if (_meshWarned.Add("ok:" + smr.name)) Plugin.Log.LogInfo($"veil fog: Mesh emitter on '{smr.name}' (mesh '{smr.sharedMesh.name}')");
@@ -833,11 +841,21 @@ namespace InvisibilityPotion.Visuals
             // With a material colour the tint lives there (it can follow the environment); else in the particle colour.
             main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
             main.gravityModifier = 0f;
-            main.maxParticles = FogSettings.MaxParticles(rate, layer.Lifetime);
+            main.maxParticles = layer.MaxParticles > 0 ? layer.MaxParticles : FogSettings.MaxParticles(rate, layer.Lifetime);
 
             var emission = ps.emission;
             emission.enabled = true;
             emission.rateOverTime = Mathf.Max(0f, rate);
+            // Per metre moved; Unity only applies it in world space (FogSettings.OuterEffectiveRateDistance is 0 otherwise).
+            emission.rateOverDistance = Mathf.Max(0f, layer.RateDistance);
+
+            if (layer.Grow > 1.0001f)
+            {
+                // Linear growth from the start size to Grow x start size (round M: the volume's 3.2 m sprites end at 4.5 m).
+                var sol = ps.sizeOverLifetime;
+                sol.enabled = true;
+                sol.size = new ParticleSystem.MinMaxCurve(layer.Grow, new AnimationCurve(new Keyframe(0f, 1f / layer.Grow), new Keyframe(1f, 1f)));
+            }
 
             var vel = ps.velocityOverLifetime;
             var drift = layer.Volume ? 0f : s.Drift;   // the inner Drift is not the volume's (it drifts by its start speed)
@@ -923,12 +941,51 @@ namespace InvisibilityPotion.Visuals
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
                           : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {F(s.OuterRadius)} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
                                                             $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
-                lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)})");
+                lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)}), " +
+                          $"max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}");
             }
+            AddMaterialLines(snap, s, lines);
             var text = string.Join("\n", lines);
             if (text == _lastSpawnLog) return;
             _lastSpawnLog = text;
             foreach (var l in lines) Plugin.Log.LogInfo(l);
+        }
+
+        /// <summary>
+        /// Round M ruling 2d: the final values of every fog material of the veil (one line per material, with the layers using
+        /// it): _Color, _EmissionColor, queue, keywords and any blend/alpha property the shader declares
+        /// (FogMaterialCheck.BlendProperties; logged, never changed). A _Color brighter than the applied colour or a non-black
+        /// _EmissionColor at Emission 0 is logged as a warning.
+        /// </summary>
+        private static void AddMaterialLines(Snapshot snap, FogSettings s, List<string> lines)
+        {
+            var users = new Dictionary<Material, List<string>>();
+            foreach (var e in snap.Fog)
+            {
+                var psr = e.Go != null ? e.Go.GetComponent<ParticleSystemRenderer>() : null;
+                var m = psr != null ? psr.sharedMaterial : null;
+                if (m == null) continue;
+                if (!users.TryGetValue(m, out var list)) users[m] = list = new List<string>();
+                var tag = e.Layer == FogLayerKind.Inner ? "Inner" : e.Layer == FogLayerKind.Outer ? "Outer" : e.Anchor;
+                if (!list.Contains(tag)) list.Add(tag);
+            }
+            var applied = new FogRgb(snap.AppliedColor.r, snap.AppliedColor.g, snap.AppliedColor.b);
+            foreach (var kv in users)
+            {
+                var m = kv.Key;
+                var blend = new List<string>();
+                foreach (var name in FogMaterialCheck.BlendProperties)
+                    if (m.HasProperty(name)) blend.Add($"{name}={F(m.GetFloat(name))}");
+                var c = m.HasProperty(ColorId) ? m.GetColor(ColorId) : Color.white;
+                var em = m.HasProperty(EmissionColorId) ? m.GetColor(EmissionColorId) : Color.black;
+                var problems = m.HasProperty(ColorId)
+                    ? FogMaterialCheck.Problems(applied, new FogRgb(c.r, c.g, c.b), new FogRgb(em.r, em.g, em.b), s.Emission)
+                    : new List<string>();
+                lines.Add($"  material '{m.name}' ({string.Join("+", kv.Value)}): shader '{(m.shader != null ? m.shader.name : "-")}' queue {m.renderQueue}, " +
+                          $"_Color {MatColor(m, ColorId)}, _EmissionColor {MatColor(m, EmissionColorId)}, applied colour {FormatRgb(snap.AppliedColor)}, " +
+                          $"blend [{(blend.Count > 0 ? string.Join(" ", blend) : "no blend properties declared")}], keywords [{string.Join(" ", m.shaderKeywords)}]" +
+                          (problems.Count > 0 ? $"; WARNING {string.Join("; ", problems)}" : "; check ok"));
+            }
         }
 
         private static string F(float v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);

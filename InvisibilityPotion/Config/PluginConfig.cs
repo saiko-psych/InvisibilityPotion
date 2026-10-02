@@ -175,7 +175,9 @@ namespace InvisibilityPotion.Config
         /// only files below revision 4 get the full reset, a revision 4 file keeps its tuning), revision 6 (plan 4, round J ruling: the
         /// tier II outer layer is a ring around the player; a revision 4/5 file gets only its [Fog.Tier2] Outer* keys reset), revision 7
         /// (plan 4, round L ruling: tier I/II = enveloping body cloud plus a fog volume (OuterShape Volume) and a lighter ground field;
-        /// every file below revision 7 gets [Fog.Tier1] and [Fog.Tier2] fully reset, old values logged). Existing files keep their old values, so once per
+        /// every file below revision 7 gets [Fog.Tier1] and [Fog.Tier2] fully reset, old values logged), revision 8 (plan 4, round M
+        /// ruling: subtle mid-grey haze, low alphas, the fog volume left behind in world space; again a full [Fog.Tier1]/[Fog.Tier2]
+        /// reset of every older file). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -202,7 +204,7 @@ namespace InvisibilityPotion.Config
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
                 // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below FullResetRevision were reset above;
-                // since revision 7 that is every older file, so this branch only runs if FullResetRevision is lowered again).
+                // since revision 7 (now 8) that is every older file, so this branch only runs if FullResetRevision is lowered again).
                 var outerReset = 0;
                 if (!LookDefaults.ResetsTiers(rev.Value))
                     foreach (var kv in _fogEntries[2])

@@ -359,8 +359,9 @@ namespace InvisibilityPotion.Dev
             Row(s.OuterShape == FogOuterShape.Volume ? "Height (x radius)" : "Band height (x radius)", ref s.OuterSpreadY, 0.01f, 1f, 0.01f, def.OuterSpreadY, saved.OuterSpreadY);
             Row("Rotation deg/s", ref s.OuterRotation, -60f, 60f, 1f, def.OuterRotation, saved.OuterRotation);
             Row("Offset Y m", ref s.OuterOffsetY, -1f, 1f, 0.05f, def.OuterOffsetY, saved.OuterOffsetY);
-            Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.05f, def.OuterAlpha, saved.OuterAlpha);
+            Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.005f, def.OuterAlpha, saved.OuterAlpha);
             Row("Rate /s per anchor", ref s.OuterRate, 0f, 40f, 1f, def.OuterRate, saved.OuterRate);
+            Row("Rate /m walked (trail only)", ref s.OuterRateDistance, 0f, 10f, 0.5f, def.OuterRateDistance, saved.OuterRateDistance);
             Row("Size m", ref s.OuterSize, 0.1f, 5f, 0.1f, def.OuterSize, saved.OuterSize);
             Row("Lifetime s", ref s.OuterLifetime, 0.2f, 10f, 0.25f, def.OuterLifetime, saved.OuterLifetime);
             var anchorsChanged = s.Get("OuterAnchors") != saved.Get("OuterAnchors");
@@ -398,7 +399,7 @@ namespace InvisibilityPotion.Dev
             Row("Radius m", ref s.GroundRadius, 0f, 3f, 0.05f, def.GroundRadius, saved.GroundRadius);
             Row("Height m (above feet)", ref s.GroundHeight, -0.5f, 2f, 0.05f, def.GroundHeight, saved.GroundHeight);
             Row("Drift m/s (random)", ref s.GroundDrift, 0f, 0.5f, 0.01f, def.GroundDrift, saved.GroundDrift);
-            GUILayout.Label($"Live particles: ~{s.LiveParticlesGround:0} while running ({FogSettings.GroundBudgetSpeed:0} m/s), max {s.GroundMaxParticles}", _wrap);
+            GUILayout.Label($"Live particles: ~{s.LiveParticlesGround:0} while running ({FogSettings.GroundBudgetSpeed:0} m/s), max {s.GroundLowerMaxParticles} + {s.GroundUpperMaxParticles} (cap {FogSettings.GroundParticleBudget})", _wrap);
         }
 
         private void DrawLook(FogSettings s, FogSettings saved, FogSettings def, int tier)

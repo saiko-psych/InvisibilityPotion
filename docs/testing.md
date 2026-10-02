@@ -325,6 +325,22 @@ Setup: `make build` (Debug, game closed), `make run`, `ip_give 2`, later `ip_end
 - [ ] Tier III unchanged
 - [ ] Tuning window (`ip_fogui`, outer section): `Outer shape [Volume] Ring` switches live between the volume and the round J ring; `Height (x radius)` flattens the volume; `ip_fog outershape ring` works too
 
+## Plan 4 – round M (subtle haze left behind)
+
+Setup: game closed, `make build`, `make run`, `ip_give 2`, later `ip_end` and `ip_give 1`. Test in daylight and at night. Paste the `Config migration`, `veil fog spawned` (including the `material` lines) and `auto fog dump` lines.
+
+- [ ] `Config migration (look defaults revision 8): N [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults` once (each reset key logged before); tier III keeps its values
+- [ ] Tier II `veil fog spawned T2`: 13 inner emitters `rate 14/s, size 0.8 m, alpha 0.12 ..., max 10`; two ground emitters `alpha 0.12` / upper, `max 40` and `max 20`; `ip_fog_outer [Outer] Hips: rate 4/s, Volume radius 3 m, height 0.35 x r, ..., rotation 0 deg/s, Trail, camera-facing, size 3.2 m, alpha 0.06 ..., max 40`
+- [ ] The `material 'ip_fog_mat' (...)` lines: `_Color (0.55, 0.57, 0.6, a)`, `_EmissionColor (0, 0, 0, 1)`, `check ok` (no `WARNING`); note the `blend [...]` and `keywords [...]` lists for the next round
+- [ ] Auto fog dump, `ip_fog_outer` line: `particles n/40`, `rate 4/s + 2/m`, `startSize 2.56..3.84`, `lifetime 7.2..10.8`, `speed 0.03`, `space World`, `size over life True`, `velocity False`
+- [ ] Daylight: tier II reads as a subtle grey haze around the player, no white blob; the body is wrapped but not hidden behind a bright cloud
+- [ ] Night: no glow; the haze is darker than the sky, not lit up
+- [ ] Walking: the fog volume stays behind along the path and fades out over about 9 s (not moving rigidly with the player); standing still slowly fills the spot around the player
+- [ ] Running: note whether the trail breaks up (the volume is capped at 40 live particles per emitter)
+- [ ] Tier I (`ip_end`, `ip_give 1`): the same behaviour, fainter (`alpha 0.09` inner, `0.045` volume, `0.1` ground), grey
+- [ ] Tier III unchanged
+- [ ] Tuning window (`ip_fogui`, outer section): new row `Rate /m walked (trail only)`; the outer alpha slider steps by 0.005
+
 ## Plan 4 – items round L (goggles fit, sizes, durability, wind)
 
 Setup: `make build` (Debug, game closed), `make run`. Paste the `assets: item`, `assets: prop` and `ip_matdump` lines.

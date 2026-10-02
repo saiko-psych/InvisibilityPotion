@@ -93,12 +93,14 @@ namespace InvisibilityPotion.Visuals
     /// their [Fog.Tier2] Outer* keys reset (see <see cref="ResetsOuterKey"/>). Revision 7 (plan 4, round L ruling): the outer
     /// layer is a fog volume (OuterShape Volume), tier I and II get an enveloping body cloud; every older file gets [Fog.Tier1] and
     /// [Fog.Tier2] fully reset (<see cref="FullResetRevision"/> = 7), so the outer-only reset of revision 6 no longer runs alone.
+    /// Revision 8 (plan 4, round M ruling): subtle haze: mid-grey fog, low alphas, the fog volume in world space (left behind);
+    /// every older file gets [Fog.Tier1] and [Fog.Tier2] fully reset (<see cref="FullResetRevision"/> = 8).
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 7;
-        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round L: 7).</summary>
-        public const int FullResetRevision = 7;
+        public const int Revision = 8;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round M: 8).</summary>
+        public const int FullResetRevision = 8;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -169,8 +171,17 @@ namespace InvisibilityPotion.Visuals
         public const float OuterVolumeSizeMaxFactor = 1.2f;
         /// <summary>Outer volume: start speed in m/s, random direction (slow drift of the fog).</summary>
         public const float OuterVolumeSpeed = 0.03f;
-        /// <summary>Outer volume: alpha over the lifetime rises 0 to 1 until this fraction, then falls to 0 at the end.</summary>
-        public const float OuterVolumeFadeIn = 0.2f;
+        /// <summary>Outer volume: alpha over the lifetime rises 0 to 1 until this fraction, then falls to 0 at the end (round M: 25 %).</summary>
+        public const float OuterVolumeFadeIn = 0.25f;
+        /// <summary>Outer volume (round M): size at death = start size x this factor (3.2 m grows to 4.5 m), linear over the lifetime.</summary>
+        public const float OuterVolumeGrow = 4.5f / 3.2f;
+        /// <summary>
+        /// Round M ruling 2c: caps on simultaneously alive particles, so overlapping lit sprites cannot saturate into a white blob.
+        /// Inner: per anchor (the Mesh emitter gets this x enabled anchors); outer volume: per emitter. The ground cap is
+        /// <see cref="GroundParticleBudget"/> (both ground layers together).
+        /// </summary>
+        public const int InnerParticleCap = 10;
+        public const int OuterVolumeParticleCap = 40;
         /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
         public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
@@ -204,6 +215,8 @@ namespace InvisibilityPotion.Visuals
         public float OuterAlpha = 0.35f;
         /// <summary>Outer layer: particles per second per outer anchor (independent of the inner Rate).</summary>
         public float OuterRate = 14f;
+        /// <summary>Outer layer: extra particles per metre walked (rateOverDistance; only in world space, OuterTrail true).</summary>
+        public float OuterRateDistance;
         public float OuterSize = 1.8f;    // metres; randomised like Size
         public float OuterLifetime = 3f;  // seconds; randomised like Lifetime
         /// <summary>Outer ring band height as a fraction of OuterRadius (random vertical jitter of the spawn point).</summary>
@@ -297,18 +310,22 @@ namespace InvisibilityPotion.Visuals
 
         /// <summary>
         /// Round L ruling 1: the outer layer as a fog volume. Large soft camera-facing sprites (OuterSize 3.2, random 0.8..1.2x) at
-        /// low alpha in a flattened sphere (OuterRadius x OuterSpreadY high, about +-1 m around hip height at 3 m), slow drift,
-        /// slow turn, local space (follows the player). Overlapping big soft sprites at low alpha read as fog, not as discs.
+        /// low alpha in a flattened sphere (OuterRadius x OuterSpreadY high, about +-1 m around hip height at 3 m), slow drift.
+        /// Round M ruling 1: emitted into the world and left behind: world space (OuterTrail), no turn, 4/s plus 2 per metre
+        /// walked, 9 s lifetime, so a walking player lays fog along the path and a standing one slowly fills the spot.
         /// </summary>
-        private static void ApplyFogVolume(FogSettings s, float alpha, float radius)
+        private static void ApplyFogVolume(FogSettings s, float alpha)
         {
             s.OuterEnabled = true;
             s.OuterShape = FogOuterShape.Volume;
             s.OuterAnchors = new List<string> { "Hips" };
             s.OuterHorizontal = false;
-            s.OuterSize = 3.2f; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f;
-            s.OuterRate = 10f; s.OuterLifetime = 6f; s.OuterRotation = 3f; s.OuterOffsetY = 0f; s.OuterTrail = false;
+            s.OuterSize = 3.2f; s.OuterAlpha = alpha; s.OuterRadius = 3f; s.OuterSpreadY = 0.35f;
+            s.OuterRate = 4f; s.OuterRateDistance = 2f; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
         }
+
+        /// <summary>Round M ruling 2a: mid grey, darker than the sky, so the fog reads as haze and never as light.</summary>
+        private static void ApplyHazeColor(FogSettings s) { s.R = 0.55f; s.G = 0.57f; s.B = 0.6f; }
 
         public static FogSettings Defaults(int tier)
         {
@@ -322,13 +339,14 @@ namespace InvisibilityPotion.Visuals
                     // Round I: matte (Emission 0), fainter and greyer so it reads as mist, not as a glow.
                     // Round L: Rate 5 x Size 0.45 left gaps between the 13 bone emitters (fog on hands and feet only); the cloud
                     // now envelops the whole body like tier II's, only lighter, plus the fog volume and the ground field.
-                    s.Rate = 10f; s.Size = 0.75f; s.Lifetime = 2.2f; s.Speed = 0.03f; s.Alpha = 0.25f;
-                    s.R = 0.8f; s.G = 0.82f; s.B = 0.85f; s.Emission = 0f;
+                    // Round M (revision 8): subtle haze: mid grey, alpha 0.09 inner, 0.045 volume, 0.10 ground.
+                    s.Rate = 10f; s.Size = 0.75f; s.Lifetime = 2.2f; s.Speed = 0.03f; s.Alpha = 0.09f;
+                    ApplyHazeColor(s); s.Emission = 0f;
                     s.SpreadX = 1f; s.SpreadY = 0.6f; s.SpreadZ = 1f; s.Drift = 0.03f;
                     s.Trail = false;
-                    ApplyFogVolume(s, 0.07f, 2.4f);
+                    ApplyFogVolume(s, 0.045f);
                     s.GroundEnabled = true;
-                    s.GroundAlpha = 0.15f;
+                    s.GroundAlpha = 0.1f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
                     break;
                 case 2:
@@ -337,14 +355,16 @@ namespace InvisibilityPotion.Visuals
                     // Round I: the inner cloud is the user's tuning saved from ip_fogui (2026-10-02), matte (Emission 0). The faint
                     // alpha with the full SpreadY reads as a thin haze; the slight downward drift keeps it from rising into a plume.
                     // Round L ruling 2 (revision 7): a denser cloud enveloping the whole body (all anchors), 0.8 grey, matte.
-                    s.Rate = 14f; s.Size = 0.8f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.35f;
-                    s.R = 0.8f; s.G = 0.8f; s.B = 0.8f; s.Emission = 0f;
+                    // Round M (revision 8): tier II was a blown-out white blob in daylight; mid grey and alpha 0.12 (rate/size kept).
+                    s.Rate = 14f; s.Size = 0.8f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.12f;
+                    ApplyHazeColor(s); s.Emission = 0f;
                     s.SpreadX = 1.125f; s.SpreadY = 0.6f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
-                    // Round L ruling 1: light fog in a wide area around the player (replaces the round J ring of flat discs).
-                    ApplyFogVolume(s, 0.1f, 3f);
-                    // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth).
+                    // Round L ruling 1: light fog in a wide area around the player (replaces the round J ring of flat discs);
+                    // round M: left behind in the world, alpha 0.06.
+                    ApplyFogVolume(s, 0.06f);
+                    // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth); round M: alpha 0.12.
                     s.GroundEnabled = true;
-                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.18f; s.GroundRadius = 0.9f;
+                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.12f; s.GroundRadius = 0.9f;
                     s.DistortionStrength = 0.1f; s.DA = 0.08f;
                     break;
                 case 3:
@@ -426,8 +446,8 @@ namespace InvisibilityPotion.Visuals
         public const float GroundUpperRateFactor = 0.5f;
         /// <summary>The upper layer's alpha is this fraction of GroundAlpha.</summary>
         public const float GroundUpperAlphaFactor = 0.7f;
-        /// <summary>maxParticles of both ground emitters together.</summary>
-        public const int GroundParticleBudget = 300;
+        /// <summary>maxParticles of both ground emitters together (round M ruling 2c: 60, was 300).</summary>
+        public const int GroundParticleBudget = 60;
 
         public float GroundUpperHeight => GroundHeight + GroundUpperOffset;
         public float GroundUpperAlpha => GroundAlpha * GroundUpperAlphaFactor;
@@ -480,6 +500,24 @@ namespace InvisibilityPotion.Visuals
 
         public bool ExceedsParticleBudget => (EmitterMode == FogEmitterMode.Mesh ? LiveParticlesMesh : LiveParticlesInner) > ParticleWarnThreshold
                                              || LiveParticlesOuter > ParticleWarnThreshold || LiveParticlesGround > ParticleWarnThreshold;
+
+        /// <summary>maxParticles of one inner Bones emitter: the rate x lifetime budget, capped at <see cref="InnerParticleCap"/>.</summary>
+        public int InnerMaxParticles => Math.Min(InnerParticleCap, MaxParticles(Rate, Lifetime));
+
+        /// <summary>maxParticles of the Mesh emitter for <paramref name="enabledAnchors"/> anchors: budget capped at InnerParticleCap per anchor (at least 8).</summary>
+        public int MeshMaxParticles(int enabledAnchors) =>
+            Math.Min(Math.Max(8, InnerParticleCap * Math.Max(0, enabledAnchors)), MaxParticles(MeshEmitterRate(enabledAnchors), Lifetime));
+
+        /// <summary>rateOverDistance of the outer layer: OuterRateDistance in world space (OuterTrail), 0 in local space (Unity ignores it there).</summary>
+        public float OuterEffectiveRateDistance => OuterTrail ? Math.Max(0f, OuterRateDistance) : 0f;
+
+        /// <summary>
+        /// maxParticles of one outer emitter. Volume: budget of OuterRate plus the distance rate at <see cref="GroundBudgetSpeed"/>,
+        /// capped at <see cref="OuterVolumeParticleCap"/>; Ring: rate x lifetime (hard cap only, as in round J).
+        /// </summary>
+        public int OuterMaxParticles => OuterShape == FogOuterShape.Volume
+            ? Math.Min(OuterVolumeParticleCap, MaxParticles(Math.Max(0f, OuterRate) + OuterEffectiveRateDistance * GroundBudgetSpeed, OuterLifetime))
+            : MaxParticles(OuterRate, OuterLifetime);
 
         /// <summary>maxParticles for an inner emitter that emits <paramref name="rate"/> per second (lifetime = Lifetime).</summary>
         public int MaxParticles(float rate) => MaxParticles(rate, Lifetime);
@@ -543,6 +581,7 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterRadius", FogValueKind.Float, "Outer layer spawn radius in metres around each outer anchor"),
                 new FogKey("OuterAlpha", FogValueKind.Float, "Outer layer alpha 0..1 (independent of Alpha)"),
                 new FogKey("OuterRate", FogValueKind.Float, "Outer layer particles per second per outer anchor (independent of Rate; 0 = no outer layer)"),
+                new FogKey("OuterRateDistance", FogValueKind.Float, "Outer layer extra particles per metre walked (only with OuterTrail true: world space)"),
                 new FogKey("OuterSize", FogValueKind.Float, "Outer layer particle size in metres (randomised 0.6x..1.25x)"),
                 new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer height as a fraction of OuterRadius: Volume = vertical scale of the spawn sphere, Ring = band height (random vertical jitter); small = flat"),
                 new FogKey("OuterLifetime", FogValueKind.Float, "Outer layer particle lifetime in seconds (randomised 0.8x..1.2x)"),
@@ -605,6 +644,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRadius": return FloatList.Format(OuterRadius);
                 case "OuterAlpha": return FloatList.Format(OuterAlpha);
                 case "OuterRate": return FloatList.Format(OuterRate);
+                case "OuterRateDistance": return FloatList.Format(OuterRateDistance);
                 case "OuterSize": return FloatList.Format(OuterSize);
                 case "OuterRotation": return FloatList.Format(OuterRotation);
                 case "OuterOffsetY": return FloatList.Format(OuterOffsetY);
@@ -692,6 +732,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRadius": OuterRadius = Math.Max(0f, v); return true;
                 case "OuterAlpha": OuterAlpha = Clamp01(v); return true;
                 case "OuterRate": OuterRate = Math.Max(0f, v); return true;
+                case "OuterRateDistance": OuterRateDistance = Math.Max(0f, v); return true;
                 case "OuterSize": OuterSize = Math.Max(0.01f, v); return true;
                 case "Emission": Emission = Clamp01(v); return true;
                 case "DistortionStrength": DistortionStrength = Math.Max(0f, v); return true;
@@ -738,6 +779,28 @@ namespace InvisibilityPotion.Visuals
                 if (!s.TrySet(key.Name, text)) warnings?.Add($"{key.Name} '{text}' is malformed; using default {s.Get(key.Name)}");
             }
             return s;
+        }
+    }
+
+    /// <summary>
+    /// Round M ruling 2d: checks the final fog material values against the configured colour. Overlapping lit sprites saturate,
+    /// so _Color rgb must not be above the configured colour and _EmissionColor must be black unless Emission is configured.
+    /// </summary>
+    public static class FogMaterialCheck
+    {
+        /// <summary>Blend/alpha properties FogVeil logs when the shader declares them (never changed).</summary>
+        public static readonly string[] BlendProperties = { "_BlendOp", "_SrcBlend", "_DstBlend", "_AlphaChannel", "_ZWrite", "_Mode" };
+
+        private const float Epsilon = 0.002f;
+
+        public static List<string> Problems(FogRgb configured, FogRgb color, FogRgb emission, float emissionSetting)
+        {
+            var problems = new List<string>();
+            if (color.R > configured.R + Epsilon || color.G > configured.G + Epsilon || color.B > configured.B + Epsilon)
+                problems.Add($"_Color rgb {FloatList.Format(color.R, color.G, color.B)} is above the configured {FloatList.Format(configured.R, configured.G, configured.B)}");
+            if (emissionSetting <= 0f && (emission.R > Epsilon || emission.G > Epsilon || emission.B > Epsilon))
+                problems.Add($"_EmissionColor rgb {FloatList.Format(emission.R, emission.G, emission.B)} is not black at Emission 0");
+            return problems;
         }
     }
 
