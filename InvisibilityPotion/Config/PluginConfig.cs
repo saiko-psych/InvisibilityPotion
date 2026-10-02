@@ -52,6 +52,9 @@ namespace InvisibilityPotion.Config
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
             BindGlobal("RevealOnToolUse", true, "Tool use reveals a hidden player: swinging an axe or pickaxe, building with the hammer, using the hoe or cultivator. Picking plants by hand does not");
+            BindGlobal("DrainStaminaOnAttackReveal", true,
+                       "When your own action breaks the veil (hitting, drawing a bow, casting a staff, axe/pickaxe/hammer/hoe/cultivator use), your stamina drops to 0. " +
+                       "Being revealed by taking damage or blocking does not drain it, and neither do further hits while already revealed");
             BindGlobal("ShowSelfFaintly", true, "The hidden player still sees a faint version of themselves");
             BindGlobal("FogCutoffLight", 0.5f, "Alpha cutoff applied to the player's materials for the light veil (tier I)");
             BindGlobal("FogCutoffDense", 0.8f, "Alpha cutoff for the dense veil (tier II/III)");
@@ -74,6 +77,7 @@ namespace InvisibilityPotion.Config
 #endif
             BindPlants();   // plan 5: [Plants], [Goggles] (Config/PluginConfig.Plants.cs)
             MigrateLookDefaults();
+            MigrateGameplayDefaults();
             MigrateMeadRecipes();
             MigrateAndDropOrphans();
             Refresh();
@@ -92,8 +96,10 @@ namespace InvisibilityPotion.Config
                 ["HiddenFromPlayers"] = Bind(section, "HiddenFromPlayers", hiddenFromPlayers, "Other players cannot see this player's position, model or nameplate"),
                 ["AggroLossTime"] = Bind(section, "AggroLossTime", aggroLoss, "Seconds a chasing enemy keeps searching before it gives up. Values above 30 have no effect (vanilla's own limit); lower values make enemies give up sooner"),
                 ["RehideDelay"] = Bind(section, "RehideDelay", rehide, "Seconds without attacking until hidden again; 0 = an attack ends the effect"),
-                ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", 0.5f, "Stamina regeneration multiplier after revealing"),
-                ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
+                ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", GameplayDefaults.DebuffStaminaRegenMultiplier,
+                                                        "Veil Broken debuff: stamina regeneration multiplier after being revealed (0.25 = a quarter of the normal regeneration)"),
+                ["DebuffDuration"] = Bind(section, "DebuffDuration", GameplayDefaults.DebuffDuration,
+                                          "Veil Broken debuff: duration in seconds, restarted on every reveal; shown in the status bar. 0 = no debuff"),
                 ["CarryWeightMultiplier"] = Bind(section, "CarryWeightMultiplier", carry,
                                                  "Max carry weight while the effect is active, as a fraction of the normal limit (Megingjord and world settings included). 1 = no penalty. Being over the limit slows the player as in vanilla",
                                                  new AcceptableValueRange<float>(0f, 1f)),
@@ -265,6 +271,46 @@ namespace InvisibilityPotion.Config
             _file.Save();
         }
 
+        /// <summary>
+        /// Server-synced gameplay defaults that changed (<see cref="GameplayDefaults"/>): once per file ([General]
+        /// GameplayDefaultsRevision below the current revision) every [TierN] key still at its old default moves to the new one;
+        /// values the admin changed stay. The log lists what changed.
+        /// </summary>
+        private static void MigrateGameplayDefaults()
+        {
+            var rev = _file.Bind("General", "GameplayDefaultsRevision", 0,
+                "Internal: revision of the gameplay defaults applied to this file. Below the plugin's revision, [TierN] values still at an old default move to the new default once");
+            if (rev.Value >= GameplayDefaults.Revision) return;
+            var saveOnSet = _file.SaveOnConfigSet;
+            _file.SaveOnConfigSet = false;
+            var changed = new List<string>();
+            try
+            {
+                for (var t = 1; t <= 3; t++)
+                    foreach (var kv in _tierEntries[t])
+                    {
+                        if (!(kv.Value is ConfigEntry<float> entry)) continue;
+                        var migrated = GameplayDefaults.Migrate(kv.Key, t, entry.Value, rev.Value);
+                        if (migrated.Equals(entry.Value)) continue;
+                        changed.Add($"[Tier{t}] {kv.Key} {entry.Value.ToString(CultureInfo.InvariantCulture)} -> {migrated.ToString(CultureInfo.InvariantCulture)}");
+                        entry.Value = migrated;
+                    }
+                rev.Value = GameplayDefaults.Revision;
+                Plugin.Log?.LogInfo(changed.Count == 0
+                    ? $"Config migration (gameplay defaults revision {GameplayDefaults.Revision}): nothing to change"
+                    : $"Config migration (gameplay defaults revision {GameplayDefaults.Revision}): {string.Join(", ", changed)}");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"Config migration (gameplay defaults) failed: {ex.Message}");
+            }
+            finally
+            {
+                _file.SaveOnConfigSet = saveOnSet;
+            }
+            _file.Save();
+        }
+
         private static void BindGlobal<T>(string key, T value, string description) =>
             _globalEntries[key] = Bind("General", key, value, description);
 
@@ -338,6 +384,7 @@ namespace InvisibilityPotion.Config
                 RevealOnBlock = Get<bool>(_globalEntries, "RevealOnBlock"),
                 RevealOnBowDraw = Get<bool>(_globalEntries, "RevealOnBowDraw"),
                 RevealOnToolUse = Get<bool>(_globalEntries, "RevealOnToolUse"),
+                DrainStaminaOnAttackReveal = Get<bool>(_globalEntries, "DrainStaminaOnAttackReveal"),
                 ShowSelfFaintly = Get<bool>(_globalEntries, "ShowSelfFaintly"),
                 FogCutoffLight = Get<float>(_globalEntries, "FogCutoffLight"),
                 FogCutoffDense = Get<float>(_globalEntries, "FogCutoffDense"),

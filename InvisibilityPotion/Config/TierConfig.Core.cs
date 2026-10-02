@@ -40,6 +40,7 @@ namespace InvisibilityPotion.Config
         public bool RevealOnBlock = true;
         public bool RevealOnBowDraw = true;
         public bool RevealOnToolUse = true;   // axe/pickaxe swings, hammer/hoe/cultivator placement
+        public bool DrainStaminaOnAttackReveal = true;   // round Q: own attack that breaks the veil empties the stamina bar
         public bool ShowSelfFaintly = true;
         public float FogCutoffLight = 0.5f;
         public float FogCutoffDense = 0.8f;
@@ -50,6 +51,32 @@ namespace InvisibilityPotion.Config
         public string SpiritColor = "0.6,0.7,0.8";
         public float SpiritStrength = 0.25f;
         public bool AllowPvpInvisibility = true;
+    }
+
+    /// <summary>
+    /// Revisions of the server-synced [TierN] gameplay defaults (pure; PluginConfig applies it once per file). A key still at its
+    /// old default moves to the new one; a value the admin changed stays. Revision 1 (round Q): DebuffStaminaRegenMultiplier
+    /// 0.5 -> 0.25, DebuffDuration 20 -> 15.
+    /// </summary>
+    public static class GameplayDefaults
+    {
+        public const int Revision = 1;
+
+        public const float DebuffStaminaRegenMultiplier = 0.25f;
+        public const float DebuffDuration = 15f;
+
+        /// <summary>The value of [Tier<paramref name="tier"/>] <paramref name="key"/> after migrating a file from <paramref name="fromRevision"/>.</summary>
+        public static float Migrate(string key, int tier, float current, int fromRevision)
+        {
+            if (fromRevision < 1)
+            {
+                if (key == "DebuffStaminaRegenMultiplier" && Same(current, 0.5f)) return DebuffStaminaRegenMultiplier;
+                if (key == "DebuffDuration" && Same(current, 20f)) return DebuffDuration;
+            }
+            return current;
+        }
+
+        private static bool Same(float a, float b) => Math.Abs(a - b) < 0.0001f;
     }
 
     public static class ModifierMath

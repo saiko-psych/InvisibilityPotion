@@ -1,5 +1,6 @@
 using Jotunn.Entities;
 using Jotunn.Managers;
+using InvisibilityPotion.Config;
 using UnityEngine;
 
 namespace InvisibilityPotion.Effects
@@ -42,8 +43,10 @@ namespace InvisibilityPotion.Effects
             }
             var rev = ScriptableObject.CreateInstance<SE_Revealed>();
             rev.name = RevealedName;
-            rev.m_name = "$ip_se_revealed_name";
+            rev.m_name = "$ip_se_revealed_name";   // "Veil Broken"
             rev.m_tooltip = "$ip_se_revealed_tooltip";
+            rev.m_icon = Items.Icons.Sprite("se_veil_broken");   // round Q: shows in the status bar (SEMan.GetHUDStatusEffects needs m_icon)
+            rev.m_ttl = GameplayDefaults.DebuffDuration;   // the clone takes the revealing tier's DebuffDuration in Setup; the HUD shows m_ttl - m_time
             ItemManager.Instance.AddStatusEffect(new CustomStatusEffect(rev, fixReference: false));
             RevealedPrefab = rev;
         }

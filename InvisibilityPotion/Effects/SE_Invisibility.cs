@@ -4,8 +4,6 @@ using InvisibilityPotion.Net;
 
 namespace InvisibilityPotion.Effects
 {
-    public enum RevealReason { DamageDealt, BowDraw, StaffCast, Block, DamageTaken, Command, ToolUse }
-
     /// <summary>Owner-side status effect. Hosts the state machine, writes the ZDO state, applies the debuff. Visuals are driven separately from the ZDO by VeilController (Task 9).</summary>
     public class SE_Invisibility : SE_Stats
     {
@@ -48,7 +46,7 @@ namespace InvisibilityPotion.Effects
         public void MarkRevealed(RevealReason reason)
         {
             if (Machine == null) return;
-            Machine.MarkRevealed();
+            Machine.MarkRevealed(reason);
             Plugin.Log.LogInfo($"T{Tier} reveal marked: {reason}");
         }
 
@@ -63,6 +61,17 @@ namespace InvisibilityPotion.Effects
             base.UpdateStatusEffect(dt);
             if (Machine == null || Owner == null) return;
             var r = Machine.Tick(dt);
+            if (r.DrainStamina && PluginConfig.Global.DrainStaminaOnAttackReveal)
+            {
+                // Round Q ruling 2: the player's own action broke the veil. Player.UseStamina runs RPC_UseStamina directly on the
+                // owner (m_stamina clamped at 0, m_staminaRegenTimer = m_staminaRegenDelay), the HUD reads m_stamina.
+                var use = RevealPenalty.StaminaToUse(Owner.GetStamina(), Game.m_staminaRate);
+                if (use > 0f)
+                {
+                    Owner.UseStamina(use);
+                    Plugin.Log.LogInfo($"T{Tier} veil broken by an own action: stamina emptied");
+                }
+            }
             if (r.ApplyDebuff && Cfg.DebuffDuration > 0f)   // m_ttl 0 would make SE_Revealed permanent (IsDone needs m_ttl > 0)
             {
                 var cfg = Cfg;
