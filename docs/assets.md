@@ -62,15 +62,30 @@ Materials (one `.mat` per Blender material name, shared across FBX files):
 |---|---|---|
 | `bottle_glass_t1..3` | `JVLmock_Custom/Creature` (fix round 2: Distortion read as broken on a bottle; vanilla potions are opaque `Custom/Creature`) | `_Color` opaque, the Blender colour lerped 25 % toward white. `AssetSetup.UseDistortionGlass = true` restores the Distortion glass |
 | `amber_lens`, `crystal_lens`, `obsidian_lens` | `JVLmock_Custom/Distortion` | `_Color` with the Blender alpha (lenses 0.6 / 0.6 / 0.88 in goggles v3), `_RefractionIntensity` 0.02, `_Glossiness` 0.9 |
-| plant foliage: `huldra_strand`, `huldra_strand_shade`, `huldra_tip`, `baldr_leaf`, `baldr_petal`, `helfern_frond` | `JVLmock_Custom/Vegetation` (assumed vanilla name; C# falls back to `Custom/Creature` with a warning) | `_Color` |
+| plant foliage: `huldra_strand`, `huldra_strand_shade`, `huldra_tip`, `baldr_leaf`, `baldr_petal`, `helfern_frond` | `JVLmock_Custom/Vegetation` (assumed vanilla name; C# falls back to `Custom/Creature` with a warning) | `_Color`; wind (items round L): `_RippleDistance` 0.1 (?) and `_RippleSpeed` 1 (?), both 0 on `helfern_frond` (the fern does not sway) |
 | `bottle_mist_t1..3` | `JVLmock_Custom/Creature` | renderer disabled; C# reads the tier colour for the cork wisp |
 | everything else (wood, metal, leather, cork, brew, stones, berries, glowing parts) | `JVLmock_Custom/Creature` (chosen over `/Piece` for one shader everywhere; the `/Piece` stump stays for a comparison) | `_Color` opaque; `_EmissionColor` = colour x Blender emission strength for the 12 emissive materials |
 
 Where the values come from: `_Color` and alpha from the FBX import (Unity's Standard material import, read once before the remap); emission from the `MATS` tables in `tools/blender/make_*.py` (Blender's FBX exporter writes `EmissiveColor` 0,0,0).
 
-C# side: `Items/AssetBundles.cs` (load, asset list, shader safety net), `Items/ModelPrefabs.cs` (item components, size factors, cork wisp, plants), `Items/ModelScale.Core.cs` (size factor per group), `Items/PotionItems.cs` (meads and bases), `Items/GoggleItems.cs`, `Items/IngredientItems.cs`, `Items/ModelItems.cs` (goggles, ingredients, plants, unload), dev commands in `Dev/AssetCommands.cs` and `Dev/MeshExport.cs` (`ip_exportmesh`).
+C# side: `Items/AssetBundles.cs` (load, asset list, shader safety net), `Items/ModelPrefabs.cs` (item components, size factors, cork wisp, plants), `Items/ModelScale.Core.cs` (size factor per group), `Items/PotionItems.cs` (meads and bases), `Items/GoggleItems.cs`, `Items/IngredientItems.cs`, `Items/ModelItems.cs` (goggles, ingredients, plants, unload), dev commands in `Dev/AssetCommands.cs`, `Dev/MeshExport.cs` (`ip_exportmesh`) and `Dev/MaterialDump.cs` (`ip_matdump`).
 
-Size factors (fix round 2, `Items/ModelScale.Core.cs`): bottles x1.6, bowls x2.4, plants and ingredients x1.5, goggles x1. Applied in C# to the `attach` child (items; the held, worn and item-stand views keep that scale) or the `model` child (plants), before the box collider is sized from the renderer bounds. The bundle itself stays at Blender scale.
+Size factors (`Items/ModelScale.Core.cs`; fix round 2, round K, items round L): two per group, the **world** size (dropped item on the ground, plant prop) and the **attach** size (worn, held, item stand, armour stand).
+
+| Group | World | Attach |
+|---|---|---|
+| bottles (`MeadBottle_*`) | x2.4 | x2.0 |
+| bowls (`MeadBowl_*`) | x3.0 | x3.0 |
+| goggles (`Goggles_*`) | x2.2 | x1 |
+| ingredients (`Ingredient_*`, never worn) | x8 | x8 |
+| plants `Plant_T2*`, `Plant_T3*` (props) | x2.2 | – |
+| lichen `Plant_T1*` (props) | x4.5 | – |
+
+Mechanism (decompile, `docs/decompile-notes.md` "Items round L"): the worn and stand views clone only the `attach` child and keep its scale; the dropped item is the whole prefab, but `ItemDrop.SetQuality` resets the root's `localScale` to `ItemData.GetScale()` (1 at quality 1) in `Awake`, `Load` and `DropItem`, so a root factor is lost. So the item prefab's `attach` carries the attach factor, and items whose world size differs (bottles, goggles) get a `DroppedItemScale` component on the root that multiplies its own instance's `attach` by world / attach in `Awake` (world instances only; the attach clones do not carry the root component). The box collider is sized for the dropped view. Plants scale their `model` child by the world factor. The bundle itself stays at Blender scale.
+
+Helmet items (goggles) have no durability (items round L): `ModelPrefabs.MakeItem` sets `m_useDurability = false`, `m_maxDurability = 100` and the item's `m_durability = 100` for every `ItemType.Helmet` (the `HelmetLeather` template wears down and shows a bar).
+
+Wind (items round L, assumption (?)): vanilla vegetation sways through the material float `_RippleDistance` (a real property: `Player` zeroes it on placement ghosts and `Destructible` on fragments to freeze them), driven by the global `_GlobalWind1/2`, `_GlobalWindAlpha` and `_GlobalWindForce` that `EnvMan` sets. The foliage materials get `_RippleDistance` 0.1 and `_RippleSpeed` 1; both values and the second name are guesses (?), declared in the `JVLmock_Custom/Vegetation` stub so they serialize. Stems and other parts stay on `Custom/Creature` and do not move. The fern fronds (`helfern_frond`) stay on `Custom/Vegetation` with both values 0: the items round L brief asked for `Custom/Creature` "as now", but the fronds already use Vegetation and are single-sided leaflets, which need the double-sided foliage shader. `ip_matdump Bush01` (also `shrub_2`, `Pickable_Thistle`, `ip_matdump clutter grass`) logs the real property names and values for the next round.
 
 Cork wisp (fix round 2): the opaque bottle hides interior mist, so `ModelPrefabs.AddMist` moves `MistAnchor` to the top centre of the renderer bounds (the cork) and adds a thin wisp: 2 particles/s, size 0.03..0.06 m, lifetime 1.5 s, rising 0.04..0.06 m/s in world space, tier colour at alpha 0.5.
 

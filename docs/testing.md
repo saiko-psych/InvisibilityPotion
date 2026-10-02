@@ -324,3 +324,27 @@ Setup: `make build` (Debug, game closed), `make run`, `ip_give 2`, later `ip_end
 - [ ] Tier I (`ip_end`, `ip_give 1`): the normal body is wrapped as a whole in a light fog (not only hands and feet), plus a fainter fog volume (radius 2.4 m) and a light ground field; `veil fog spawned T1` lists 13 inner emitters `rate 10/s, size 0.75 m, alpha 0.25` and `ip_fog_outer ... Volume radius 2.4 m`, alpha 0.07
 - [ ] Tier III unchanged
 - [ ] Tuning window (`ip_fogui`, outer section): `Outer shape [Volume] Ring` switches live between the volume and the round J ring; `Height (x radius)` flattens the volume; `ip_fog outershape ring` works too
+
+## Plan 4 – items round L (goggles fit, sizes, durability, wind)
+
+Setup: `make build` (Debug, game closed), `make run`. Paste the `assets: item`, `assets: prop` and `ip_matdump` lines.
+
+Startup log:
+- [ ] `assets: item MeadInvisibility_TN <- MeadBottle_TN ...: scale world x2.4 / attach x2, durability False ...`; bases `world x3 / attach x3`; `VeilGoggles_TN ... world x2.2 / attach x1, durability False`; `VeilIngredient_TN ... world x8 / attach x8`
+- [ ] `assets: prop Plant_T2*/Plant_T3*: scale x2.2`, `Plant_T1*: scale x4.5`
+
+Goggles (`ip_give goggles 1`, 2, 3; equip; front and side screenshots):
+- [ ] T1 and T2 sit higher than in round K, the lenses in front of the eyes (not below them), the rims close to the face and tilted slightly outward with the eye sockets; nothing sticks into the head
+- [ ] T3: the mask lies on the face (about 3 mm off, also at the cheeks); the lens rims bend with the mask at the temples, nothing floats; the strap lies on the head all the way round
+- [ ] No durability bar on the goggles in the inventory or hotbar
+- [ ] Drop goggles: on the ground they are about 2.2x the worn size (clearly visible); picked up and worn again: worn size unchanged
+- [ ] Goggles on an armour stand: worn size
+
+Sizes:
+- [ ] Bottles on the ground a bit bigger than in round K (x2.4); on an item stand still x2.0
+- [ ] Ingredients (`ip_spawn VeilIngredient_T1`, 2, 3) clearly visible on the ground (x8)
+- [ ] Plants `Plant_T2`, `Plant_T3` x2.2; lichen `Plant_T1*` x4.5
+
+Wind (assumption, `docs/assets.md`):
+- [ ] Huldra lichen strands and Baldr leaves/petals sway a little in the wind like vanilla bushes (stems stay); the fern (`Plant_T3`) does not sway. If nothing moves or the leaves tear away from the stems, note it
+- [ ] `ip_matdump Bush01`, `ip_matdump shrub_2`, `ip_matdump Pickable_Thistle` and `ip_matdump clutter grass`: paste the full output (shader names and the `_Ripple*` / wind values) so the next round can copy the real names and values; also `ip_matdump Plant_T2` to see what our foliage carries after Jötunn's shader swap
