@@ -261,3 +261,37 @@ Plants and goggles (look checks):
 - [ ] `ip_components VeilGoggles_T1`, `ip_components MeadHealthMinor`, `ip_components HelmetLeather`: paste the logs (S4: compare the vanilla child names/components with ours)
 - [ ] `ip_shaderdump MeadInvisibility_T2` and `ip_shaderdump Plant_T2`: shaders resolved, render queue of the glass
 - [ ] `ip_bundle`: every material listed with a `Custom/...` shader, none `JVLmock_...`, all `supported True`
+
+## Plan 4 – round J (fix round 2)
+
+Setup: `make build` (Debug, game closed), `make run`. Paste the `assets:`, `veil fog:`, `auto fog dump` and `ip_exportmesh` lines.
+
+Startup log:
+- [ ] `assets: loaded 'ip_assets' (... 33 prefabs, 83 materials)`
+- [ ] `assets: item MeadInvisibility_TN <- MeadBottle_TN ...: scale x1.6, ... box (...)` and `MeadBaseInvisibility_TN ...: scale x2.4`: the box size is the round-I size times the factor (round I: compare with the previous log, lines 33–1119)
+- [ ] `assets: prop Plant_* : scale x1.5` for every plant
+- [ ] `assets: T1..T3 cork wisp on 1 anchor(s) at (...)` (the y value is the top of the bottle)
+- [ ] `assets: item VeilIngredient_T1..3 <- Ingredient_T1..3 ...: scale x1.5` and `assets: ingredient VeilIngredient_TN registered (material, stack 20, ...)`
+- [ ] `Config migration (look defaults revision 5): ...; FogMaterial -> soft on N tier(s)` once (revision 4 tuning kept), then `veil fog: soft material from 'swamp_mist' ...: _MainTex dust02 -> ip_fog_sprite ..., _NormalTex wave-normal -> ip_fog_flat_normal`
+
+Sizes and looks (screenshots next to vanilla `MeadHealthMinor` / `MeadBaseHealthMinor`, `ip_spawn MeadHealthMinor`):
+- [ ] Bases (bowls) about as big as the vanilla mead bases; meads (bottles) about the vanilla potion size; both rest on the ground (collider fits, no floating, no sinking)
+- [ ] Bottle glass opaque and slightly lighter than the Blender colour, not broken/see-through; no interior mist visible
+- [ ] Cork wisp: a thin, slow wisp rising from the cork in the tier colour; on the ground, on an item stand, and in the inventory icon (should not show up as a blob)
+- [ ] Item stand: hang a mead and a base; the bigger size carries over; note the orientation
+- [ ] Plants 1.5x bigger; `ip_spawn Plant_T2` stands on the ground (no 0.3 m float); `ip_spawn MeadHealthMinor` still drops from 0.3 m (the spawn message says `rigidbody` / `no rigidbody`)
+- [ ] Plant visibility, pickability and spawn rules are plan 5: not checked here
+
+Ingredients:
+- [ ] `ip_give ingredient 1` (2, 3, optional amount): "Huldra's Hair", "Baldr's Tear", "Hel's Ember Spore" with icons, stack to 20, descriptions shown
+- [ ] `ip_spawn VeilIngredient_T2`: visible on the ground, can be picked up; ribbons/petals visible from both sides (Creature shader may be single-sided)
+
+Goggles v3:
+- [ ] `ip_give goggles 1` (2, 3), equip: lenses clearly visible on T1 and T2; note how far the goggles sit from the head
+- [ ] `ip_exportmesh head`: writes `BepInEx/export/head_body.obj` and `head_HelmetLeather.obj`; the log names the helmet joint and whether BakeMesh or the bind-pose fallback was used. `ip_exportmesh VeilGoggles_T1` writes `VeilGoggles_T1.obj`. Hand the files to the Blender fitting step; if a mesh line says `not exported (read failed ...)`, paste it
+
+Fog (tiers I and II; drink or `ip_give 1` / `ip_give 2`):
+- [ ] Fog colour neutral grey/white, no brownish/yellowish tint; not brighter than round I
+- [ ] Ground field reads as a soft volume (two layers, 0.15 m and 0.45 m, overlapping patches of varying size), not as flat discs
+- [ ] 2.5 s after the veil appears the log carries `auto fog dump at ...` ... `auto fog dump end` without running a command: check the `ip_fog_outer` lines (particles n/max, renderer `visible`, bounds, camera distance) for the outer ring, and the two `Ground` / `GroundUpper` emitters (particles ≤ max, sum of the two max ≤ 300)
+- [ ] `ip_fog material swamp_mist` vs `ip_fog material soft` (current tier): the dust texture is the only difference; if `soft` renders as hard-edged squares, report it (`_AlphaChannel` assumption, `docs/decompile-notes.md`)

@@ -49,9 +49,10 @@ Full rebuild after a model change: `make models && make unity-setup && make bund
 | `bottle_t1..3` | `MeadBottle_T1..3` | item `MeadInvisibility_T1..3` (clone; mist added) | root -> `attach` -> `model` (`mist_tN` renderer disabled, `MistAnchor`, FBX `attach` empty) |
 | `bowl_t1..3` | `MeadBowl_T1..3` | item `MeadBaseInvisibility_T1..3` (clone) | root -> `attach` -> `model` |
 | `goggles_t1..3` | `Goggles_T1..3` | helmet item `VeilGoggles_T1..3` (clone) | root -> `attach` -> `model` |
+| `ingredient_t1..3` | `Ingredient_T1..3` | material item `VeilIngredient_T1..3` (clone, template `Thistle`, stack 20) | root -> `attach` -> `model` |
 | `plant_t1_s1..s3`, `plant_t1`, `plant_t1_s3_a/b/c`, `plant_t1_flat`, `plant_t1_flat_a/b/c`, `plant_t2`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3`, `plant_t3_a/b/c`, `plant_t3_picked` | `Plant_T1_S1..S3`, `Plant_T1`, `Plant_T1_S3_a/b/c`, `Plant_T1_Flat`, `Plant_T1_Flat_a/b/c`, `Plant_T2`, `Plant_T2_a/b/c`, `Plant_T2_picked`, `Plant_T3`, `Plant_T3_a/b/c`, `Plant_T3_picked` (21) | the bundle prefab itself as `CustomPrefab` with a non-persistent `ZNetView` (`ip_spawn Plant_T2`) | root -> `model` (`PickAnchor`, `EmberAnchor` on T3) |
 
-Name rule (`AssetSetup.PrefabName`): `bottle`/`bowl`/`goggles`/`plant` become `MeadBottle`/`MeadBowl`/`Goggles`/`Plant`, `tN`/`sN` upper case, `flat` -> `Flat`, other suffixes (`a`, `b`, `c`, `picked`) stay as they are. Un-suffixed plant files are variant a (identical meshes; kept so the base names exist).
+Name rule (`AssetSetup.PrefabName`): `bottle`/`bowl`/`goggles`/`ingredient`/`plant` become `MeadBottle`/`MeadBowl`/`Goggles`/`Ingredient`/`Plant`, `tN`/`sN` upper case, `flat` -> `Flat`, other suffixes (`a`, `b`, `c`, `picked`) stay as they are. Un-suffixed plant files are variant a (identical meshes; kept so the base names exist).
 
 Why `root -> attach -> model` for items: Valheim shows only the **direct child named `attach`** of an item prefab, instantiated at the hand/head joint or the item stand's attach point with an identity local transform (`VisEquipment.AttachItem`, `ItemStand.SetVisualItem`; `docs/decompile-notes.md`, "Asset items"). So the whole model lives inside `attach`, shifted so the FBX's own `attach` empty (grip point: bottle neck, bowl rim at +X, goggles head centre) lands on the `attach` origin. On the ground the same object is what you see; the C# `BoxCollider` is sized from the mesh bounds.
 
@@ -59,14 +60,21 @@ Materials (one `.mat` per Blender material name, shared across FBX files):
 
 | Material names | Stump shader | Values |
 |---|---|---|
-| `bottle_glass_t1..3`, `amber_lens`, `crystal_lens`, `obsidian_lens` | `JVLmock_Custom/Distortion` | `_Color` with the Blender alpha (0.45 glass; lenses 0.6 / 0.35 / 0.88), `_RefractionIntensity` 0.02, `_Glossiness` 0.9 |
+| `bottle_glass_t1..3` | `JVLmock_Custom/Creature` (fix round 2: Distortion read as broken on a bottle; vanilla potions are opaque `Custom/Creature`) | `_Color` opaque, the Blender colour lerped 25 % toward white. `AssetSetup.UseDistortionGlass = true` restores the Distortion glass |
+| `amber_lens`, `crystal_lens`, `obsidian_lens` | `JVLmock_Custom/Distortion` | `_Color` with the Blender alpha (lenses 0.6 / 0.6 / 0.88 in goggles v3), `_RefractionIntensity` 0.02, `_Glossiness` 0.9 |
 | plant foliage: `huldra_strand`, `huldra_strand_shade`, `huldra_tip`, `baldr_leaf`, `baldr_petal`, `helfern_frond` | `JVLmock_Custom/Vegetation` (assumed vanilla name; C# falls back to `Custom/Creature` with a warning) | `_Color` |
-| `bottle_mist_t1..3` | `JVLmock_Custom/Creature` | renderer disabled; C# reads the colour for the particle mist |
+| `bottle_mist_t1..3` | `JVLmock_Custom/Creature` | renderer disabled; C# reads the tier colour for the cork wisp |
 | everything else (wood, metal, leather, cork, brew, stones, berries, glowing parts) | `JVLmock_Custom/Creature` (chosen over `/Piece` for one shader everywhere; the `/Piece` stump stays for a comparison) | `_Color` opaque; `_EmissionColor` = colour x Blender emission strength for the 12 emissive materials |
 
 Where the values come from: `_Color` and alpha from the FBX import (Unity's Standard material import, read once before the remap); emission from the `MATS` tables in `tools/blender/make_*.py` (Blender's FBX exporter writes `EmissiveColor` 0,0,0).
 
-C# side: `Items/AssetBundles.cs` (load, asset list, shader safety net), `Items/ModelPrefabs.cs` (item components, mist, plants), `Items/PotionItems.cs` (meads and bases), `Items/GoggleItems.cs`, `Items/ModelItems.cs` (goggles, plants, unload), dev commands in `Dev/AssetCommands.cs`.
+C# side: `Items/AssetBundles.cs` (load, asset list, shader safety net), `Items/ModelPrefabs.cs` (item components, size factors, cork wisp, plants), `Items/ModelScale.Core.cs` (size factor per group), `Items/PotionItems.cs` (meads and bases), `Items/GoggleItems.cs`, `Items/IngredientItems.cs`, `Items/ModelItems.cs` (goggles, ingredients, plants, unload), dev commands in `Dev/AssetCommands.cs` and `Dev/MeshExport.cs` (`ip_exportmesh`).
+
+Size factors (fix round 2, `Items/ModelScale.Core.cs`): bottles x1.6, bowls x2.4, plants and ingredients x1.5, goggles x1. Applied in C# to the `attach` child (items; the held, worn and item-stand views keep that scale) or the `model` child (plants), before the box collider is sized from the renderer bounds. The bundle itself stays at Blender scale.
+
+Cork wisp (fix round 2): the opaque bottle hides interior mist, so `ModelPrefabs.AddMist` moves `MistAnchor` to the top centre of the renderer bounds (the cork) and adds a thin wisp: 2 particles/s, size 0.03..0.06 m, lifetime 1.5 s, rising 0.04..0.06 m/s in world space, tier colour at alpha 0.5.
+
+Fitting references: `ip_exportmesh <prefab>` / `ip_exportmesh head` write OBJ files to `<game>/BepInEx/export/` (x negated, winding reversed: import in Blender with the OBJ defaults, forward -Z, up Y). `head_body.obj` is the player's body baked in the helmet joint's space, i.e. the space of the goggles' `attach` origin; `head_HelmetLeather.obj` is the vanilla leather helmet in the same space.
 
 ## Spike results
 
