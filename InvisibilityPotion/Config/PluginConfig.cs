@@ -168,11 +168,12 @@ namespace InvisibilityPotion.Config
         /// <summary>
         /// The tier I and II looks changed on the user's request: revision 1 (round F, task 10f), revision 2 (round G, task 10g:
         /// absolute outer-layer keys, Emission, DynamicColor off), revision 3 (round H, task 10h: tier I = normal body in a thin
-        /// fog layer that follows the body, ground fog field for tiers I and II). Existing files keep their old values, so once per
+        /// fog layer that follows the body, ground fog field for tiers I and II), revision 4 (round I, task 10i: matte fog, tier II
+        /// = the user's saved tuning, so a revision 3 file of that user loses nothing). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
-        /// default) becomes Off. Tier III is untouched (approved as is). The log lists what happened.
+        /// default) becomes Off for files below revision 3. Tier III is untouched (approved as is). The log lists what happened.
         /// </summary>
         private static void MigrateLookDefaults()
         {
@@ -201,7 +202,7 @@ namespace InvisibilityPotion.Config
                                 Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {key} = {old} is obsolete (replaced by the absolute OuterRadius/OuterAlpha/OuterRate/OuterSize/OuterLifetime) and removed");
                 var t1Mode = (ConfigEntry<string>)_tierEntries[1]["BodyVeilMode"];
                 var oldMode = t1Mode.Value;
-                var newMode = LookDefaults.MigrateBodyVeilMode(1, oldMode);
+                var newMode = LookDefaults.MigrateBodyVeilMode(1, oldMode, rev.Value);
                 var modeChanged = newMode != oldMode;
                 if (modeChanged) t1Mode.Value = newMode;
                 rev.Value = LookDefaultsRevision;

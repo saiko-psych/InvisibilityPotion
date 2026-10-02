@@ -59,7 +59,7 @@ public class FogSettingsTests
         Assert.Equal(5f, t1.Rate, 5);
         Assert.Equal(0.45f, t1.Size, 5);
         Assert.Equal(2f, t1.Lifetime, 5);
-        Assert.Equal(0.22f, t1.Alpha, 5);
+        Assert.Equal(0.18f, t1.Alpha, 5);
         Assert.Equal(0.5f, t1.SpreadY, 5);
         Assert.Equal(0.03f, t1.Speed, 5);
         Assert.Equal(0.03f, t1.Drift, 5);
@@ -77,9 +77,9 @@ public class FogSettingsTests
         Assert.Equal(0.15f, t1.GroundHeight, 5);
         Assert.Equal(0.05f, t1.GroundDrift, 5);
         Assert.All(t1.Anchors, a => Assert.True(a.Enabled));
-        Assert.Equal("0.88,0.9,0.93", t1.Get("Color"));
+        Assert.Equal("0.8,0.82,0.85", t1.Get("Color"));
         Assert.False(t1.DynamicColor);
-        Assert.Equal(0.25f, t1.Emission, 5);
+        Assert.Equal(0f, t1.Emission);   // round I: matte fog, no self-illumination
         Assert.Equal(0.04f, t1.DistortionStrength, 5);
         Assert.Equal(0.5f, t1.DA, 5);
 
@@ -88,14 +88,19 @@ public class FogSettingsTests
         Assert.False(t2.Trail);
         Assert.Equal(FogEmitterMode.Bones, t2.EmitterMode);
         Assert.All(t2.Anchors, a => Assert.True(a.Enabled));
+        // Round I: the user's values saved from ip_fogui (2026-10-02), Emission 0 (matte).
         Assert.Equal(12f, t2.Rate, 5);
-        Assert.Equal(0.7f, t2.Size, 5);
+        Assert.Equal(0.685f, t2.Size, 5);
         Assert.Equal(2.5f, t2.Lifetime, 5);
-        Assert.Equal(0.45f, t2.Alpha, 5);
-        Assert.Equal(0.4f, t2.SpreadY, 5);
-        Assert.Equal("0.85,0.87,0.9", t2.Get("Color"));
+        Assert.Equal(0.05f, t2.Speed, 5);
+        Assert.Equal(0.035f, t2.Alpha, 5);
+        Assert.Equal(1.125f, t2.SpreadX, 5);
+        Assert.Equal(1f, t2.SpreadY, 5);
+        Assert.Equal(1.025f, t2.SpreadZ, 5);
+        Assert.Equal(-0.066f, t2.Drift, 5);
+        Assert.Equal("0.775,0.775,0.775", t2.Get("Color"));
         Assert.False(t2.DynamicColor);
-        Assert.Equal(0.25f, t2.Emission, 5);
+        Assert.Equal(0f, t2.Emission);
         Assert.True(t2.OuterEnabled);
         Assert.True(t2.OuterTrail);
         Assert.Equal(FogTrailMode.Trail, t2.OuterTrailMode);
@@ -220,18 +225,40 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void LookDefaults_Revision3_ResetsTier1And2_AndTier1BodyOff()
+    public void LookDefaults_Revision4_ResetsTier1And2_AndTier1BodyOff()
     {
-        Assert.Equal(3, LookDefaults.Revision);
+        Assert.Equal(4, LookDefaults.Revision);
         Assert.Equal(new[] { 1, 2 }, LookDefaults.ResetTiers);
         Assert.Equal("Off", LookDefaults.BodyVeilModes[1]);
         Assert.Equal("Distortion", LookDefaults.BodyVeilModes[2]);
         Assert.Equal("Distortion", LookDefaults.BodyVeilModes[3]);
-        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Distortion"));
-        Assert.Equal("Spirit", LookDefaults.MigrateBodyVeilMode(1, "Spirit"));
-        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Off"));
-        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(2, "Distortion"));
-        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(3, "Distortion"));
+        // Below revision 3 the old tier I default Distortion becomes Off.
+        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Distortion", 2));
+        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Distortion", 0));
+        Assert.Equal("Spirit", LookDefaults.MigrateBodyVeilMode(1, "Spirit", 2));
+        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Off", 2));
+        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(2, "Distortion", 2));
+        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(3, "Distortion", 2));
+        // A revision 3 file already had Off as the default: Distortion there is the user's choice and stays.
+        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(1, "Distortion", 3));
+    }
+
+    [Fact]
+    public void Defaults_AreMatte_AllTiers()
+    {
+        for (var t = 1; t <= 3; t++) Assert.Equal(0f, FogSettings.Defaults(t).Emission);
+    }
+
+    [Fact]
+    public void Drift_AllowsNegative_AndRoundTrips()
+    {
+        var s = FogSettings.Defaults(1);
+        Assert.True(s.TrySet("Drift", "-0.066"));
+        Assert.Equal(-0.066f, s.Drift, 5);
+        Assert.Equal("-0.066", s.Get("Drift"));
+        var parsed = FogSettings.Defaults(1);
+        Assert.True(parsed.TrySet("Drift", s.Get("Drift")));
+        Assert.Equal(s.Drift, parsed.Drift, 5);
     }
 
     [Fact]

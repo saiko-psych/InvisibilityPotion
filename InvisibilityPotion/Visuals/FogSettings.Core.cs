@@ -79,19 +79,25 @@ namespace InvisibilityPotion.Visuals
     /// <summary>
     /// Revision of the per-tier look defaults and what a migration to it changes (pure; PluginConfig applies it to the file).
     /// Revision 3 (round H, task 10h): tier I is the normal body in a thin fog layer plus a ground fog field, tier II gets the
-    /// ground field too.
+    /// ground field too. Revision 4 (round I, task 10i): matte fog (Emission 0), tier I fainter and greyer, tier II = the values
+    /// the user saved from the tuning window.
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 3;
+        public const int Revision = 4;
+        /// <summary>First revision whose [Tier1] BodyVeilMode default is Off; files from it on keep their tier I body mode.</summary>
+        public const int Tier1BodyOffRevision = 3;
         /// <summary>[Fog.TierN] sections reset to the new defaults when a file is below <see cref="Revision"/>; tier III is untouched.</summary>
         public static readonly int[] ResetTiers = { 1, 2 };
         /// <summary>Default [TierN] BodyVeilMode per tier (index 1..3).</summary>
         public static readonly string[] BodyVeilModes = { null, "Off", "Distortion", "Distortion" };
 
-        /// <summary>BodyVeilMode after the migration: tier I on the previous default Distortion becomes Off; anything else is kept.</summary>
-        public static string MigrateBodyVeilMode(int tier, string current) =>
-            tier == 1 && string.Equals((current ?? "").Trim(), "Distortion", StringComparison.Ordinal) ? "Off" : current;
+        /// <summary>
+        /// BodyVeilMode after the migration from <paramref name="fromRevision"/>: tier I on the pre-revision-3 default Distortion
+        /// becomes Off; anything else is kept (from revision 3 on, Distortion on tier I is the user's own choice).
+        /// </summary>
+        public static string MigrateBodyVeilMode(int tier, string current, int fromRevision) =>
+            tier == 1 && fromRevision < Tier1BodyOffRevision && string.Equals((current ?? "").Trim(), "Distortion", StringComparison.Ordinal) ? "Off" : current;
     }
 
     /// <summary>One config key of a per-tier fog section ([Fog.TierN]).</summary>
@@ -224,8 +230,9 @@ namespace InvisibilityPotion.Visuals
                 case 1:
                     // Light tier (round H): the normal body ([Tier1] BodyVeilMode Off) in a thin, close fog layer that follows the
                     // body (no trail plume), plus a ground fog field along the walked path. Distortion values stay for the mode switch.
-                    s.Rate = 5f; s.Size = 0.45f; s.Lifetime = 2f; s.Speed = 0.03f; s.Alpha = 0.22f;
-                    s.R = 0.88f; s.G = 0.9f; s.B = 0.93f; s.Emission = 0.25f;
+                    // Round I: matte (Emission 0), fainter and greyer so it reads as mist, not as a glow.
+                    s.Rate = 5f; s.Size = 0.45f; s.Lifetime = 2f; s.Speed = 0.03f; s.Alpha = 0.18f;
+                    s.R = 0.8f; s.G = 0.82f; s.B = 0.85f; s.Emission = 0f;
                     s.SpreadX = 1f; s.SpreadY = 0.5f; s.SpreadZ = 1f; s.Drift = 0.03f;
                     s.Trail = false;
                     s.GroundEnabled = true;
@@ -234,8 +241,11 @@ namespace InvisibilityPotion.Visuals
                 case 2:
                     // Round G: overlapping blobs on every bone form one cloud head to feet (follows the body), plus a flat disc of
                     // large slow particles at hip height that trails.
-                    s.Rate = 12f; s.Size = 0.7f; s.Lifetime = 2.5f; s.Alpha = 0.45f; s.SpreadY = 0.4f;
-                    s.Emission = 0.25f;
+                    // Round I: the inner cloud is the user's tuning saved from ip_fogui (2026-10-02), matte (Emission 0). The faint
+                    // alpha with the full SpreadY reads as a thin haze; the slight downward drift keeps it from rising into a plume.
+                    s.Rate = 12f; s.Size = 0.685f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.035f;
+                    s.R = 0.775f; s.G = 0.775f; s.B = 0.775f; s.Emission = 0f;
+                    s.SpreadX = 1.125f; s.SpreadY = 1f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
                     s.OuterEnabled = true;
                     s.OuterAnchors = new List<string> { "Hips" };
                     s.OuterRadius = 1.4f; s.OuterAlpha = 0.35f; s.OuterRate = 14f; s.OuterSize = 1.8f; s.OuterLifetime = 3f;
@@ -382,11 +392,11 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("Alpha", FogValueKind.Float, "Fog alpha 0..1"),
                 new FogKey("Color", FogValueKind.Text, "Fog colour as r,g,b (0..1)"),
                 new FogKey("DynamicColor", FogValueKind.Bool, "Blend the fog colour 50/50 with the environment's fog colour (day, night, weather); turns the fog dark in rain and at night"),
-                new FogKey("Emission", FogValueKind.Float, "Fog self-illumination 0..1 (_EmissionColor = Color x Emission); keeps the fog whitish in rain and at night, 0 = lit by the scene only"),
+                new FogKey("Emission", FogValueKind.Float, "Fog self-illumination 0..1 (_EmissionColor = Color x Emission); keeps the fog whitish in rain and at night but makes it glow, 0 = matte, lit by the scene only (default)"),
                 new FogKey("SpreadX", FogValueKind.Float, "Emitter shape scale sideways (multiplies each anchor's radius)"),
                 new FogKey("SpreadY", FogValueKind.Float, "Emitter shape scale vertically; below 1 flattens the fog"),
                 new FogKey("SpreadZ", FogValueKind.Float, "Emitter shape scale front/back"),
-                new FogKey("Drift", FogValueKind.Float, "Vertical drift of fog particles in m/s (world space); 0 = no plume"),
+                new FogKey("Drift", FogValueKind.Float, "Vertical drift of fog particles in m/s (world space); 0 = no plume, negative = sinks"),
                 new FogKey("Trail", FogValueKind.Bool, "true = world space: fog particles stay where they were emitted, so moving leaves a trail; false = they follow the body"),
                 new FogKey("MeshRate", FogValueKind.Float, "Mesh emitter: particles per second on the body surface; 0 = Rate x enabled anchors"),
                 new FogKey("OuterEnabled", FogValueKind.Bool, "Second, wider fog layer on the OuterAnchors bones"),
