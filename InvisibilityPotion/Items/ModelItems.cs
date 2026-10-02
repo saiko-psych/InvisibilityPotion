@@ -14,6 +14,8 @@ namespace InvisibilityPotion.Items
             catch (System.Exception e) { Plugin.Log.LogError($"Ingredient registration failed: {e}"); }
             try { ModelPrefabs.RegisterPlants(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Plant registration failed: {e}"); }
+            try { Plants.PlantPrefabs.Register(); }   // plan 5: needs the scaled plant models, before Unload
+            catch (System.Exception e) { Plugin.Log.LogError($"Hidden plant registration failed: {e}"); }
             AssetBundles.Unload();
             // After Jötunn has put the custom prefabs into ZNetScene (and fixed their mock references): log and resolve what is left.
             PrefabManager.OnPrefabsRegistered += () => AssetBundles.FixAllShaders("OnPrefabsRegistered");

@@ -44,16 +44,27 @@ namespace InvisibilityPotion.Plants
 
         private void Awake()
         {
+            // Placement ghost (Player.SetupPlacementGhost instantiates under ZNetView.m_forceDisableInit, Player.cs:3485-3499, and
+            // disables colliders itself): leave the preview alone.
+            if (ZNetView.m_forceDisableInit)
+            {
+                Destroy(this);
+                return;
+            }
             Cache();
             ActiveStage = Stages.Length > 0 ? Stages.Length - 1 : 0;   // ripe until VeilHarvest says otherwise
             Apply(false, ActiveStage);
             All.Add(this);
         }
 
-        private void Start()
+        /// <summary>Forced: ZoneSystem.PlaceVegetation re-enables the colliders of a scaled instance after Awake (ZoneSystem.cs:1553-1561).</summary>
+        private void Start() => RefreshNow(true);
+
+        /// <summary>Applies the current goggle level and stage at once (Start, stage change) instead of on the next driver tick.</summary>
+        public void RefreshNow(bool force = false)
         {
             var p = Player.m_localPlayer;
-            Evaluate(GogglesLevel.Local, p != null, p != null ? p.transform.position : Vector3.zero, true);
+            Evaluate(GogglesLevel.Local, p != null, p != null ? p.transform.position : Vector3.zero, force);
         }
 
         private void OnDestroy() => All.Remove(this);
