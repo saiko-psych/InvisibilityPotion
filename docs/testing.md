@@ -469,3 +469,17 @@ Config `[TierN] CarryWeightMultiplier` (admin, synced, 0..1, defaults T1 0.75, T
 - [ ] Carrying more than the reduced limit: vanilla encumbered icon and slow walk; at expiry (or `ip_end`) the limit returns at once and the icon goes
 - [ ] T2 reveal (hit an enemy): the penalty stays during the Revealed phase (whole effect)
 - [ ] Set `[Tier1] CarryWeightMultiplier = 1`, `ip_reload_config`: the reload line prints `carry T1/T2/T3 1.00/...` and the active T1 penalty is gone without re-drinking
+
+## Plan 5 – tool use reveals
+
+Config `[General] RevealOnToolUse` (admin, synced, default true). Reveal reason in the log: `reveal marked: ToolUse`. T1 ends, T2/T3 reveal and re-hide after `RehideDelay`.
+- [ ] Log: patch health includes `Player.PlacePiece`; `ip_state` prints `reveal on: ... toolUse=True`
+- [ ] T2: swing an axe at a tree (and into the air) -> `ToolUse` reveal on the swing, re-hide after `RehideDelay`
+- [ ] T2: swing a pickaxe at a rock/ore -> `ToolUse` reveal
+- [ ] T2: place a hammer piece -> reveal; repair and remove with the hammer -> no reveal
+- [ ] T2: hoe (level, pave, raise) -> reveal per placement
+- [ ] T2: cultivator (cultivate ground, plant a sapling, also the Huldra sapling on a tree) -> reveal
+- [ ] T1: one axe swing ends the effect
+- [ ] Picking plants by hand (berries, thistle, our hidden plants) -> no reveal
+- [ ] Staff cast still reveals as `StaffCast`; a sword swing that misses does not reveal
+- [ ] `[General] RevealOnToolUse = false`, `ip_reload_config` (line ends `reveal on tool use False`): axe, pickaxe, hammer, hoe, cultivator no longer reveal, without re-drinking

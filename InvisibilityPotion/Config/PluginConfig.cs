@@ -51,6 +51,7 @@ namespace InvisibilityPotion.Config
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
+            BindGlobal("RevealOnToolUse", true, "Tool use reveals a hidden player: swinging an axe or pickaxe, building with the hammer, using the hoe or cultivator. Picking plants by hand does not");
             BindGlobal("ShowSelfFaintly", true, "The hidden player still sees a faint version of themselves");
             BindGlobal("FogCutoffLight", 0.5f, "Alpha cutoff applied to the player's materials for the light veil (tier I)");
             BindGlobal("FogCutoffDense", 0.8f, "Alpha cutoff for the dense veil (tier II/III)");
@@ -331,6 +332,7 @@ namespace InvisibilityPotion.Config
                 RevealOnDamage = Get<bool>(_globalEntries, "RevealOnDamage"),
                 RevealOnBlock = Get<bool>(_globalEntries, "RevealOnBlock"),
                 RevealOnBowDraw = Get<bool>(_globalEntries, "RevealOnBowDraw"),
+                RevealOnToolUse = Get<bool>(_globalEntries, "RevealOnToolUse"),
                 ShowSelfFaintly = Get<bool>(_globalEntries, "ShowSelfFaintly"),
                 FogCutoffLight = Get<float>(_globalEntries, "FogCutoffLight"),
                 FogCutoffDense = Get<float>(_globalEntries, "FogCutoffDense"),

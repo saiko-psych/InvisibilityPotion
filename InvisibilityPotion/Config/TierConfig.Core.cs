@@ -39,6 +39,7 @@ namespace InvisibilityPotion.Config
         public bool RevealOnDamage = true;
         public bool RevealOnBlock = true;
         public bool RevealOnBowDraw = true;
+        public bool RevealOnToolUse = true;   // axe/pickaxe swings, hammer/hoe/cultivator placement
         public bool ShowSelfFaintly = true;
         public float FogCutoffLight = 0.5f;
         public float FogCutoffDense = 0.8f;

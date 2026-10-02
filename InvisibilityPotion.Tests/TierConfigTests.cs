@@ -99,3 +99,12 @@ public class TierConfigTests
         new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, DebuffDuration = 20f }.Validate();
     }
 }
+
+public class GlobalConfigDefaultsTests
+{
+    [Fact]
+    public void RevealOnToolUse_DefaultsToOn()
+    {
+        Assert.True(new GlobalConfig().RevealOnToolUse);
+    }
+}

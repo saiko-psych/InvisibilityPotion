@@ -48,7 +48,9 @@ namespace InvisibilityPotion.Patches
         }
     }
 
-    /// <summary>Starting a staff cast. Melee swings are not revealed here (they reveal on hit via DamagePatch), so harvesting stays silent.</summary>
+    /// <summary>Starting a staff cast, or an axe/pickaxe swing when [General] RevealOnToolUse is on (any target: tree, rock, ore, creature, air).
+    /// Other melee swings are not revealed here (they reveal on hit via DamagePatch). Hammer, hoe and cultivator never reach StartAttack (place mode
+    /// returns early in Player.PlayerAttackInput); they reveal through PlacePiecePatch.</summary>
     [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.StartAttack))]
     internal static class StartAttackPatch
     {
@@ -62,6 +64,21 @@ namespace InvisibilityPotion.Patches
             var skill = weapon?.m_shared?.m_skillType;
             if (skill == Skills.SkillType.ElementalMagic || skill == Skills.SkillType.BloodMagic)
                 Reveal.Mark(p, RevealReason.StaffCast);
+            else if ((skill == Skills.SkillType.Axes || skill == Skills.SkillType.Pickaxes) && PluginConfig.Global.RevealOnToolUse)
+                Reveal.Mark(p, RevealReason.ToolUse);
+        }
+    }
+
+    /// <summary>Building with the hammer, levelling/paving/digging with the hoe (terrain ops are pieces) and planting with the cultivator
+    /// (Player.TryPlacePiece -> PlacePiece, Player.cs:3082). doAttack is false only for pieces spawned by a weapon attack (Attack.cs:1509), which are not tool use.</summary>
+    [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece))]
+    internal static class PlacePiecePatch
+    {
+        [HarmonyPostfix]
+        private static void Postfix(Player __instance, bool doAttack)
+        {
+            if (!doAttack || !PluginConfig.Global.RevealOnToolUse) return;
+            Reveal.Mark(__instance, RevealReason.ToolUse);
         }
     }
 

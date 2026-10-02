@@ -4,7 +4,7 @@ using InvisibilityPotion.Net;
 
 namespace InvisibilityPotion.Effects
 {
-    public enum RevealReason { DamageDealt, BowDraw, StaffCast, Block, DamageTaken, Command }
+    public enum RevealReason { DamageDealt, BowDraw, StaffCast, Block, DamageTaken, Command, ToolUse }
 
     /// <summary>Owner-side status effect. Hosts the state machine, writes the ZDO state, applies the debuff. Visuals are driven separately from the ZDO by VeilController (Task 9).</summary>
     public class SE_Invisibility : SE_Stats

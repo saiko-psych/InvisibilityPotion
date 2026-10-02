@@ -357,7 +357,7 @@ namespace InvisibilityPotion.Dev
                 {
                     Cfg.PluginConfig.Reload();
                     var t2 = Cfg.PluginConfig.Tier(2);
-                    Say($"config reloaded: T1 duration {Cfg.PluginConfig.Tier(1).Duration}s, T2 rehide {t2.RehideDelay}s, T3 aggro-loss {Cfg.PluginConfig.Tier(3).AggroLossTime}s, carry T1/T2/T3 {Cfg.PluginConfig.Tier(1).CarryWeightMultiplier:F2}/{t2.CarryWeightMultiplier:F2}/{Cfg.PluginConfig.Tier(3).CarryWeightMultiplier:F2}");
+                    Say($"config reloaded: T1 duration {Cfg.PluginConfig.Tier(1).Duration}s, T2 rehide {t2.RehideDelay}s, T3 aggro-loss {Cfg.PluginConfig.Tier(3).AggroLossTime}s, carry T1/T2/T3 {Cfg.PluginConfig.Tier(1).CarryWeightMultiplier:F2}/{t2.CarryWeightMultiplier:F2}/{Cfg.PluginConfig.Tier(3).CarryWeightMultiplier:F2}, reveal on tool use {Cfg.PluginConfig.Global.RevealOnToolUse}");
                 }
                 catch (System.Exception e)
                 {
@@ -434,6 +434,8 @@ namespace InvisibilityPotion.Dev
                         ? $"self: no effect; zdo tier={tier} hidden={hidden} hiddenFromPlayers={fromPlayers}"
                         : $"self: T{inv.Tier} phase={inv.Machine.Phase} elapsed={inv.Machine.Elapsed:F1}s rehide={inv.Machine.RehideTimer:F1}s pending={inv.Machine.PendingReveal}; zdo tier={tier} hidden={hidden} hiddenFromPlayers={fromPlayers}");
                     Say($"carry: max {p.GetMaxCarryWeight():F0} (multiplier {(inv == null ? 1f : Cfg.PluginConfig.Tier(inv.Tier).CarryWeightMultiplier):F2}; config T1 {Cfg.PluginConfig.Tier(1).CarryWeightMultiplier:F2}, T2 {Cfg.PluginConfig.Tier(2).CarryWeightMultiplier:F2}, T3 {Cfg.PluginConfig.Tier(3).CarryWeightMultiplier:F2})");
+                    var g = Cfg.PluginConfig.Global;
+                    Say($"reveal on: damage={g.RevealOnDamage} block={g.RevealOnBlock} bowDraw={g.RevealOnBowDraw} toolUse={g.RevealOnToolUse}");
                     var mine = ZDOMan.GetSessionID();
                     foreach (var c in Character.GetAllCharacters())
                     {
