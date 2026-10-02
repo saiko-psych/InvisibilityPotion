@@ -81,15 +81,29 @@ namespace InvisibilityPotion.Visuals
     /// Revision 3 (round H, task 10h): tier I is the normal body in a thin fog layer plus a ground fog field, tier II gets the
     /// ground field too. Revision 4 (round I, task 10i): matte fog (Emission 0), tier I fainter and greyer, tier II = the values
     /// the user saved from the tuning window. Revision 5 (plan 4 fix round 2): FogMaterial soft is the default of every tier;
-    /// files at revision 4 keep their tuning and only move FogMaterial swamp_mist to soft (all three tiers).
+    /// files at revision 4 keep their tuning and only move FogMaterial swamp_mist to soft (all three tiers). Revision 6 (plan 4,
+    /// round J ruling): the tier II outer layer is a distinct ring that stays around the player; files at revision 4 or 5 get only
+    /// their [Fog.Tier2] Outer* keys reset (see <see cref="ResetsOuterKey"/>).
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 5;
+        public const int Revision = 6;
         /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults.</summary>
         public const int FullResetRevision = 4;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
+        /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
+        public const int OuterRingRevision = 6;
+        /// <summary>Key prefix of the outer layer keys.</summary>
+        public const string OuterKeyPrefix = "Outer";
+
+        /// <summary>
+        /// True when the migration from <paramref name="fromRevision"/> resets [Fog.Tier<paramref name="tier"/>] <paramref name="key"/>
+        /// to its default for the outer ring: only tier II, only the Outer* keys, only files below <see cref="OuterRingRevision"/>
+        /// (files below <see cref="FullResetRevision"/> get the full tier reset anyway).
+        /// </summary>
+        public static bool ResetsOuterKey(int tier, string key, int fromRevision) =>
+            tier == 2 && fromRevision < OuterRingRevision && key != null && key.StartsWith(OuterKeyPrefix, StringComparison.Ordinal);
 
         /// <summary>True when a file at <paramref name="fromRevision"/> gets the full reset of <see cref="ResetTiers"/>.</summary>
         public static bool ResetsTiers(int fromRevision) => fromRevision < FullResetRevision;
@@ -136,6 +150,13 @@ namespace InvisibilityPotion.Visuals
         public const int ParticleWarnThreshold = 200;
         /// <summary>Hard cap on particles per emitter, whatever rate × lifetime asks for.</summary>
         public const int ParticleHardCap = 300;
+        /// <summary>
+        /// Outer ring: Circle shape radiusThickness (0 = particles on the rim only, 1 = the whole disc). 0.25 keeps them in the
+        /// outer quarter of OuterRadius, so the layer reads as a ring, not a filled disc (round J ruling).
+        /// </summary>
+        public const float OuterRingThickness = 0.25f;
+        /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
+        public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
         public static readonly string[] DefaultOuterAnchors = { "Head", "Chest", "Hips" };
 
@@ -169,9 +190,13 @@ namespace InvisibilityPotion.Visuals
         public float OuterRate = 14f;
         public float OuterSize = 1.8f;    // metres; randomised like Size
         public float OuterLifetime = 3f;  // seconds; randomised like Lifetime
-        /// <summary>Outer layer vertical shape scale on OuterRadius; below 1 flattens the disc.</summary>
+        /// <summary>Outer ring band height as a fraction of OuterRadius (random vertical jitter of the spawn point).</summary>
         public float OuterSpreadY = 0.35f;
         public bool OuterTrail;
+        /// <summary>Outer ring: turn speed around the player's up axis in deg/s (orbital velocity of the particles); 0 = still.</summary>
+        public float OuterRotation;
+        /// <summary>Outer ring: vertical offset in metres added to the outer anchor's offset (Anchor.* Y), so the ring can sit below the bone.</summary>
+        public float OuterOffsetY;
         /// <summary>
         /// Outer layer quads lie parallel to the ground (HorizontalBillboard) instead of facing the camera. Round H: upright 1.8 m
         /// billboards cannot form a flat ring (each quad is ~4x taller than the 0.42 m disc), so the ring read as part of the body cloud.
@@ -270,8 +295,12 @@ namespace InvisibilityPotion.Visuals
                     s.SpreadX = 1.125f; s.SpreadY = 1f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
                     s.OuterEnabled = true;
                     s.OuterAnchors = new List<string> { "Hips" };
-                    s.OuterRadius = 1.4f; s.OuterAlpha = 0.35f; s.OuterRate = 14f; s.OuterSize = 1.8f; s.OuterLifetime = 3f;
-                    s.OuterSpreadY = 0.15f; s.OuterTrail = true;
+                    // Round J ruling (revision 6): a distinct ring 2.5 m around the player at hip height (Hips - 0.2 m) that stays
+                    // with the player (local space, no trail: in world space its patches looked exactly like the ground field),
+                    // thin and turning slowly.
+                    s.OuterRadius = 2.5f; s.OuterAlpha = 0.55f; s.OuterRate = 18f; s.OuterSize = 1.6f; s.OuterLifetime = 4f;
+                    s.OuterSpreadY = 0.1f; s.OuterTrail = false; s.OuterHorizontal = true;
+                    s.OuterOffsetY = -0.2f; s.OuterRotation = 8f;
                     // Round H: a denser, wider ground fog field than tier I.
                     s.GroundEnabled = true;
                     s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1f; s.GroundGrow = 3.5f; s.GroundAlpha = 0.3f; s.GroundRadius = 0.9f;
@@ -322,6 +351,9 @@ namespace InvisibilityPotion.Visuals
 
         public FogTrailMode InnerTrailMode => Trail ? FogTrailMode.Trail : FogTrailMode.Follow;
         public FogTrailMode OuterTrailMode => OuterTrail ? FogTrailMode.Trail : FogTrailMode.Follow;
+
+        /// <summary>OuterRotation in rad/s (ParticleSystem velocityOverLifetime.orbitalY).</summary>
+        public float OuterOrbitalRadPerSecond => OuterRotation * (float)Math.PI / 180f;
 
         /// <summary>True when the inner layer emits anything: alpha above 0 and a rate (Rate, or MeshRate in Mesh mode).</summary>
         public bool InnerActive => Alpha > 0f && (Rate > 0f || (EmitterMode == FogEmitterMode.Mesh && MeshRate > 0f));
@@ -470,9 +502,11 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterAlpha", FogValueKind.Float, "Outer layer alpha 0..1 (independent of Alpha)"),
                 new FogKey("OuterRate", FogValueKind.Float, "Outer layer particles per second per outer anchor (independent of Rate; 0 = no outer layer)"),
                 new FogKey("OuterSize", FogValueKind.Float, "Outer layer particle size in metres (randomised 0.6x..1.25x)"),
-                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer vertical shape scale on OuterRadius; below 1 flattens the disc"),
+                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer ring band height as a fraction of OuterRadius (random vertical jitter of the spawn point); small = a thin band"),
                 new FogKey("OuterLifetime", FogValueKind.Float, "Outer layer particle lifetime in seconds (randomised 0.8x..1.2x)"),
                 new FogKey("OuterTrail", FogValueKind.Bool, "Outer layer in world space (leaves a trail), like Trail for the inner layer"),
+                new FogKey("OuterRotation", FogValueKind.Float, "Outer ring turn speed around the player in deg/s (negative = the other way, 0 = still)"),
+                new FogKey("OuterOffsetY", FogValueKind.Float, "Outer ring vertical offset in metres, added to the outer anchor's Anchor.* offset (negative = lower)"),
                 new FogKey("OuterHorizontal", FogValueKind.Bool, "Outer layer particles lie flat, parallel to the ground (a visible flat ring from above); false = they face the camera like the inner fog"),
                 new FogKey("GroundEnabled", FogValueKind.Bool, "Ground fog field: flat fog patches at the feet that stay where they were emitted and spread, so walking leaves a field of fog"),
                 new FogKey("GroundRate", FogValueKind.Float, "Ground field particles per second (also while standing still)"),
@@ -528,6 +562,8 @@ namespace InvisibilityPotion.Visuals
                 case "OuterAlpha": return FloatList.Format(OuterAlpha);
                 case "OuterRate": return FloatList.Format(OuterRate);
                 case "OuterSize": return FloatList.Format(OuterSize);
+                case "OuterRotation": return FloatList.Format(OuterRotation);
+                case "OuterOffsetY": return FloatList.Format(OuterOffsetY);
                 case "GroundEnabled": return Bool(GroundEnabled);
                 case "GroundRate": return FloatList.Format(GroundRate);
                 case "GroundRateDistance": return FloatList.Format(GroundRateDistance);
@@ -616,6 +652,8 @@ namespace InvisibilityPotion.Visuals
                 case "MeshRate": MeshRate = Math.Max(0f, v); return true;
                 case "OuterSpreadY": OuterSpreadY = Math.Max(0.01f, v); return true;
                 case "OuterLifetime": OuterLifetime = Math.Max(0.05f, v); return true;
+                case "OuterRotation": OuterRotation = v < -MaxOuterRotation ? -MaxOuterRotation : v > MaxOuterRotation ? MaxOuterRotation : v; return true;
+                case "OuterOffsetY": OuterOffsetY = v < -2f ? -2f : v > 2f ? 2f : v; return true;
                 case "GroundRate": GroundRate = Math.Max(0f, v); return true;
                 case "GroundRateDistance": GroundRateDistance = Math.Max(0f, v); return true;
                 case "GroundSize": GroundSize = Math.Max(0.01f, v); return true;

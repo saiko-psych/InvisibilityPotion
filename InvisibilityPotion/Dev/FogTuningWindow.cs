@@ -355,7 +355,9 @@ namespace InvisibilityPotion.Dev
             var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner and ground off; not saved, all tiers)", GUILayout.Height(22f));
             if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
             Row("Radius m", ref s.OuterRadius, 0.1f, 4f, 0.1f, def.OuterRadius, saved.OuterRadius);
-            Row("Spread Y (flat < 1)", ref s.OuterSpreadY, 0.05f, 2f, 0.05f, def.OuterSpreadY, saved.OuterSpreadY);
+            Row("Band height (x radius)", ref s.OuterSpreadY, 0.01f, 1f, 0.01f, def.OuterSpreadY, saved.OuterSpreadY);
+            Row("Rotation deg/s", ref s.OuterRotation, -60f, 60f, 1f, def.OuterRotation, saved.OuterRotation);
+            Row("Offset Y m", ref s.OuterOffsetY, -1f, 1f, 0.05f, def.OuterOffsetY, saved.OuterOffsetY);
             Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.05f, def.OuterAlpha, saved.OuterAlpha);
             Row("Rate /s per anchor", ref s.OuterRate, 0f, 40f, 1f, def.OuterRate, saved.OuterRate);
             Row("Size m", ref s.OuterSize, 0.1f, 5f, 0.1f, def.OuterSize, saved.OuterSize);

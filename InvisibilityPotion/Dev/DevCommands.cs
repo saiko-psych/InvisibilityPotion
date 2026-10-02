@@ -165,7 +165,7 @@ namespace InvisibilityPotion.Dev
             public override string Help =>
                 "ip_fog [t1|t2|t3] ...: tier defaults to your current one (else 1) | ip_fog [tN]: print | ip_fog [tN] <key> <value>, keys: enabled, rate, size, life, speed, alpha, " +
                 "dynamic, emission (0..1), spreadx, spready, spreadz, drift, trail (on|off), outer (on|off), outerradius (m), outeralpha, outerrate (/s per anchor), outersize (m), " +
-                "outerspready, outerlife (s), outertrail (on|off), outerflat (on|off: quads parallel to the ground), ground (on|off), groundrate (/s), grounddistance (/m), groundsize (m), groundgrow (x), groundlife (s), " +
+                "outerspready (ring band height x radius), outerlife (s), outertrail (on|off), outerflat (on|off: quads parallel to the ground), outerrotation (deg/s, ring turn speed), outeroffsety (m), ground (on|off), groundrate (/s), grounddistance (/m), groundsize (m), groundgrow (x), groundlife (s), " +
                 "groundalpha, groundradius (m), groundheight (m), grounddrift (m/s), " +
                 "outeranchors (comma list, e.g. Chest,Hips,Head), material (soft|swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
                 "emitter (bones|mesh), meshoffset, meshrate (0 = rate x anchors), wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
@@ -179,7 +179,7 @@ namespace InvisibilityPotion.Dev
                 ["outeralpha"] = "OuterAlpha", ["outerrate"] = "OuterRate", ["outersize"] = "OuterSize",
                 ["material"] = "FogMaterial", ["emitter"] = "FogEmitterMode", ["wave"] = "DistortionWave",
                 ["outerlife"] = "OuterLifetime", ["outerspready"] = "OuterSpreadY", ["outertrail"] = "OuterTrail", ["outeranchors"] = "OuterAnchors",
-                ["outerflat"] = "OuterHorizontal", ["ground"] = "GroundEnabled", ["grounddistance"] = "GroundRateDistance", ["groundlife"] = "GroundLifetime",
+                ["outerflat"] = "OuterHorizontal", ["outerrotation"] = "OuterRotation", ["outeroffsety"] = "OuterOffsetY", ["ground"] = "GroundEnabled", ["grounddistance"] = "GroundRateDistance", ["groundlife"] = "GroundLifetime",
             };
 
             public override void Run(string[] args)
@@ -285,7 +285,7 @@ namespace InvisibilityPotion.Dev
                     $"color {s.Get("Color")} (dynamic {s.DynamicColor}, emission {s.Emission}), spread {s.SpreadX}/{s.SpreadY}/{s.SpreadZ}, drift {s.Drift}, alphamode {FogVeil.AlphaMode}, " +
                     $"material {s.FogMaterial}, emitter {s.EmitterMode} (mesh offset {s.MeshOffset}, mesh rate {s.MeshRate}), {s.InnerTrailMode}");
                 Say($"  outer {(s.OuterEnabled ? "on" : "off")} on {s.Get("OuterAnchors")}: radius {s.OuterRadius} m, alpha {s.OuterAlpha}, rate {s.OuterRate}/s per anchor, " +
-                    $"size {s.OuterSize} m, life {s.OuterLifetime} s, spread y {s.OuterSpreadY}, {s.OuterTrailMode}, {(s.OuterHorizontal ? "flat" : "camera-facing")}; " +
+                    $"size {s.OuterSize} m, life {s.OuterLifetime} s, spread y {s.OuterSpreadY}, rotation {s.OuterRotation} deg/s, offset y {s.OuterOffsetY} m, {s.OuterTrailMode}, {(s.OuterHorizontal ? "flat" : "camera-facing")}; " +
                     $"~{s.LiveParticlesInner:0} live particles per inner emitter{(s.ExceedsParticleBudget ? $" (over {Fog.FogSettings.ParticleWarnThreshold})" : "")}");
                 Say($"  ground {(s.GroundEnabled ? "on" : "off")}: rate {s.GroundRate}/s + {s.GroundRateDistance}/m, size {s.GroundSize} m x{s.GroundGrow} grow, life {s.GroundLifetime} s, " +
                     $"alpha {s.GroundAlpha}, radius {s.GroundRadius} m, height {s.GroundHeight} m, drift {s.GroundDrift} m/s; ~{s.LiveParticlesGround:0} live particles while running");
@@ -294,7 +294,7 @@ namespace InvisibilityPotion.Dev
 
             public override System.Collections.Generic.List<string> CommandOptionList() =>
                 new System.Collections.Generic.List<string> { "t1", "t2", "t3", "enabled", "rate", "size", "life", "speed", "alpha", "color", "dynamic", "emission", "spreadx", "spready", "spreadz",
-                    "drift", "trail", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "outerspready", "outerlife", "outertrail", "outerflat", "outeranchors",
+                    "drift", "trail", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "outerspready", "outerlife", "outertrail", "outerflat", "outerrotation", "outeroffsety", "outeranchors",
                     "ground", "groundrate", "grounddistance", "groundsize", "groundgrow", "groundlife", "groundalpha", "groundradius", "groundheight", "grounddrift", "dump", "strays",
                     "material", "emitter", "meshoffset", "meshrate", "wave", "alphamode", "anchor", "save", "reset" };
         }

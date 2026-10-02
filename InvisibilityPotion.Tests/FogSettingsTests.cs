@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using InvisibilityPotion.Visuals;
 using Xunit;
@@ -102,15 +103,18 @@ public class FogSettingsTests
         Assert.False(t2.DynamicColor);
         Assert.Equal(0f, t2.Emission);
         Assert.True(t2.OuterEnabled);
-        Assert.True(t2.OuterTrail);
-        Assert.Equal(FogTrailMode.Trail, t2.OuterTrailMode);
+        // Round J ruling: the outer layer is a distinct ring that stays around the player (local space), thin, turning slowly.
+        Assert.False(t2.OuterTrail);
+        Assert.Equal(FogTrailMode.Follow, t2.OuterTrailMode);
         Assert.Equal(new[] { "Hips" }, t2.OuterAnchors);
-        Assert.Equal(1.4f, t2.OuterRadius, 5);
-        Assert.Equal(0.35f, t2.OuterAlpha, 5);
-        Assert.Equal(14f, t2.OuterRate, 5);
-        Assert.Equal(1.8f, t2.OuterSize, 5);
-        Assert.Equal(3f, t2.OuterLifetime, 5);
-        Assert.Equal(0.15f, t2.OuterSpreadY, 5);
+        Assert.Equal(2.5f, t2.OuterRadius, 5);
+        Assert.Equal(0.55f, t2.OuterAlpha, 5);
+        Assert.Equal(18f, t2.OuterRate, 5);
+        Assert.Equal(1.6f, t2.OuterSize, 5);
+        Assert.Equal(4f, t2.OuterLifetime, 5);
+        Assert.Equal(0.1f, t2.OuterSpreadY, 5);
+        Assert.Equal(-0.2f, t2.OuterOffsetY, 5);
+        Assert.Equal(8f, t2.OuterRotation, 5);
         Assert.True(t2.OuterHorizontal);
         Assert.True(t2.GroundEnabled);
         Assert.Equal(6f, t2.GroundRate, 5);
@@ -227,7 +231,6 @@ public class FogSettingsTests
     [Fact]
     public void LookDefaults_Revision5_ResetsTier1And2BelowRevision4_AndTier1BodyOff()
     {
-        Assert.Equal(5, LookDefaults.Revision);
         Assert.Equal(4, LookDefaults.FullResetRevision);
         Assert.True(LookDefaults.ResetsTiers(3));
         Assert.True(LookDefaults.ResetsTiers(0));
@@ -245,6 +248,57 @@ public class FogSettingsTests
         Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(3, "Distortion", 2));
         // A revision 3 file already had Off as the default: Distortion there is the user's choice and stays.
         Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(1, "Distortion", 3));
+    }
+
+    [Fact]
+    public void LookDefaults_Revision6_ResetsOnlyTier2OuterKeys()
+    {
+        Assert.Equal(6, LookDefaults.Revision);
+        Assert.Equal(6, LookDefaults.OuterRingRevision);
+        // Revision 4 and 5 files keep their tuning except the [Fog.Tier2] Outer* keys.
+        Assert.True(LookDefaults.ResetsOuterKey(2, "OuterRadius", 5));
+        Assert.True(LookDefaults.ResetsOuterKey(2, "OuterTrail", 4));
+        Assert.True(LookDefaults.ResetsOuterKey(2, "OuterRotation", 5));
+        Assert.True(LookDefaults.ResetsOuterKey(2, "OuterAnchors", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(2, "Rate", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(2, "GroundRate", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(2, "Anchor.Hips", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(1, "OuterEnabled", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(3, "OuterRadius", 5));
+        Assert.False(LookDefaults.ResetsOuterKey(2, "OuterRadius", 6));
+        // Every Outer* key the reset covers is a real key of the section.
+        var outerKeys = 0;
+        foreach (var k in FogSettings.Keys) if (LookDefaults.ResetsOuterKey(2, k.Name, 5)) outerKeys++;
+        Assert.Equal(12, outerKeys);
+        // Below revision 4 the full reset already covers tier II.
+        Assert.True(LookDefaults.ResetsTiers(3));
+        Assert.False(LookDefaults.ResetsTiers(5));
+    }
+
+    [Fact]
+    public void OuterRing_DefaultsPerTier_AndRotationKey()
+    {
+        Assert.False(FogSettings.Defaults(1).OuterEnabled);
+        var t3 = FogSettings.Defaults(3);
+        Assert.False(t3.OuterEnabled);
+        Assert.Equal(0f, t3.OuterOffsetY, 5);
+        Assert.Equal(0.25f, FogSettings.OuterRingThickness, 5);
+        Assert.Contains(FogSettings.Keys, k => k.Name == "OuterRotation" && k.Kind == FogValueKind.Float);
+        Assert.Contains(FogSettings.Keys, k => k.Name == "OuterOffsetY" && k.Kind == FogValueKind.Float);
+
+        var s = FogSettings.Defaults(2);
+        Assert.Equal(8f * (float)Math.PI / 180f, s.OuterOrbitalRadPerSecond, 5);
+        Assert.True(s.TrySet("OuterRotation", "-12"));
+        Assert.Equal(-12f, s.OuterRotation, 5);
+        Assert.Equal("-12", s.Get("OuterRotation"));
+        Assert.True(s.TrySet("OuterRotation", "999"));
+        Assert.Equal(FogSettings.MaxOuterRotation, s.OuterRotation, 5);
+        Assert.True(s.TrySet("OuterOffsetY", "-0.35"));
+        Assert.Equal("-0.35", s.Get("OuterOffsetY"));
+        Assert.False(s.TrySet("OuterRotation", "fast"));
+        var parsed = FogSettings.Parse(2, k => k == "OuterRotation" ? "4" : k == "OuterOffsetY" ? "0.1" : null, new List<string>());
+        Assert.Equal(4f, parsed.OuterRotation, 5);
+        Assert.Equal(0.1f, parsed.OuterOffsetY, 5);
     }
 
     [Fact]
@@ -384,10 +438,10 @@ public class FogSettingsTests
     [Fact]
     public void OuterParticleBudget_UsesOuterRateAndLifetime()
     {
-        var s = FogSettings.Defaults(2);   // outer rate 14, outer life 3
-        Assert.Equal(42f, s.LiveParticlesOuter, 3);
+        var s = FogSettings.Defaults(2);   // outer rate 18, outer life 4
+        Assert.Equal(72f, s.LiveParticlesOuter, 3);
         s.Rate = 0f;   // independent of the inner rate
-        Assert.Equal(42f, s.LiveParticlesOuter, 3);
+        Assert.Equal(72f, s.LiveParticlesOuter, 3);
         Assert.Equal(FogSettings.MaxParticles(14f, 3f), (int)System.Math.Ceiling(14f * 3f * 1.3f + 4f));
         s.OuterEnabled = false;
         Assert.Equal(0f, s.LiveParticlesOuter);

@@ -465,13 +465,15 @@ namespace InvisibilityPotion.Visuals
                     snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, true, groundUpper, groundUpperVertexAlpha, snap.MaterialHasColor));
             }
 
-            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter
-            // modes. Absolute values: radius in metres (not scaled by SpreadX/Z), its own rate, size, alpha and lifetime.
+            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), in both emitter modes. A ring
+            // (round J ruling): Circle shape near the rim of OuterRadius, band height OuterSpreadY x radius, OuterOffsetY below the
+            // anchor offset, turning at OuterRotation (orbital velocity). Absolute values: its own rate, size, alpha and lifetime.
             if (outer == null || animator == null) return;
             var outerLayer = new FogLayer
             {
                 Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
                 Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
+                Ring = true, Orbital = s.OuterOrbitalRadPerSecond,
             };
             foreach (var name in s.OuterAnchors)
             {
@@ -479,7 +481,7 @@ namespace InvisibilityPotion.Visuals
                 if (a == null) continue;
                 var bone = BoneFor(animator, a.Name);
                 if (bone == null) continue;
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, FogLayerKind.Outer, s.OuterRadius, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
+                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, FogLayerKind.Outer, s.OuterRadius, new Vector3(a.X, a.Y + s.OuterOffsetY, a.Z), color, outerLayer, s, snap.MaterialHasColor));
             }
         }
 
@@ -496,6 +498,8 @@ namespace InvisibilityPotion.Visuals
             public float Rate, Size, Lifetime, SpreadX, SpreadY, SpreadZ, VertexAlpha;
             public FogTrailMode Trail;
             public bool Horizontal;   // HorizontalBillboard (quads parallel to the ground) instead of camera-facing billboards
+            public bool Ring;         // Circle shape near the rim (outer ring) instead of a scaled sphere; SpreadY = band height x radius
+            public float Orbital;     // rad/s around the emitter's up axis (velocityOverLifetime.orbitalY); 0 = none
             public Material Material;
         }
 
@@ -595,9 +599,25 @@ namespace InvisibilityPotion.Visuals
             var ps = ConfigureSystem(go, color, layer, s, materialHasColor);
             var shape = ps.shape;
             shape.enabled = true;
-            shape.shapeType = ParticleSystemShapeType.Sphere;
-            shape.radius = Mathf.Max(0.001f, radius);
-            shape.scale = new Vector3(layer.SpreadX, layer.SpreadY, layer.SpreadZ);   // follower rotation = player rotation, so y is up
+            if (layer.Ring)
+            {
+                // Ring: the Circle shape lies in its local XY plane; rotated 90 deg about x it lies flat (XZ, y up in the follower =
+                // player frame). radiusThickness keeps the spawn points in the outer quarter of the radius, so it reads as a ring,
+                // and the random position jitter gives the band its height (and a little radial softness).
+                shape.shapeType = ParticleSystemShapeType.Circle;
+                shape.radius = Mathf.Max(0.001f, radius);
+                shape.radiusThickness = FogSettings.OuterRingThickness;
+                shape.arc = 360f;
+                shape.rotation = new Vector3(90f, 0f, 0f);
+                shape.scale = Vector3.one;
+                shape.randomPositionAmount = Mathf.Max(0f, layer.SpreadY * radius);
+            }
+            else
+            {
+                shape.shapeType = ParticleSystemShapeType.Sphere;
+                shape.radius = Mathf.Max(0.001f, radius);
+                shape.scale = new Vector3(layer.SpreadX, layer.SpreadY, layer.SpreadZ);   // follower rotation = player rotation, so y is up
+            }
 
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
@@ -797,11 +817,16 @@ namespace InvisibilityPotion.Visuals
             emission.rateOverTime = Mathf.Max(0f, rate);
 
             var vel = ps.velocityOverLifetime;
-            vel.enabled = Mathf.Abs(s.Drift) > 0.0001f;
+            vel.enabled = Mathf.Abs(s.Drift) > 0.0001f || Mathf.Abs(layer.Orbital) > 0.0001f;
             vel.space = ParticleSystemSimulationSpace.World;   // drift is vertical regardless of bone rotation
             vel.x = new ParticleSystem.MinMaxCurve(0f);
             vel.y = new ParticleSystem.MinMaxCurve(s.Drift);
             vel.z = new ParticleSystem.MinMaxCurve(0f);
+            // Outer ring turn (round J ruling): orbital velocity around the system's centre (the follower, y = player up), all three
+            // orbital curves in Constant mode like the linear ones.
+            vel.orbitalX = new ParticleSystem.MinMaxCurve(0f);
+            vel.orbitalY = new ParticleSystem.MinMaxCurve(layer.Orbital);
+            vel.orbitalZ = new ParticleSystem.MinMaxCurve(0f);
 
             var col = ps.colorOverLifetime;
             col.enabled = true;
@@ -868,7 +893,8 @@ namespace InvisibilityPotion.Visuals
                 var upperGround = e.Anchor == GroundUpperAnchorName;
                 var extra = e.Layer == FogLayerKind.Ground ? $" + {F(upperGround ? s.GroundUpperRateDistance : s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, " +
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
-                          : e.Layer == FogLayerKind.Outer ? $", radius {F(s.OuterRadius)} m, spread y {F(s.OuterSpreadY)}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
+                          : e.Layer == FogLayerKind.Outer ? $", ring radius {F(s.OuterRadius)} m, band {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
+                                                            $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)})");
             }
             var text = string.Join("\n", lines);
@@ -890,6 +916,8 @@ namespace InvisibilityPotion.Visuals
                 default: return $"{c.mode} x{F(c.curveMultiplier)}";
             }
         }
+
+        private static float Curve0(ParticleSystem.MinMaxCurve c) => c.mode == ParticleSystemCurveMode.Constant ? c.constant : c.constantMax;
 
         private static string MatFloat(Material m, int id) => m != null && m.HasProperty(id) ? F(m.GetFloat(id)) : "-";
         private static string MatColor(Material m, int id) => m != null && m.HasProperty(id) ? C(m.GetColor(id)) : "-";
@@ -926,7 +954,11 @@ namespace InvisibilityPotion.Visuals
                     into.Add($"  {e.Go.name} [{e.Layer}] {e.Anchor}: active {e.Go.activeInHierarchy}, playing {ps.isPlaying}, emitting {ps.isEmitting}, particles {ps.particleCount}/{main.maxParticles}, " +
                              $"rate {Curve(em.rateOverTime)}/s + {Curve(em.rateOverDistance)}/m (emission {em.enabled}), startSize {Curve(main.startSize)}, lifetime {Curve(main.startLifetime)}, " +
                              $"speed {Curve(main.startSpeed)}, space {main.simulationSpace}, scaling {main.scalingMode}, shape {shape.shapeType} r {F(shape.radius)} scale {V(shape.scale)}, " +
-                             $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}");
+                             $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}" +
+                             (e.Layer == FogLayerKind.Outer
+                                 ? $"; shape {shape.shapeType} r {F(shape.radius)} thickness {F(shape.radiusThickness)} rotation {V(shape.rotation)} jitter {F(shape.randomPositionAmount)}, " +
+                                   $"orbital {Curve(ps.velocityOverLifetime.orbitalY)} rad/s ({F(Curve0(ps.velocityOverLifetime.orbitalY) * Mathf.Rad2Deg)} deg/s)"
+                                 : ""));
                     into.Add(psr == null ? "    renderer: none" :
                              $"    renderer enabled {psr.enabled}, visible {psr.isVisible}, mode {psr.renderMode}, sortingFudge {F(psr.sortingFudge)}, maxParticleSize {F(psr.maxParticleSize)}, " +
                              $"minParticleSize {F(psr.minParticleSize)}, layer {LayerMask.LayerToName(e.Go.layer)} ({e.Go.layer}), culling mask has layer {(cam != null ? ((cam.cullingMask & (1 << e.Go.layer)) != 0).ToString() : "-")}; " +

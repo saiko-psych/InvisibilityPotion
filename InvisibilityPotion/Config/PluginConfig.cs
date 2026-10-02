@@ -170,7 +170,8 @@ namespace InvisibilityPotion.Config
         /// absolute outer-layer keys, Emission, DynamicColor off), revision 3 (round H, task 10h: tier I = normal body in a thin
         /// fog layer that follows the body, ground fog field for tiers I and II), revision 4 (round I, task 10i: matte fog, tier II
         /// = the user's saved tuning, so a revision 3 file of that user loses nothing), revision 5 (plan 4 fix round 2: FogMaterial soft;
-        /// only files below revision 4 get the full reset, a revision 4 file keeps its tuning). Existing files keep their old values, so once per
+        /// only files below revision 4 get the full reset, a revision 4 file keeps its tuning), revision 6 (plan 4, round J ruling: the
+        /// tier II outer layer is a ring around the player; a revision 4/5 file gets only its [Fog.Tier2] Outer* keys reset). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -196,6 +197,16 @@ namespace InvisibilityPotion.Config
                         Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {kv.Key} = {kv.Value.BoxedValue} (default {kv.Value.DefaultValue}) is reset");
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
+                // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below revision 4 were reset above).
+                var outerReset = 0;
+                if (!LookDefaults.ResetsTiers(rev.Value))
+                    foreach (var kv in _fogEntries[2])
+                    {
+                        if (!LookDefaults.ResetsOuterKey(2, kv.Key, rev.Value) || Equals(kv.Value.BoxedValue, kv.Value.DefaultValue)) continue;
+                        outerReset++;
+                        Plugin.Log?.LogInfo($"Config migration: [Fog.Tier2] {kv.Key} = {kv.Value.BoxedValue} (default {kv.Value.DefaultValue}) is reset (outer ring)");
+                        kv.Value.BoxedValue = kv.Value.DefaultValue;
+                    }
                 var orphans = Orphans();
                 if (orphans != null)
                     for (var t = 1; t <= 3; t++)
@@ -219,9 +230,10 @@ namespace InvisibilityPotion.Config
                     materialsChanged++;
                 }
                 rev.Value = LookDefaultsRevision;
-                Plugin.Log?.LogInfo(differing == 0 && !modeChanged && materialsChanged == 0
+                Plugin.Log?.LogInfo(differing == 0 && outerReset == 0 && !modeChanged && materialsChanged == 0
                     ? $"Config migration (look defaults revision {LookDefaultsRevision}): nothing to change, the file already holds the defaults"
                     : $"Config migration (look defaults revision {LookDefaultsRevision}): {differing} [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults" +
+                      (outerReset > 0 ? $"; {outerReset} [Fog.Tier2] Outer* values reset to the ring defaults" : "") +
                       (modeChanged ? $"; [Tier1] BodyVeilMode {oldMode} -> {newMode}" : "") +
                       (materialsChanged > 0 ? $"; FogMaterial -> soft on {materialsChanged} tier(s)" : ""));
             }

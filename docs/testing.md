@@ -295,3 +295,16 @@ Fog (tiers I and II; drink or `ip_give 1` / `ip_give 2`):
 - [ ] Ground field reads as a soft volume (two layers, 0.15 m and 0.45 m, overlapping patches of varying size), not as flat discs
 - [ ] 2.5 s after the veil appears the log carries `auto fog dump at ...` ... `auto fog dump end` without running a command: check the `ip_fog_outer` lines (particles n/max, renderer `visible`, bounds, camera distance) for the outer ring, and the two `Ground` / `GroundUpper` emitters (particles ≤ max, sum of the two max ≤ 300)
 - [ ] `ip_fog material swamp_mist` vs `ip_fog material soft` (current tier): the dust texture is the only difference; if `soft` renders as hard-edged squares, report it (`_AlphaChannel` assumption, `docs/decompile-notes.md`)
+
+## Plan 4 – round K (tier II outer ring)
+
+Setup: `make build` (Debug, game closed), `make run`, drink a tier II mead or `ip_give 2`. Paste the `Config migration`, `veil fog spawned` and `auto fog dump` lines.
+
+- [ ] `Config migration: [Fog.Tier2] Outer... = ... is reset (outer ring)` for each changed Outer* key, then `Config migration (look defaults revision 6): ...; N [Fog.Tier2] Outer* values reset to the ring defaults` once; the other tier II keys (inner cloud, ground field, anchors) keep their values
+- [ ] `veil fog spawned T2` lists `ip_fog_outer [Outer] Hips: rate 18/s, ring radius 2.5 m, band 0.1 x r, offset y -0.2 m, rotation 8 deg/s, Follow, horizontal`
+- [ ] Auto fog dump, `ip_fog_outer` line: `space Local`, `velocity True` and `; shape Circle r 2.5 thickness 0.25 rotation (90, 0, 0) jitter 0.25, orbital 0.14 rad/s (8 deg/s)`; the live particles sit about 0.6–1 m above the player (hips minus 0.2 m)
+- [ ] A ring of fog about 2.5 m around the player at hip height, clearly a second layer apart from the body cloud (a ring, not a filled disc)
+- [ ] Walking and running: the ring stays around the player (no patches left behind along the path)
+- [ ] Standing still: the ring turns slowly (about one turn in 45 s)
+- [ ] Ground field unchanged (patches stay along the path as in round J); tier I has no outer ring; tier III unchanged
+- [ ] Tuning window (`ip_fogui`, outer section): `Rotation deg/s`, `Offset Y m` and `Band height (x radius)` rows change the ring live; `ip_fog outerrotation 20` and `ip_fog outeroffsety 0` work too
