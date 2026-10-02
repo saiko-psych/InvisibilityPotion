@@ -18,7 +18,9 @@ namespace InvisibilityPotion.Dev
     /// [Dev] TuningWindowRect. Every numeric value is one Row: label (yellow with * when it differs from the saved file), big
     /// slider (drag or click anywhere on it, mouse wheel steps), -, typed field (Enter or focus loss applies), +, R (default). Shift = step/10, Ctrl = step×10.
     /// While the window owns the mouse, the game camera releases the cursor and player input is blocked (patch below); F7 hands
-    /// the mouse back to the game and returns it.
+    /// the mouse back to the game and returns it. Cursor and GameCamera.m_mouseCapture are touched only while the window is open
+    /// and owns the mouse. Handing the mouse back (close, F7) waits while another IMGUI config window is open (ConfigurationManager,
+    /// F1: <see cref="ExternalWindow"/>), so the camera does not re-lock the cursor under that window.
     /// </summary>
     internal sealed class FogTuningWindow : MonoBehaviour
     {
@@ -51,6 +53,7 @@ namespace InvisibilityPotion.Dev
         private bool _open;
         private bool _mouseToWindow = true;
         private bool _savedCapture = true;
+        private bool _restorePending;   // capture hand-back deferred until the external config window closes
         private Rect _rect;
         private bool _rectLoaded;
         private float _scale = 1f;
@@ -111,7 +114,8 @@ namespace InvisibilityPotion.Dev
             {
                 var t = DevCommands.CurrentTier();
                 if (t >= 1 && t <= 3) _tab = t - 1;
-                _savedCapture = cam == null || cam.m_mouseCapture;
+                if (!_restorePending) _savedCapture = cam == null || cam.m_mouseCapture;   // still false from our last open otherwise
+                _restorePending = false;
                 _mouseToWindow = true;
                 ApplyMouse();
             }
@@ -124,22 +128,37 @@ namespace InvisibilityPotion.Dev
                 _commitId = null;
                 GUIUtility.keyboardControl = 0;   // a focused text field must not keep swallowing game keys
                 SaveRect();
-                if (cam != null) cam.m_mouseCapture = _savedCapture;   // the camera locks the cursor again on its next update
+                RestoreCapture();
             }
+        }
+
+        /// <summary>Hands the mouse back to the camera (it locks the cursor again on its next update), or defers that while an
+        /// external config window is open: re-locking under it is what made the cursor fight with ConfigurationManager.</summary>
+        private void RestoreCapture()
+        {
+            if (ExternalWindow.IsOpen()) { _restorePending = true; return; }
+            _restorePending = false;
+            var cam = GameCamera.instance;
+            if (cam != null) cam.m_mouseCapture = _savedCapture;
         }
 
         // ---------- per frame ----------
 
         private void Update()
         {
-            if (!_open) return;
+            if (!_open)
+            {
+                if (_restorePending) RestoreCapture();   // retried every frame until the external window is closed
+                return;
+            }
             if (ZInput.GetKeyDown(MouseToggleKey))
             {
                 _mouseToWindow = !_mouseToWindow;
                 _sliderHot = 0;
-                var cam = GameCamera.instance;
-                if (!_mouseToWindow && cam != null) cam.m_mouseCapture = _savedCapture;
+                if (_mouseToWindow) _restorePending = false;
+                else RestoreCapture();
             }
+            else if (!_mouseToWindow && _restorePending) RestoreCapture();
             if (_dirty && Time.unscaledTime - _dirtySince >= ApplyDelay) ApplyNow();
             if (_previewAt >= 0f && Time.unscaledTime >= _previewAt)
             {
@@ -906,6 +925,48 @@ namespace InvisibilityPotion.Dev
             v = nv;
             MarkDirty();
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Detects an open IMGUI config window of another plugin: any loaded plugin whose instance has a public bool property
+    /// DisplayingWindow (BepInEx ConfigurationManager, com.bepis.bepinex.configurationmanager v19, and its Valheim forks use that
+    /// name). Resolved once per second until found, by reflection only, so there is no reference to those plugins.
+    /// </summary>
+    internal static class ExternalWindow
+    {
+        private static readonly List<KeyValuePair<object, System.Reflection.PropertyInfo>> Found = new List<KeyValuePair<object, System.Reflection.PropertyInfo>>();
+        private static float _nextScan;
+        private static bool _logged;
+
+        public static bool IsOpen()
+        {
+            if (Found.Count == 0 && Time.unscaledTime >= _nextScan) Scan();
+            foreach (var kv in Found)
+            {
+                try
+                {
+                    if (kv.Key is UnityEngine.Object o && o == null) continue;   // destroyed plugin
+                    if (kv.Value.GetValue(kv.Key, null) is bool b && b) return true;
+                }
+                catch (Exception) { /* a throwing getter counts as closed */ }
+            }
+            return false;
+        }
+
+        private static void Scan()
+        {
+            _nextScan = Time.unscaledTime + 1f;
+            foreach (var info in BepInEx.Bootstrap.Chainloader.PluginInfos.Values)
+            {
+                var inst = info?.Instance;
+                if (inst == null || inst.GetType().Assembly == typeof(ExternalWindow).Assembly) continue;
+                var prop = AccessTools.Property(inst.GetType(), "DisplayingWindow");
+                if (prop == null || prop.PropertyType != typeof(bool) || prop.GetGetMethod() == null) continue;
+                Found.Add(new KeyValuePair<object, System.Reflection.PropertyInfo>(inst, prop));
+                if (!_logged) Plugin.Log.LogInfo($"ip_fogui: cursor hand-back waits while {info.Metadata.GUID}.DisplayingWindow is true");
+            }
+            if (Found.Count > 0) _logged = true;
         }
     }
 
