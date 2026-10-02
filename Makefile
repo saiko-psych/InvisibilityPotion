@@ -69,11 +69,11 @@ define guard_unity
 		echo "$(UNITY_PROJECT) is open in a Unity editor (Temp/UnityLockfile exists): close it first."; exit 1; fi
 endef
 
-unity-setup: ## Create the spike assets (mesh, materials, prefabs) in the Unity project headless
+unity-setup: ## Import Assets/Models/*.fbx, write materials and prefabs (AssetSetup.Create) headless
 	$(guard_unity)
 	@mkdir -p build
 	"$(UNITY)" -batchmode -nographics -quit -projectPath "$(UNITY_PROJECT)" \
-		-executeMethod SpikeSetup.Create -logFile build/unity-setup.log
+		-executeMethod AssetSetup.Create -logFile build/unity-setup.log
 	@echo "Log: build/unity-setup.log"
 
 bundle: ## Build the asset bundle headless (TARGET=linux|windows) and copy it to InvisibilityPotion/Assets

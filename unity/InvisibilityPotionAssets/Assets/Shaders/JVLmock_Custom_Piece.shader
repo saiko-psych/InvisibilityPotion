@@ -6,6 +6,10 @@ Shader "JVLmock_Custom/Piece"
     {
         _Color ("Color", Color) = (1,1,1,1)
         _MainTex ("Albedo", 2D) = "white" {}
+        _EmissionColor ("Emission", Color) = (0,0,0,1)
+        _Glossiness ("Smoothness", Range(0,1)) = 0.2
+        _Metallic ("Metallic", Range(0,1)) = 0
+        _BumpMap ("Normal", 2D) = "bump" {}
     }
     SubShader
     {

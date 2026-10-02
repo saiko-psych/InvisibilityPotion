@@ -6,6 +6,10 @@ Shader "JVLmock_Custom/Distortion"
     {
         _Color ("Color", Color) = (1,1,1,1)
         _MainTex ("Albedo", 2D) = "white" {}
+        _RefractionIntensity ("Refraction", Float) = 0.02
+        _Glossiness ("Smoothness", Range(0,1)) = 0.9
+        _Metallic ("Metallic", Range(0,1)) = 0
+        _NormalTex ("Normal", 2D) = "bump" {}
     }
     SubShader
     {
