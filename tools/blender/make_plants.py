@@ -8,13 +8,13 @@ Tier III Ashlands      Hel's Ember Fern (Helfern)   black fern, two frond layers
 Lore: docs/ideas/2026-10-01-norse-lore-research.md section 3.
 """
 import math, os, random, shutil, sys
-from mathutils import Vector
+from mathutils import Vector, Matrix
 from mathutils.bvhtree import BVHTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import OUT, HERE, Builder as _Builder, bezier, empty, export_fbx, tri_count, write_log, reset, \
     ground, ruler, light, camera, world, render_panels
 
-PREVIEW = os.path.join(HERE, "preview-plants-v4.png")
+PREVIEW = os.path.join(HERE, "preview-plants-v5.png")
 
 # ==== KNOBS (lengths in metres; Blender Z-up, FBX exported Y-up, 1 unit = 1 m, pivot at ground) ====
 SEED = 11                # deterministic; each plant uses SEED + tier index
@@ -39,6 +39,7 @@ MATS = {
     "helfern_crack":  ((0.55, 0.12, 0.02, 1), 0.6, 0.0, 1.0),   # lava glow between the columns
     "helfern_root":   ((0.035, 0.028, 0.026, 1), 0.9, 0.0, 0.0),  # charred root crown
     "helfern_heart":  ((1.00, 0.42, 0.06, 1), 0.4, 0.0, 3.0),   # glowing core in the crown
+    "helfern_heart_dim": ((0.45, 0.14, 0.03, 1), 0.5, 0.0, 0.6),  # picked state: the heart barely glows
     "helfern_stem":   ((0.06, 0.05, 0.05, 1), 0.8, 0.0, 0.0),
     "helfern_frond":  ((0.055, 0.05, 0.05, 1), 0.75, 0.0, 0.0),  # charcoal leaflets
     "helfern_crozier": ((0.22, 0.06, 0.03, 1), 0.7, 0.0, 0.4),  # young fiddleheads, faint ember tint
@@ -64,6 +65,8 @@ T2 = dict(  # Baldr's Tear, ~0.45 m
     bud_stem_h=0.25,
     leaves=5, leaf_len=(0.17, 0.26), leaf_w=0.014,
     berries=3, berry_r=0.013,
+    bell_open=1.0, bud_stems=1, leaf_rise=1.0, cut_h=0.13,   # cut_h: stub height of the picked state
+    scale=(1.0, 1.0),                                         # variant scale (horizontal, vertical) about the pivot
 )
 T3 = dict(  # Hel's Ember Fern, ~0.45 m
     columns=6, crack_r=0.125, crown_z=0.068, roots=5, root_len=(0.10, 0.15),
@@ -74,13 +77,38 @@ T3 = dict(  # Hel's Ember Fern, ~0.45 m
     spore_leaflets=(2, 3, 4, 5), spore_r=0.0045,   # outer fronds: one capsule under each of these leaflets (alternating sides)
     crozier_h=(0.13, 0.10), crozier_az=(-60, 150), crozier_r=0.024, crozier_turns=1.35, crozier_w=0.006,
     embers=3,
+    young=dict(n=2, phase=0.25, len=(0.12, 0.15), angle=(85, 55), segs=3, leaflets=4, leaflet_len=0.045, fwd=0.2, start_r=0.016),
+    scale=(1.0, 1.0),                                         # variant scale (horizontal, vertical) about the pivot
 )
+# Variants: per plant, variant -> (seed offset added to that plant's seed, overrides of its knob table).
+# "a" is the reference model (identical to the single model of earlier versions). Lichen overrides are `scale` (size of
+# the patch) and `density` (leaves and nodes); the others are knob overrides, nested dicts (fern layers) merge.
+VARIANTS = {
+    "t1": {"a": (0, dict(scale=1.0, density=1.0)),
+           "b": (101, dict(scale=0.85, density=1.15)),          # small and dense
+           "c": (202, dict(scale=1.15, density=0.85))},         # large and looser
+    "t2": {"a": (0, {}),
+           "b": (101, dict(scale=(1.15, 1.15), bell_open=1.7, berries=2, leaf_rise=0.85, mound_r=0.12, mound_h=0.030)),
+           "c": (202, dict(scale=(0.85, 0.85), bud_stems=2, berries=4, leaf_rise=1.15, mound_r=0.10, mound_h=0.042))},
+    "t3": {"a": (0, {}),
+           "b": (101, dict(scale=(1.2, 0.9), outer=dict(n=7), inner=dict(n=3), embers=6, columns=7)),
+           "c": (202, dict(scale=(1.15, 1.15), outer=dict(n=5), columns=5,
+                           crozier_h=(0.21, 0.17), crozier_r=0.032, crozier_w=0.0085))},
+}
 # =============================================================================
 
 scene = reset()
 
 def Builder():
     return _Builder(MATS)
+
+def finish_plant(B, name, anchors, t):
+    """Finish the mesh, apply the variant scale (horizontal, vertical) about the pivot, add the anchor empties."""
+    ob = B.finish(name)
+    sh, sv = t.get("scale", (1.0, 1.0))
+    if (sh, sv) != (1.0, 1.0):
+        for v in ob.data.vertices: v.co = Vector((v.co.x*sh, v.co.y*sh, v.co.z*sv))
+    return ob, [empty(n, (p[0]*sh, p[1]*sh, p[2]*sv), ob) for n, p in anchors]
 
 # ---------------------------------------------------------------- Tier I
 # Frame: the patch lies on a surface facing -Y (outward normal; Unity +Z after the FBX export), pivot = patch centre on
@@ -114,9 +142,9 @@ def face_to(B, vs, m, n):
     if (b - a).cross(c - a).dot(n) < 0: vs = list(reversed(vs))
     B.face(vs, m)
 
-def huldra_skeleton(rng):
+def huldra_skeleton(rng, t=T1):
     """Full-grown layout in (u, z) surface coordinates with all random choices made up front."""
-    t = T1; step = t["step"]
+    step = t["step"]
     runners = []
     for k, h0 in enumerate(t["headings"]):
         h = math.radians(h0 + rng.uniform(-12, 12))
@@ -179,9 +207,9 @@ def path_at(r, d):
             return (ps[i][0] + (ps[i+1][0] - ps[i][0])*f, ps[i][1] + (ps[i+1][1] - ps[i][1])*f)
     return ps[-1]
 
-def huldra(skel, stage, flat=False, name=None):
+def huldra(skel, stage, flat=False, name=None, t=T1):
     """Mesh for growth stage `stage` (0-based) of the skeleton."""
-    t = T1; B = Builder(); surf = surface_fn(None if flat else t["trunk_r"]); off = t["surface_off"]
+    B = Builder(); surf = surface_fn(None if flat else t["trunk_r"]); off = t["surface_off"]
     runners, nodes = skel
     nr, g = t["stage_runners"][stage], t["stage_reach"][stage]
     for r in runners:
@@ -271,8 +299,9 @@ def bell(B, base, axis, length, radius, petals, open_=1.0, rng=None, glow=True):
         B.tube([tear - ax*0.012, tear - ax*0.004, tear + ax*0.006, tear + ax*0.011],
                [0.0, 0.0055, 0.006, 0.0], 5, "baldr_glow")
 
-def baldr(rng):
-    t = T2; B = Builder()
+def baldr(rng, t=T2, name="plant_t2", picked=False):
+    """picked=True: what remains after harvesting (mound, leaves, a cut stem)."""
+    B = Builder()
     # snow mound (lathe, jittered)
     segs = 9; prof = [(0.0, t["mound_h"]), (0.05, t["mound_h"]*0.85), (0.09, t["mound_h"]*0.45), (t["mound_r"], 0.0), (t["mound_r"]*0.9, -0.01)]
     rings = []
@@ -288,38 +317,44 @@ def baldr(rng):
     H = t["stem_h"]; nod = t["nod"]
     # main stem: up, then arches over so the bell nods
     ctrl = [(0.0, 0.0, 0.02), (0.005, 0.0, H*0.45), (0.0, 0.0, H*0.85), (0.035*nod/0.6, 0.0, H*1.0), (0.07*nod/0.6, 0.0, H*0.97)]
-    stem = bezier(ctrl, 9)
-    B.tube(stem, [t["stem_r"]]*8 + [t["stem_r"]*0.7], 4, "baldr_stem")
-    tip = stem[-1]; ax = (stem[-1] - stem[-2]).normalized()
-    ax = (ax + Vector((0, -0.6, -0.8))).normalized()   # face the mouth a little to the viewer
-    bell(B, tip, ax, t["bell_len"], t["bell_r"], t["petals"], 1.0, rng)
-    # second shorter stem with a closed bud
-    h2 = t["bud_stem_h"]
-    stem2 = bezier([(0.012, 0.01, 0.02), (0.02, 0.02, h2*0.5), (0.0, 0.035, h2*0.95), (-0.025, 0.045, h2*0.92)], 7)
-    B.tube(stem2, [t["stem_r"]*0.8]*6 + [t["stem_r"]*0.6], 4, "baldr_stem")
-    ax2 = ((stem2[-1] - stem2[-2]).normalized() + Vector((0, 0, -1.2))).normalized()
-    bell(B, stem2[-1], ax2, t["bell_len"]*0.6, t["bell_r"]*0.55, t["petals"], 0.0, rng, glow=False)
+    if picked:      # cut stem: a short straight stub with a slanted, capped end
+        B.tube([Vector((0.0, 0.0, 0.02)), Vector((0.003, 0.0, t["cut_h"]*0.6)), Vector((0.005, 0.0, t["cut_h"]))],
+               [t["stem_r"]]*3, 4, "baldr_stem", cap=True)
+    else:
+        stem = bezier(ctrl, 9)
+        B.tube(stem, [t["stem_r"]]*8 + [t["stem_r"]*0.7], 4, "baldr_stem")
+        tip = stem[-1]; ax = (stem[-1] - stem[-2]).normalized()
+        ax = (ax + Vector((0, -0.6, -0.8))).normalized()   # face the mouth a little to the viewer
+        bell(B, tip, ax, t["bell_len"], t["bell_r"], t["petals"], t["bell_open"], rng)
+        # shorter stems with closed buds (the second one turned round the stem)
+        h2 = t["bud_stem_h"]
+        for b in range(t["bud_stems"]):
+            rot = Matrix.Rotation(2.3*b, 3, 'Z'); hb = h2*(1 - 0.18*b)
+            stem2 = [rot @ p for p in bezier([(0.012, 0.01, 0.02), (0.02, 0.02, hb*0.5), (0.0, 0.035, hb*0.95), (-0.025, 0.045, hb*0.92)], 7)]
+            B.tube(stem2, [t["stem_r"]*0.8]*6 + [t["stem_r"]*0.6], 4, "baldr_stem")
+            ax2 = ((stem2[-1] - stem2[-2]).normalized() + Vector((0, 0, -1.2))).normalized()
+            bell(B, stem2[-1], ax2, t["bell_len"]*0.6, t["bell_r"]*0.55, t["petals"], 0.0, rng, glow=False)
     # narrow frosted leaves from the base, arching outwards
     for i in range(t["leaves"]):
         ang = 2*math.pi*i/t["leaves"] + rng.uniform(-0.3, 0.3)
         d = Vector((math.cos(ang), math.sin(ang), 0)); side = Vector((-d.y, d.x, 0))
         L = rng.uniform(*t["leaf_len"]); w = t["leaf_w"]
-        ctrl = [Vector((0, 0, 0.025)) + d*0.008, d*L*0.15 + Vector((0, 0, L*0.55)), d*L*0.45 + Vector((0, 0, L*0.75)), d*L*0.7 + Vector((0, 0, L*0.55))]
+        rs = t["leaf_rise"]                # >1 steeper leaves, <1 flatter
+        ctrl = [Vector((0, 0, 0.025)) + d*0.008, d*L*0.15/rs + Vector((0, 0, L*0.55*rs)), d*L*0.45/rs + Vector((0, 0, L*0.75*rs)), d*L*0.7/rs + Vector((0, 0, L*0.55*rs))]
         c = bezier(ctrl, 6)
         wid = [w*0.6, w, w, w*0.8, w*0.45]
         for k in range(len(c)-2):
             B.face([c[k] - side*wid[k], c[k] + side*wid[k], c[k+1] + side*wid[k+1], c[k+1] - side*wid[k+1]], "baldr_leaf")
         B.face([c[-2] - side*wid[-1], c[-2] + side*wid[-1], c[-1]], "baldr_leaf")
     # mistletoe-like berry cluster at the stem base on short forked twigs
+    if picked: return finish_plant(B, name, [("PickAnchor", (0.0, 0.0, t["cut_h"]*0.5))], t)
     bc = Vector((-0.02, -0.05, 0.04))
     B.tube([Vector((0, 0, 0.025)), bc + Vector((0.008, 0, 0.004))], [0.003, 0.002], 3, "baldr_stem")
     for i in range(t["berries"]):
         a = 2*math.pi*i/t["berries"] + 0.4
         p = bc + Vector((math.cos(a)*0.014, math.sin(a)*0.014, 0.006*(i % 2)))
         B.ico(p, (t["berry_r"],)*3, "baldr_berry", 1, 0.06, rng)
-    ob = B.finish("plant_t2")
-    pick = empty("PickAnchor", (0.0, 0.0, H*0.35), ob)
-    return ob, [pick]
+    return finish_plant(B, name, [("PickAnchor", (0.0, 0.0, H*0.35))], t)
 
 # ---------------------------------------------------------------- Tier III
 def leaflet(B, qa, qb, out, tan, ll, m, teeth):
@@ -332,9 +367,8 @@ def leaflet(B, qa, qb, out, tan, ll, m, teeth):
             B.face([p0, p1 + tan*sgn*ll*0.16 - out*ll*0.02, p1], m)
     return tip
 
-def frond(B, rng, L, d, start, a0, a1, segs, nl, l_len, spores, fwd):
+def frond(B, rng, L, d, start, a0, a1, segs, nl, l_len, spores, fwd, t=T3):
     """Arching frond along azimuth d from start; returns (tips, rachis points)."""
-    t = T3
     p = start.copy(); pts = [p.copy()]
     for s in range(segs):
         a = a0 + (a1 - a0)*(s + 0.5)/segs
@@ -372,8 +406,9 @@ def crozier(B, base, d, h, R0, turns, r):
     radii = [r, r*0.95, r*0.9] + [r*(0.85 - 0.5*i/n) for i in range(1, n)] + [0.0]
     B.tube(pts, radii, 3, "helfern_crozier")
 
-def helfern(rng):
-    t = T3; B = Builder()
+def helfern(rng, t=T3, name="plant_t3", picked=False):
+    """picked=True: root crown and basalt with a dim heart and two short young fronds."""
+    B = Builder()
     # cracked basalt: hex columns over a lava-glow plate
     B.prism((0, 0, 0), t["crack_r"], 0.012, 6, "helfern_crack", rot=0.2)
     nc = t["columns"]
@@ -393,10 +428,11 @@ def helfern(rng):
                d*L*0.8 - bend + Vector((0, 0, 0.040)), d*L + Vector((0, 0, 0.006))]
         B.tube(pts, [0.012, 0.009, 0.006, 0.002], 3, "helfern_root")
     # glowing heart in the crown
-    B.ico((0, 0, t["heart_z"]), (t["heart_r"],)*3, "helfern_heart", 1, 0.12, rng)
+    B.ico((0, 0, t["heart_z"]), (t["heart_r"],)*3, "helfern_heart_dim" if picked else "helfern_heart", 1, 0.12, rng)
     # fronds: outer arching layer, inner steeper layer (offset half a step)
     tips = []
-    for layer, spores in ((t["outer"], t["spore_leaflets"]), (t["inner"], None)):
+    layers = ((t["young"], None),) if picked else ((t["outer"], t["spore_leaflets"]), (t["inner"], None))
+    for layer, spores in layers:
         n = layer["n"]
         for f in range(n):
             az = 2*math.pi*(f + layer["phase"])/n + rng.uniform(-0.2, 0.2)
@@ -404,8 +440,9 @@ def helfern(rng):
             a0, a1 = (math.radians(x) for x in layer["angle"]); a0 -= math.radians(rng.uniform(0, 8))
             start = d*layer["start_r"] + Vector((0, 0, cz))
             tp, _ = frond(B, rng, rng.uniform(*layer["len"]), d, start, a0, a1, layer["segs"], layer["leaflets"],
-                          layer["leaflet_len"], spores, layer["fwd"])
+                          layer["leaflet_len"], spores, layer["fwd"], t)
             tips += tp
+    if picked: return finish_plant(B, name, [("PickAnchor", (0.0, 0.0, cz))], t)
     # two young fiddleheads in the centre
     for k, (h, az) in enumerate(zip(t["crozier_h"], t["crozier_az"])):
         d = Vector((math.cos(math.radians(az)), math.sin(math.radians(az)), 0))
@@ -413,19 +450,39 @@ def helfern(rng):
     for i in range(t["embers"]):
         tip = tips[rng.randrange(len(tips))]
         B.octa(tip + Vector((0, 0, 0.004)), 0.004, "helfern_ember")
-    ob = B.finish("plant_t3")
-    pick = empty("PickAnchor", (0.0, 0.0, cz), ob)
-    ember = empty("EmberAnchor", (0.0, 0.0, t["heart_z"] + t["ember_anchor_dz"]), ob)
-    return ob, [pick, ember]
+    return finish_plant(B, name, [("PickAnchor", (0.0, 0.0, cz)),
+                                  ("EmberAnchor", (0.0, 0.0, t["heart_z"] + t["ember_anchor_dz"]))], t)
 
 # ---------------------------------------------------------------- build + export
+def merged(base, over):
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = merged(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
+    return out
+
+def lichen_params(scale, density):
+    t = dict(T1)
+    for k in ("reach_up", "reach_side", "reach_down", "leaf_len", "leaf_w"): t[k] = T1[k]*scale
+    t["beard_len"] = tuple(x*scale for x in T1["beard_len"])
+    t["node_step"] = T1["node_step"]/density
+    t["leaves_max"] = T1["leaves_max"]*density
+    t["rosette"] = round(T1["rosette"]*density)
+    return t
+
 plants = {}
-skel = huldra_skeleton(random.Random(SEED))
-for st in range(3):
-    plants[f"t1_s{st + 1}"] = huldra(skel, st)
-plants["t1_flat"] = huldra(skel, 2, flat=True, name="plant_t1_flat")     # full stage on a flat surface
-for i, (k, fn) in enumerate((("t2", baldr), ("t3", helfern)), start=1):
-    plants[k] = fn(random.Random(SEED + i))
+for v, (off, o) in VARIANTS["t1"].items():
+    tv = lichen_params(o["scale"], o["density"])
+    sk = huldra_skeleton(random.Random(SEED + off), tv)
+    if v == "a":                                                  # growth stages: one variant
+        for st in range(2):
+            plants[f"t1_s{st + 1}"] = huldra(sk, st, t=tv)
+        skel = sk
+    plants[f"t1_s3_{v}"] = huldra(sk, 2, name=f"plant_t1_s3_{v}", t=tv)
+    plants[f"t1_flat_{v}"] = huldra(sk, 2, flat=True, name=f"plant_t1_flat_{v}", t=tv)   # full stage on a flat surface
+for k, fn, base, i in (("t2", baldr, T2, 1), ("t3", helfern, T3, 2)):
+    for v, (off, o) in VARIANTS[k].items():
+        plants[f"{k}_{v}"] = fn(random.Random(SEED + i + off), merged(base, o), f"plant_{k}_{v}")
+    plants[f"{k}_picked"] = fn(random.Random(SEED + i), base, f"plant_{k}_picked", picked=True)
 
 log = []
 for k, (ob, kids) in plants.items():
@@ -433,60 +490,63 @@ for k, (ob, kids) in plants.items():
     zs = [v.co.z for v in ob.data.vertices]
     log.append(f"TRIS plant_{k}: {tri_count(ob)}  z {min(zs):.3f}..{max(zs):.3f} m  spread {max(xs)-min(xs):.2f} x {max(ys)-min(ys):.2f} m")
     export_fbx(os.path.join(OUT, f"plant_{k}.fbx"), ob)
-shutil.copyfile(os.path.join(OUT, "plant_t1_s3.fbx"), os.path.join(OUT, "plant_t1.fbx"))   # alias of the full stage
-log.append("plant_t1.fbx = copy of plant_t1_s3.fbx")
+# compatibility files: variant a exported again under the earlier file and object names (stable for Unity imports)
+for fname, src, objname in (("plant_t1_s3", "t1_s3_a", "plant_t1_s3"), ("plant_t1", "t1_s3_a", "plant_t1_s3"),
+                            ("plant_t1_flat", "t1_flat_a", "plant_t1_flat"), ("plant_t2", "t2_a", "plant_t2"),
+                            ("plant_t3", "t3_a", "plant_t3")):
+    ob = plants[src][0]; old = ob.name
+    ob.name = objname; ob.data.name = objname
+    export_fbx(os.path.join(OUT, f"{fname}.fbx"), ob)
+    ob.name = old; ob.data.name = old
+    log.append(f"{fname}.fbx = plant_{src} (object named {objname})")
 write_log("plants", log)
 
-# ---- preview (1280 x 1080), top row: two full patches overlapping on a trunk | stages 1-3 on three trunks;
-# bottom row: full flat patch on a plank | Baldr's Tear + Helfern ----
+# ---- preview (1280 x 1260), one row per plant:
+# lichen s1 s2 s3a s3b s3c on five 0.5 m trunks | Baldr's Tear a b c picked | Helfern a b c picked ----
 from common import mat
 import bpy
 PATCH_Z, TR = 1.30, T1["trunk_r"]
-def trunk_ref(x, name):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=TR, depth=2.2, location=(x, TR, 1.1))
-    o = bpy.context.active_object; o.name = name; o.data.materials.append(trunk_mat); return o
 trunk_mat = mat("trunk_ref", (0.20, 0.19, 0.18, 1), rough=0.9)
 def on_trunk(ob, x, z, turn=0.0):
     """Place a trunk-curved patch on the trunk whose axis is at (x, TR), turned `turn` radians around that axis."""
-    from mathutils import Matrix
     ob.rotation_euler.z = turn
     ob.location = Vector((x, TR, z)) + Matrix.Rotation(turn, 3, 'Z') @ Vector((0, -TR, 0))
-# A: two full patches on one trunk, the second turned 0.3 m round the trunk and 0.12 m lower
-XA, XB, XP = -3.0, -6.0, -9.0
-trunkA = trunk_ref(XA, "trunk_a")
-pA1 = huldra(skel, 2, name="plant_t1_s3_left")[0]; on_trunk(pA1, XA, PATCH_Z, -0.55)
-pA2 = huldra(skel, 2, name="plant_t1_s3_right")[0]; on_trunk(pA2, XA, PATCH_Z - 0.12, 0.65)
-# B: stages 1-3 side by side on three trunks
-trunksB = [trunk_ref(XB + (k - 1)*0.62, f"trunk_b{k}") for k in range(3)]
-for k in range(3): on_trunk(plants[f"t1_s{k + 1}"][0], XB + (k - 1)*0.62, PATCH_Z)
-# C: flat full patch on a plank
-pF = plants["t1_flat"][0]; pF.location = (XP, 0, PATCH_Z)
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(XP, 0.02, PATCH_Z))
-plank = bpy.context.active_object; plank.name = "plank_ref"; plank.scale = (0.60, 0.04, 0.80)
-plank.data.materials.append(mat("plank_ref", (0.36, 0.27, 0.18, 1), rough=0.85))
-plants["t2"][0].location = (-0.26, 0, 0); plants["t2"][0].rotation_euler.z = -1.0
-plants["t3"][0].location = (0.24, 0.10, 0); plants["t3"][0].rotation_euler.z = 0.75
-g = ground()
-rB = ruler((XB - 0.98, 0.05, 0), height=2.0, band=0.5, r=0.015)      # 2 m in 0.5 m bands
-r2 = ruler((-0.05, 0.25, 0))                                          # 0.5 m in 0.1 m bands
-L_far = [light("key", 'AREA', (1.5, -2.0, 2.0), 160, (1.0, 0.85, 0.7), 1.5),
-         light("fill", 'AREA', (-2.2, -1.5, 1.0), 40, (0.7, 0.8, 1.0), 2.0),
-         light("rim", 'AREA', (0.0, 2.0, 1.6), 80, (1.0, 0.9, 0.8), 1.5)]
-def side_lights(x, tag, e=70):
-    tz = (x, 0, PATCH_Z)
-    return [light("key_" + tag, 'AREA', (x + 1.4, -2.0, 2.6), e, (1.0, 0.85, 0.7), 1.5, tz),
-            light("fill_" + tag, 'AREA', (x - 2.0, -1.6, 1.4), e*0.26, (0.7, 0.8, 1.0), 2.0, tz)]
-LA, LB, LC = side_lights(XA, "a", 55), side_lights(XB, "b", 85), side_lights(XP, "c", 55)
+row1 = ["t1_s1", "t1_s2", "t1_s3_a", "t1_s3_b", "t1_s3_c"]
+X1, DX1, Y2, DX2, Y3, DX3 = -10.0, 0.58, 4.0, 0.45, 8.0, 0.95
+trunks = []
+for k, key in enumerate(row1):
+    x = X1 + (k - 2)*DX1
+    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=TR, depth=2.2, location=(x, TR, 1.1))
+    o = bpy.context.active_object; o.name = f"trunk_ref_{k}"; o.data.materials.append(trunk_mat); trunks.append(o)
+    on_trunk(plants[key][0], x, PATCH_Z)
+row2 = ["t2_a", "t2_b", "t2_c", "t2_picked"]
+for k, key in enumerate(row2):
+    plants[key][0].location = ((k - 1.5)*DX2, Y2, 0); plants[key][0].rotation_euler.z = -1.0
+row3 = ["t3_a", "t3_b", "t3_c", "t3_picked"]
+for k, key in enumerate(row3):
+    plants[key][0].location = ((k - 1.5)*DX3, Y3, 0); plants[key][0].rotation_euler.z = 0.75
+for key in ("t1_flat_a", "t1_flat_b", "t1_flat_c"):              # not in this preview (see v4 for the plank view)
+    plants[key][0].location = (0, -30, 0)
+g = ground(40.0)
+r1 = ruler((X1 - 2.5*DX1, 0.0, 0), height=2.0, band=0.5, r=0.015)
+r2 = ruler((-2.25*DX2, Y2 + 0.1, 0))
+r3 = ruler((-1.95*DX3, Y3 - 0.3, 0))
+def row_lights(c, tag, e=160):
+    c = Vector(c)
+    return [light("key_" + tag, 'AREA', tuple(c + Vector((1.5, -2.0, 2.0))), e, (1.0, 0.85, 0.7), 1.5, tuple(c)),
+            light("fill_" + tag, 'AREA', tuple(c + Vector((-2.2, -1.5, 1.0))), e*0.25, (0.7, 0.8, 1.0), 2.0, tuple(c)),
+            light("rim_" + tag, 'AREA', tuple(c + Vector((0.0, 2.0, 1.6))), e*0.5, (1.0, 0.9, 0.8), 1.5, tuple(c))]
+L1 = row_lights((X1, 0, PATCH_Z), "lichen", 110)
+L2 = row_lights((0, Y2, 0.2), "baldr")
+L3 = row_lights((0, Y3, 0.2), "fern")
 sky = light("sky", 'SUN', (0.0, 0.0, 5.0), 1.2, (0.9, 0.92, 1.0))
 world((0.16, 0.155, 0.15, 1))
 both = [g, sky]
 render_panels([
-    dict(height=540, panels=[
-        dict(width=480, cam=((XA, -0.95, PATCH_Z + 0.12), (XA, 0, PATCH_Z + 0.10), 40), show=both + [trunkA, pA1, pA2] + LA),
-        dict(width=800, cam=((XB, -1.9, PATCH_Z + 0.14), (XB, 0, PATCH_Z + 0.12), 42),
-             show=both + trunksB + [plants[f"t1_s{k + 1}"][0] for k in range(3)] + LB)]),
-    dict(height=540, panels=[
-        dict(width=480, cam=((XP, -0.95, PATCH_Z + 0.1), (XP, 0, PATCH_Z + 0.04), 40), show=both + [plank, pF] + LC),
-        dict(width=800, cam=((0.06, -1.6, 0.55), (0.06, 0, 0.20), 40),
-             show=both + [plants["t2"][0], plants["t3"][0], r2] + L_far)]),
+    dict(height=420, panels=[dict(width=1280, cam=((X1 - 0.05, -3.55, PATCH_Z + 0.12), (X1 - 0.05, 0, PATCH_Z + 0.04), 42),
+         show=both + trunks + [plants[k][0] for k in row1] + [r1] + L1)]),
+    dict(height=420, panels=[dict(width=1280, cam=((-0.05, Y2 - 2.2, 0.5), (-0.05, Y2, 0.22), 40),
+         show=both + [plants[k][0] for k in row2] + [r2] + L2)]),
+    dict(height=420, panels=[dict(width=1280, cam=((-0.1, Y3 - 4.3, 1.1), (-0.1, Y3, 0.20), 40),
+         show=both + [plants[k][0] for k in row3] + [r3] + L3)]),
 ], "preview-plants.png", PREVIEW, "plants.blend")
