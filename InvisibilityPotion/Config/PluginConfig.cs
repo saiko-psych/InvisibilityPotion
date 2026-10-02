@@ -45,9 +45,9 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", "Distortion");
-            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", "Distortion");
-            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", "Distortion");
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", LookDefaults.BodyVeilModes[1]);
+            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", LookDefaults.BodyVeilModes[2]);
+            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", LookDefaults.BodyVeilModes[3]);
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
@@ -162,17 +162,17 @@ namespace InvisibilityPotion.Config
             }
         }
 
-        /// <summary>Revision of the per-tier look defaults; bump when a default the user asked for must reach existing config files.</summary>
-        private const int LookDefaultsRevision = 2;
+        /// <summary>Revision of the per-tier look defaults (<see cref="LookDefaults.Revision"/>); bump it there when a default the user asked for must reach existing config files.</summary>
+        private const int LookDefaultsRevision = LookDefaults.Revision;
 
         /// <summary>
-        /// The tier I and II looks changed on the user's request: revision 1 (round F, task 10f: light distortion plus surface
-        /// wisps for tier I, wide flat outer ring for tier II), revision 2 (round G, task 10g: visible tier I body with bone fog and
-        /// trail, whole-body tier II cloud, absolute outer-layer keys, Emission, DynamicColor off). Existing files keep their old
-        /// values, so once per file ([Fog] LookDefaultsRevision below the current revision) [Fog.Tier1] and [Fog.Tier2] are reset to
-        /// the new defaults, the obsolete outer factor keys are logged with their values (MigrateAndDropOrphans then removes them),
-        /// and a [Tier1] BodyVeilMode still on the old default Off becomes Distortion. Tier III is untouched (approved as is).
-        /// The log lists what happened.
+        /// The tier I and II looks changed on the user's request: revision 1 (round F, task 10f), revision 2 (round G, task 10g:
+        /// absolute outer-layer keys, Emission, DynamicColor off), revision 3 (round H, task 10h: tier I = normal body in a thin
+        /// fog layer that follows the body, ground fog field for tiers I and II). Existing files keep their old values, so once per
+        /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
+        /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
+        /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
+        /// default) becomes Off. Tier III is untouched (approved as is). The log lists what happened.
         /// </summary>
         private static void MigrateLookDefaults()
         {
@@ -185,7 +185,7 @@ namespace InvisibilityPotion.Config
             {
                 // Log what is about to be overwritten so a user's tuned values can be recovered from the log.
                 var differing = 0;
-                foreach (var t in new[] { 1, 2 })
+                foreach (var t in LookDefaults.ResetTiers)
                     foreach (var kv in _fogEntries[t])
                     {
                         if (Equals(kv.Value.BoxedValue, kv.Value.DefaultValue)) continue;
@@ -200,13 +200,15 @@ namespace InvisibilityPotion.Config
                             if (orphans.TryGetValue(new ConfigDefinition($"Fog.Tier{t}", key), out var old))
                                 Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {key} = {old} is obsolete (replaced by the absolute OuterRadius/OuterAlpha/OuterRate/OuterSize/OuterLifetime) and removed");
                 var t1Mode = (ConfigEntry<string>)_tierEntries[1]["BodyVeilMode"];
-                var modeChanged = t1Mode.Value == "Off";
-                if (modeChanged) t1Mode.Value = "Distortion";
+                var oldMode = t1Mode.Value;
+                var newMode = LookDefaults.MigrateBodyVeilMode(1, oldMode);
+                var modeChanged = newMode != oldMode;
+                if (modeChanged) t1Mode.Value = newMode;
                 rev.Value = LookDefaultsRevision;
                 Plugin.Log?.LogInfo(differing == 0 && !modeChanged
                     ? $"Config migration (look defaults revision {LookDefaultsRevision}): nothing to change, [Fog.Tier1] and [Fog.Tier2] already hold the defaults"
                     : $"Config migration (look defaults revision {LookDefaultsRevision}): {differing} [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults" +
-                      (modeChanged ? "; [Tier1] BodyVeilMode Off -> Distortion" : ""));
+                      (modeChanged ? $"; [Tier1] BodyVeilMode {oldMode} -> {newMode}" : ""));
             }
             catch (Exception ex)
             {

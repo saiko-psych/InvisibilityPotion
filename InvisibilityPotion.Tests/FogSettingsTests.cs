@@ -56,14 +56,26 @@ public class FogSettingsTests
         Assert.False(t1.OuterEnabled);
         Assert.Equal(FogEmitterMode.Bones, t1.EmitterMode);
         Assert.Equal(0f, t1.MeshRate);
-        Assert.Equal(6f, t1.Rate, 5);
-        Assert.Equal(0.6f, t1.Size, 5);
-        Assert.Equal(3.5f, t1.Lifetime, 5);
-        Assert.Equal(0.35f, t1.Alpha, 5);
+        Assert.Equal(5f, t1.Rate, 5);
+        Assert.Equal(0.45f, t1.Size, 5);
+        Assert.Equal(2f, t1.Lifetime, 5);
+        Assert.Equal(0.22f, t1.Alpha, 5);
+        Assert.Equal(0.5f, t1.SpreadY, 5);
         Assert.Equal(0.03f, t1.Speed, 5);
         Assert.Equal(0.03f, t1.Drift, 5);
-        Assert.True(t1.Trail);
-        Assert.Equal(FogTrailMode.Trail, t1.InnerTrailMode);
+        Assert.False(t1.Trail);
+        Assert.Equal(FogTrailMode.Follow, t1.InnerTrailMode);
+        Assert.True(t1.GroundEnabled);
+        Assert.True(t1.GroundActive);
+        Assert.Equal(4f, t1.GroundRate, 5);
+        Assert.Equal(2f, t1.GroundRateDistance, 5);
+        Assert.Equal(0.8f, t1.GroundSize, 5);
+        Assert.Equal(3f, t1.GroundGrow, 5);
+        Assert.Equal(7f, t1.GroundLifetime, 5);
+        Assert.Equal(0.22f, t1.GroundAlpha, 5);
+        Assert.Equal(0.6f, t1.GroundRadius, 5);
+        Assert.Equal(0.15f, t1.GroundHeight, 5);
+        Assert.Equal(0.05f, t1.GroundDrift, 5);
         Assert.All(t1.Anchors, a => Assert.True(a.Enabled));
         Assert.Equal("0.88,0.9,0.93", t1.Get("Color"));
         Assert.False(t1.DynamicColor);
@@ -94,12 +106,25 @@ public class FogSettingsTests
         Assert.Equal(1.8f, t2.OuterSize, 5);
         Assert.Equal(3f, t2.OuterLifetime, 5);
         Assert.Equal(0.15f, t2.OuterSpreadY, 5);
+        Assert.True(t2.OuterHorizontal);
+        Assert.True(t2.GroundEnabled);
+        Assert.Equal(6f, t2.GroundRate, 5);
+        Assert.Equal(3f, t2.GroundRateDistance, 5);
+        Assert.Equal(1f, t2.GroundSize, 5);
+        Assert.Equal(3.5f, t2.GroundGrow, 5);
+        Assert.Equal(7f, t2.GroundLifetime, 5);
+        Assert.Equal(0.3f, t2.GroundAlpha, 5);
+        Assert.Equal(0.9f, t2.GroundRadius, 5);
+        Assert.Equal(0.15f, t2.GroundHeight, 5);
+        Assert.Equal(0.05f, t2.GroundDrift, 5);
         Assert.Equal(0.1f, t2.DistortionStrength, 5);
         Assert.Equal(0.08f, t2.DA, 5);
 
         var t3 = FogSettings.Defaults(3);
         Assert.False(t3.Enabled);
         Assert.False(t3.OuterEnabled);
+        Assert.False(t3.GroundEnabled);
+        Assert.False(t3.GroundActive);
         Assert.Equal(0f, t3.Emission);
         Assert.False(t3.DynamicColor);
         Assert.Equal(0.03f, t3.DistortionStrength, 5);
@@ -131,6 +156,82 @@ public class FogSettingsTests
     {
         foreach (var k in FogSettings.Keys) if (k.Name == name) return k;
         return null;
+    }
+
+    [Fact]
+    public void GroundKeys_AreBoundWithDescriptions()
+    {
+        Assert.Equal(new[] { "GroundEnabled", "GroundRate", "GroundRateDistance", "GroundSize", "GroundGrow", "GroundLifetime", "GroundAlpha", "GroundRadius", "GroundHeight", "GroundDrift" },
+                     FogSettings.GroundKeys);
+        foreach (var k in FogSettings.GroundKeys)
+        {
+            var key = Find(k);
+            Assert.NotNull(key);
+            Assert.Equal(k == "GroundEnabled" ? FogValueKind.Bool : FogValueKind.Float, key.Kind);
+            Assert.False(string.IsNullOrWhiteSpace(key.Description));
+            Assert.NotNull(FogSettings.Defaults(1).Get(k));
+        }
+    }
+
+    [Fact]
+    public void GroundKeys_ClampOnSet()
+    {
+        var s = FogSettings.Defaults(1);
+        Assert.True(s.TrySet("GroundRate", "-1")); Assert.Equal(0f, s.GroundRate);
+        Assert.True(s.TrySet("GroundRateDistance", "-1")); Assert.Equal(0f, s.GroundRateDistance);
+        Assert.True(s.TrySet("GroundSize", "0")); Assert.Equal(0.01f, s.GroundSize, 5);
+        Assert.True(s.TrySet("GroundGrow", "0")); Assert.Equal(0.1f, s.GroundGrow, 5);
+        Assert.True(s.TrySet("GroundLifetime", "0")); Assert.Equal(0.05f, s.GroundLifetime, 5);
+        Assert.True(s.TrySet("GroundAlpha", "5")); Assert.Equal(1f, s.GroundAlpha);
+        Assert.True(s.TrySet("GroundRadius", "-2")); Assert.Equal(0f, s.GroundRadius);
+        Assert.True(s.TrySet("GroundHeight", "9")); Assert.Equal(2f, s.GroundHeight);
+        Assert.True(s.TrySet("GroundHeight", "-9")); Assert.Equal(-0.5f, s.GroundHeight);
+        Assert.True(s.TrySet("GroundDrift", "-1")); Assert.Equal(0f, s.GroundDrift);
+        Assert.True(s.TrySet("GroundEnabled", "off")); Assert.False(s.GroundEnabled);
+        Assert.False(s.TrySet("GroundEnabled", "maybe"));
+        Assert.False(s.TrySet("GroundRate", "lots"));
+    }
+
+    [Fact]
+    public void GroundField_ActiveAndBudget()
+    {
+        var s = FogSettings.Defaults(1);   // 4/s + 2/m, 7 s
+        Assert.True(s.GroundActive);
+        Assert.Equal(4f + 2f * FogSettings.GroundBudgetSpeed, s.GroundBudgetRate, 4);
+        Assert.Equal((4f + 2f * FogSettings.GroundBudgetSpeed) * 7f, s.LiveParticlesGround, 3);
+        Assert.Equal(FogSettings.MaxParticles(s.GroundBudgetRate, 7f), s.GroundMaxParticles);
+        Assert.False(s.ExceedsParticleBudget);
+        Assert.False(FogSettings.Defaults(2).ExceedsParticleBudget);
+        s.Rate = 0f; s.Alpha = 0f;
+        Assert.False(s.InnerActive);
+        Assert.True(s.GroundActive);   // independent of the inner layer
+        s.GroundRate = 0f;
+        Assert.True(s.GroundActive);   // distance emission alone still forms the field
+        s.GroundRateDistance = 0f;
+        Assert.False(s.GroundActive);
+        s.GroundRate = 4f; s.GroundAlpha = 0f;
+        Assert.False(s.GroundActive);
+        s.GroundAlpha = 0.2f; s.GroundEnabled = false;
+        Assert.False(s.GroundActive);
+        Assert.Equal(0f, s.LiveParticlesGround);
+        s.GroundEnabled = true; s.GroundRate = 30f; s.GroundRateDistance = 10f; s.GroundLifetime = 10f;
+        Assert.True(s.ExceedsParticleBudget);
+        Assert.Equal(FogSettings.ParticleHardCap, s.GroundMaxParticles);
+    }
+
+    [Fact]
+    public void LookDefaults_Revision3_ResetsTier1And2_AndTier1BodyOff()
+    {
+        Assert.Equal(3, LookDefaults.Revision);
+        Assert.Equal(new[] { 1, 2 }, LookDefaults.ResetTiers);
+        Assert.Equal("Off", LookDefaults.BodyVeilModes[1]);
+        Assert.Equal("Distortion", LookDefaults.BodyVeilModes[2]);
+        Assert.Equal("Distortion", LookDefaults.BodyVeilModes[3]);
+        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Distortion"));
+        Assert.Equal("Spirit", LookDefaults.MigrateBodyVeilMode(1, "Spirit"));
+        Assert.Equal("Off", LookDefaults.MigrateBodyVeilMode(1, "Off"));
+        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(2, "Distortion"));
+        Assert.Equal("Distortion", LookDefaults.MigrateBodyVeilMode(3, "Distortion"));
     }
 
     [Fact]
@@ -173,9 +274,11 @@ public class FogSettingsTests
     public void NewKeys_RoundTripAndParse()
     {
         var s = FogSettings.Defaults(3);
-        s.Trail = true; s.OuterTrail = true; s.MeshRate = 12.5f; s.OuterSpreadY = 0.2f; s.OuterLifetime = 2f;
+        s.Trail = true; s.OuterTrail = true; s.OuterHorizontal = false; s.MeshRate = 12.5f; s.OuterSpreadY = 0.2f; s.OuterLifetime = 2f;
         s.OuterRadius = 2.5f; s.OuterAlpha = 0.6f; s.OuterRate = 9f; s.OuterSize = 2.2f; s.Emission = 0.4f;
         s.OuterAnchors = new List<string> { "LeftFoot", "Head" };
+        s.GroundEnabled = true; s.GroundRate = 3f; s.GroundRateDistance = 1.5f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f;
+        s.GroundLifetime = 5f; s.GroundAlpha = 0.4f; s.GroundRadius = 0.7f; s.GroundHeight = 0.3f; s.GroundDrift = 0.1f;
         var text = new Dictionary<string, string>();
         foreach (var k in FogSettings.Keys) text[k.Name] = s.Get(k.Name);
         Assert.Equal("LeftFoot,Head", text["OuterAnchors"]);
@@ -187,6 +290,7 @@ public class FogSettingsTests
         Assert.Empty(warnings);
         Assert.True(parsed.Trail);
         Assert.True(parsed.OuterTrail);
+        Assert.False(parsed.OuterHorizontal);
         Assert.Equal(12.5f, parsed.MeshRate, 5);
         Assert.Equal(0.2f, parsed.OuterSpreadY, 5);
         Assert.Equal(2f, parsed.OuterLifetime, 5);
@@ -196,6 +300,16 @@ public class FogSettingsTests
         Assert.Equal(2.2f, parsed.OuterSize, 5);
         Assert.Equal(0.4f, parsed.Emission, 5);
         Assert.Equal(new[] { "LeftFoot", "Head" }, parsed.OuterAnchors);
+        Assert.True(parsed.GroundEnabled);
+        Assert.Equal(3f, parsed.GroundRate, 5);
+        Assert.Equal(1.5f, parsed.GroundRateDistance, 5);
+        Assert.Equal(1.2f, parsed.GroundSize, 5);
+        Assert.Equal(2.5f, parsed.GroundGrow, 5);
+        Assert.Equal(5f, parsed.GroundLifetime, 5);
+        Assert.Equal(0.4f, parsed.GroundAlpha, 5);
+        Assert.Equal(0.7f, parsed.GroundRadius, 5);
+        Assert.Equal(0.3f, parsed.GroundHeight, 5);
+        Assert.Equal(0.1f, parsed.GroundDrift, 5);
     }
 
     [Fact]
@@ -315,7 +429,7 @@ public class FogSettingsTests
         var mesh = FogSettings.Defaults(1);   // Mesh: MeshRate x Lifetime
         mesh.EmitterMode = FogEmitterMode.Mesh; mesh.MeshRate = 18f;
         Assert.False(mesh.ExceedsParticleBudget);
-        mesh.MeshRate = 60f;
+        mesh.MeshRate = 120f;   // x lifetime 2 s = 240
         Assert.True(mesh.ExceedsParticleBudget);
     }
 

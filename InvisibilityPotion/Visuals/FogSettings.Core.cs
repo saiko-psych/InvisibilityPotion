@@ -73,6 +73,27 @@ namespace InvisibilityPotion.Visuals
 
     public enum FogValueKind { Float, Bool, Text }
 
+    /// <summary>The three kinds of fog emitter: inner (on the body), outer (wide ring on bones), ground (fog field at the feet).</summary>
+    public enum FogLayerKind { Inner, Outer, Ground }
+
+    /// <summary>
+    /// Revision of the per-tier look defaults and what a migration to it changes (pure; PluginConfig applies it to the file).
+    /// Revision 3 (round H, task 10h): tier I is the normal body in a thin fog layer plus a ground fog field, tier II gets the
+    /// ground field too.
+    /// </summary>
+    public static class LookDefaults
+    {
+        public const int Revision = 3;
+        /// <summary>[Fog.TierN] sections reset to the new defaults when a file is below <see cref="Revision"/>; tier III is untouched.</summary>
+        public static readonly int[] ResetTiers = { 1, 2 };
+        /// <summary>Default [TierN] BodyVeilMode per tier (index 1..3).</summary>
+        public static readonly string[] BodyVeilModes = { null, "Off", "Distortion", "Distortion" };
+
+        /// <summary>BodyVeilMode after the migration: tier I on the previous default Distortion becomes Off; anything else is kept.</summary>
+        public static string MigrateBodyVeilMode(int tier, string current) =>
+            tier == 1 && string.Equals((current ?? "").Trim(), "Distortion", StringComparison.Ordinal) ? "Off" : current;
+    }
+
     /// <summary>One config key of a per-tier fog section ([Fog.TierN]).</summary>
     public sealed class FogKey
     {
@@ -84,7 +105,8 @@ namespace InvisibilityPotion.Visuals
     }
 
     /// <summary>
-    /// Per-tier look of the veil: body-anchored fog (inner layer plus an optional wider, fainter outer layer) and the tier's
+    /// Per-tier look of the veil: body-anchored fog (inner layer plus an optional wider, fainter outer layer), an optional ground
+    /// fog field at the feet, and the tier's
     /// Distortion parameters. One instance per tier, config section [Fog.TierN] (local, not server-synced).
     /// </summary>
     public sealed class FogSettings
@@ -129,8 +151,24 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Outer layer vertical shape scale on OuterRadius; below 1 flattens the disc.</summary>
         public float OuterSpreadY = 0.35f;
         public bool OuterTrail;
+        /// <summary>
+        /// Outer layer quads lie parallel to the ground (HorizontalBillboard) instead of facing the camera. Round H: upright 1.8 m
+        /// billboards cannot form a flat ring (each quad is ~4x taller than the 0.42 m disc), so the ring read as part of the body cloud.
+        /// </summary>
+        public bool OuterHorizontal = true;
         /// <summary>Bones the outer layer spawns on (one emitter each, radius OuterRadius, offset from the Anchor.* key), whatever the emitter mode.</summary>
         public List<string> OuterAnchors = new List<string>(DefaultOuterAnchors);
+        /// <summary>Ground fog field: world-space, ground-parallel particles at the feet that stay where they were emitted and grow.</summary>
+        public bool GroundEnabled;
+        public float GroundRate = 4f;          // particles per second (also while standing)
+        public float GroundRateDistance = 2f;  // extra particles per metre walked (world space rateOverDistance)
+        public float GroundSize = 0.8f;        // metres at birth
+        public float GroundGrow = 3f;          // size at death = GroundSize x GroundGrow
+        public float GroundLifetime = 7f;      // seconds
+        public float GroundAlpha = 0.22f;
+        public float GroundRadius = 0.6f;      // spawn radius around the feet, metres
+        public float GroundHeight = 0.15f;     // metres above the player's root (feet)
+        public float GroundDrift = 0.05f;      // random horizontal drift amplitude, m/s
         public float DistortionStrength = 0.1f;
         public float DR = 1f, DG = 1f, DB = 1f, DA = 0.08f;
         /// <summary>Ripple speed (_WaveVel) of the Distortion body mode; negative = keep the value borrowed from staff_shield_shard.</summary>
@@ -156,6 +194,15 @@ namespace InvisibilityPotion.Visuals
         /// </summary>
         public static readonly string[] ObsoleteKeys = { "OuterRadiusMultiplier", "OuterAlphaFactor", "OuterRateFactor", "OuterSizeFactor", "OuterLifetimeFactor" };
 
+        /// <summary>The ground fog field keys (round H), in file order.</summary>
+        public static readonly string[] GroundKeys =
+        {
+            "GroundEnabled", "GroundRate", "GroundRateDistance", "GroundSize", "GroundGrow", "GroundLifetime", "GroundAlpha", "GroundRadius", "GroundHeight", "GroundDrift",
+        };
+
+        /// <summary>Movement speed (m/s) the ground field budget assumes for rateOverDistance; roughly a running player (assumption, not read from the game).</summary>
+        public const float GroundBudgetSpeed = 7f;
+
         /// <summary>Canonical fog material name for a config value (case-insensitive), or null when it is not one of <see cref="FogMaterialNames"/>.</summary>
         public static string NormalizeFogMaterial(string text)
         {
@@ -175,11 +222,13 @@ namespace InvisibilityPotion.Visuals
             switch (tier)
             {
                 case 1:
-                    // Light tier (round G): clearly visible shimmering body (DA 0.5), fog hugging every bone, strong trail.
-                    s.Rate = 6f; s.Size = 0.6f; s.Lifetime = 3.5f; s.Speed = 0.03f; s.Alpha = 0.35f;
+                    // Light tier (round H): the normal body ([Tier1] BodyVeilMode Off) in a thin, close fog layer that follows the
+                    // body (no trail plume), plus a ground fog field along the walked path. Distortion values stay for the mode switch.
+                    s.Rate = 5f; s.Size = 0.45f; s.Lifetime = 2f; s.Speed = 0.03f; s.Alpha = 0.22f;
                     s.R = 0.88f; s.G = 0.9f; s.B = 0.93f; s.Emission = 0.25f;
                     s.SpreadX = 1f; s.SpreadY = 0.5f; s.SpreadZ = 1f; s.Drift = 0.03f;
-                    s.Trail = true;
+                    s.Trail = false;
+                    s.GroundEnabled = true;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
                     break;
                 case 2:
@@ -191,6 +240,9 @@ namespace InvisibilityPotion.Visuals
                     s.OuterAnchors = new List<string> { "Hips" };
                     s.OuterRadius = 1.4f; s.OuterAlpha = 0.35f; s.OuterRate = 14f; s.OuterSize = 1.8f; s.OuterLifetime = 3f;
                     s.OuterSpreadY = 0.15f; s.OuterTrail = true;
+                    // Round H: a denser, wider ground fog field than tier I.
+                    s.GroundEnabled = true;
+                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1f; s.GroundGrow = 3.5f; s.GroundAlpha = 0.3f; s.GroundRadius = 0.9f;
                     s.DistortionStrength = 0.1f; s.DA = 0.08f;
                     break;
                 case 3:
@@ -245,6 +297,18 @@ namespace InvisibilityPotion.Visuals
         /// <summary>True when the outer layer emits anything; independent of the inner layer (it can be tested alone).</summary>
         public bool OuterActive => OuterEnabled && OuterRate > 0f && OuterAlpha > 0f && OuterAnchors.Count > 0;
 
+        /// <summary>True when the ground fog field emits anything: enabled, alpha above 0 and a rate over time or over distance.</summary>
+        public bool GroundActive => GroundEnabled && GroundAlpha > 0f && (GroundRate > 0f || GroundRateDistance > 0f);
+
+        /// <summary>Emission the ground field is budgeted for: GroundRate plus GroundRateDistance at <see cref="GroundBudgetSpeed"/>.</summary>
+        public float GroundBudgetRate => Math.Max(0f, GroundRate) + Math.Max(0f, GroundRateDistance) * GroundBudgetSpeed;
+
+        /// <summary>Expected live particles of the ground emitter while running; 0 when the field is off.</summary>
+        public float LiveParticlesGround => GroundEnabled ? GroundBudgetRate * Math.Max(0f, GroundLifetime) : 0f;
+
+        /// <summary>maxParticles of the ground emitter (budget rate x lifetime with headroom, hard-capped).</summary>
+        public int GroundMaxParticles => MaxParticles(GroundBudgetRate, GroundLifetime);
+
         /// <summary>Rate of the single Mesh emitter for <paramref name="enabledAnchors"/> enabled anchors: MeshRate, or Rate x anchors when MeshRate is 0.</summary>
         public float MeshEmitterRate(int enabledAnchors) => MeshRate > 0f ? MeshRate : Math.Max(0f, Rate) * Math.Max(0, enabledAnchors);
 
@@ -266,7 +330,7 @@ namespace InvisibilityPotion.Visuals
         }
 
         public bool ExceedsParticleBudget => (EmitterMode == FogEmitterMode.Mesh ? LiveParticlesMesh : LiveParticlesInner) > ParticleWarnThreshold
-                                             || LiveParticlesOuter > ParticleWarnThreshold;
+                                             || LiveParticlesOuter > ParticleWarnThreshold || LiveParticlesGround > ParticleWarnThreshold;
 
         /// <summary>maxParticles for an inner emitter that emits <paramref name="rate"/> per second (lifetime = Lifetime).</summary>
         public int MaxParticles(float rate) => MaxParticles(rate, Lifetime);
@@ -334,6 +398,17 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer vertical shape scale on OuterRadius; below 1 flattens the disc"),
                 new FogKey("OuterLifetime", FogValueKind.Float, "Outer layer particle lifetime in seconds (randomised 0.8x..1.2x)"),
                 new FogKey("OuterTrail", FogValueKind.Bool, "Outer layer in world space (leaves a trail), like Trail for the inner layer"),
+                new FogKey("OuterHorizontal", FogValueKind.Bool, "Outer layer particles lie flat, parallel to the ground (a visible flat ring from above); false = they face the camera like the inner fog"),
+                new FogKey("GroundEnabled", FogValueKind.Bool, "Ground fog field: flat fog patches at the feet that stay where they were emitted and spread, so walking leaves a field of fog"),
+                new FogKey("GroundRate", FogValueKind.Float, "Ground field particles per second (also while standing still)"),
+                new FogKey("GroundRateDistance", FogValueKind.Float, "Ground field extra particles per metre walked"),
+                new FogKey("GroundSize", FogValueKind.Float, "Ground field particle size in metres at birth"),
+                new FogKey("GroundGrow", FogValueKind.Float, "Ground field growth: a particle ends at GroundSize x GroundGrow (1 = no growth)"),
+                new FogKey("GroundLifetime", FogValueKind.Float, "Ground field particle lifetime in seconds"),
+                new FogKey("GroundAlpha", FogValueKind.Float, "Ground field alpha 0..1 (fades in over the first 15 % and out over the last 40 % of the lifetime)"),
+                new FogKey("GroundRadius", FogValueKind.Float, "Ground field spawn radius in metres around the feet"),
+                new FogKey("GroundHeight", FogValueKind.Float, "Ground field height in metres above the player's feet (-0.5..2)"),
+                new FogKey("GroundDrift", FogValueKind.Float, "Ground field random horizontal drift in m/s"),
                 new FogKey("DistortionStrength", FogValueKind.Float, "Refraction strength when this tier's body mode is Distortion (shader property _RefractionIntensity)"),
                 new FogKey("DistortionColor", FogValueKind.Text, "Colour of the Distortion body mode as r,g,b,a (shader property _Color)"),
                 new FogKey("DistortionWave", FogValueKind.Float, "Ripple speed of the Distortion body mode (_WaveVel, normal map borrowed from staff_shield_shard); negative = the borrowed vanilla value"),
@@ -373,10 +448,21 @@ namespace InvisibilityPotion.Visuals
                 case "OuterSpreadY": return FloatList.Format(OuterSpreadY);
                 case "OuterLifetime": return FloatList.Format(OuterLifetime);
                 case "OuterTrail": return Bool(OuterTrail);
+                case "OuterHorizontal": return Bool(OuterHorizontal);
                 case "OuterRadius": return FloatList.Format(OuterRadius);
                 case "OuterAlpha": return FloatList.Format(OuterAlpha);
                 case "OuterRate": return FloatList.Format(OuterRate);
                 case "OuterSize": return FloatList.Format(OuterSize);
+                case "GroundEnabled": return Bool(GroundEnabled);
+                case "GroundRate": return FloatList.Format(GroundRate);
+                case "GroundRateDistance": return FloatList.Format(GroundRateDistance);
+                case "GroundSize": return FloatList.Format(GroundSize);
+                case "GroundGrow": return FloatList.Format(GroundGrow);
+                case "GroundLifetime": return FloatList.Format(GroundLifetime);
+                case "GroundAlpha": return FloatList.Format(GroundAlpha);
+                case "GroundRadius": return FloatList.Format(GroundRadius);
+                case "GroundHeight": return FloatList.Format(GroundHeight);
+                case "GroundDrift": return FloatList.Format(GroundDrift);
                 case "Emission": return FloatList.Format(Emission);
                 case "DistortionStrength": return FloatList.Format(DistortionStrength);
                 case "DistortionColor": return FloatList.Format(DR, DG, DB, DA);
@@ -408,6 +494,8 @@ namespace InvisibilityPotion.Visuals
                 case "OuterEnabled": return SetBool(text, ref OuterEnabled);
                 case "Trail": return SetBool(text, ref Trail);
                 case "OuterTrail": return SetBool(text, ref OuterTrail);
+                case "OuterHorizontal": return SetBool(text, ref OuterHorizontal);
+                case "GroundEnabled": return SetBool(text, ref GroundEnabled);
                 case "OuterAnchors":
                     if (!TryParseAnchorList(text, out var outerAnchors)) return false;
                     OuterAnchors = outerAnchors;
@@ -453,6 +541,15 @@ namespace InvisibilityPotion.Visuals
                 case "MeshRate": MeshRate = Math.Max(0f, v); return true;
                 case "OuterSpreadY": OuterSpreadY = Math.Max(0.01f, v); return true;
                 case "OuterLifetime": OuterLifetime = Math.Max(0.05f, v); return true;
+                case "GroundRate": GroundRate = Math.Max(0f, v); return true;
+                case "GroundRateDistance": GroundRateDistance = Math.Max(0f, v); return true;
+                case "GroundSize": GroundSize = Math.Max(0.01f, v); return true;
+                case "GroundGrow": GroundGrow = Math.Max(0.1f, v); return true;
+                case "GroundLifetime": GroundLifetime = Math.Max(0.05f, v); return true;
+                case "GroundAlpha": GroundAlpha = Clamp01(v); return true;
+                case "GroundRadius": GroundRadius = Math.Max(0f, v); return true;
+                case "GroundHeight": GroundHeight = v < -0.5f ? -0.5f : v > 2f ? 2f : v; return true;
+                case "GroundDrift": GroundDrift = Math.Max(0f, v); return true;
                 default: return false;
             }
         }
