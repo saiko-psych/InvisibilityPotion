@@ -6,7 +6,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package test run play log bundle unity-setup
+.PHONY: help decompile build package test run play log bundle unity-setup models
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -85,3 +85,16 @@ bundle: ## Build the asset bundle headless (TARGET=linux|windows) and copy it to
 		|| { echo "Unity failed, see build/unity-bundle-$(TARGET).log"; exit 1; }
 	@dest=InvisibilityPotion/Assets/ip_assets$(if $(filter windows,$(TARGET)),.windows,); \
 		cp "$(UNITY_PROJECT)/Build/Bundles/$(TARGET)/ip_assets" "$$dest" && ls -l "$$dest"
+
+# Blender models (see tools/blender/README.md). SKIP_BLENDER=1 only copies what tools/blender/out/ already holds.
+BLENDER ?= blender
+SKIP_BLENDER ?=
+models: ## Run every tools/blender/make_*.py headless, then copy tools/blender/out/*.fbx into the Unity project
+	@mkdir -p build
+	@if [ "$(SKIP_BLENDER)" != "1" ]; then \
+		for s in tools/blender/make_*.py; do echo "== $$s"; "$(BLENDER)" -b --python-exit-code 1 --python "$$s" > "build/blender-$$(basename $$s .py).log" 2>&1 \
+			|| { echo "$$s failed, see build/blender-$$(basename $$s .py).log"; exit 1; }; done; fi
+	@mkdir -p "$(UNITY_PROJECT)/Assets/Models"
+	@ls tools/blender/out/*.fbx > /dev/null 2>&1 || { echo "no FBX in tools/blender/out/"; exit 1; }
+	cp tools/blender/out/*.fbx "$(UNITY_PROJECT)/Assets/Models/"
+	@ls "$(UNITY_PROJECT)/Assets/Models/"*.fbx | wc -l | xargs echo "FBX files in Assets/Models:"
