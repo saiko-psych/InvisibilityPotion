@@ -61,6 +61,14 @@ public static class AssetSetup
         return _emission;
     }
 
+    // Fix round 2 (ruling 2): Custom/Distortion read as broken on a bottle in game; the bottle glass is opaque Custom/Creature
+    // like the vanilla potions (MeadHealthMinor: potion mesh with weapons1, Custom/Creature), its Blender colour lerped
+    // GlassLighten toward white. true restores the Distortion glass (alpha and refraction as before) for later experiments.
+    const bool UseDistortionGlass = false;
+    const float GlassLighten = 0.25f;
+
+    static bool IsGlass(string name) => name.Contains("_glass");
+
     static readonly string[] FoliageWords = { "strand", "tip", "leaf", "petal", "frond" };
 
     public static void Create()
@@ -141,7 +149,8 @@ public static class AssetSetup
     /// <summary>Stump shader for a material name (vanilla name without the JVLmock_ prefix).</summary>
     static string ShaderFor(string name)
     {
-        if (name.StartsWith("bottle_glass", StringComparison.Ordinal) || name.Contains("lens")) return "Custom/Distortion";
+        if (IsGlass(name)) return UseDistortionGlass ? "Custom/Distortion" : "Custom/Creature";
+        if (name.Contains("lens")) return "Custom/Distortion";
         if (name.StartsWith("bottle_mist", StringComparison.Ordinal)) return "Custom/Creature";   // renderer disabled in the prefab
         var plant = name.StartsWith("huldra_", StringComparison.Ordinal) || name.StartsWith("baldr_", StringComparison.Ordinal) || name.StartsWith("helfern_", StringComparison.Ordinal);
         if (plant && FoliageWords.Any(w => name.Contains(w))) return "Custom/Vegetation";
@@ -164,6 +173,12 @@ public static class AssetSetup
         {
             color.a = 1f;
             alphaSource = "opaque";
+        }
+        if (IsGlass(src.name) && vanilla != "Custom/Distortion")
+        {
+            color = Color.Lerp(color, Color.white, GlassLighten);
+            color.a = 1f;
+            alphaSource = "opaque glass, lightened " + GlassLighten.ToString("0.##") + " toward white";
         }
         var emission = EmissionTable().TryGetValue(src.name, out var e) ? e : Color.black;
 

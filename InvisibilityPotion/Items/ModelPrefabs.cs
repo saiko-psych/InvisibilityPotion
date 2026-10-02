@@ -175,24 +175,25 @@ namespace InvisibilityPotion.Items
 
         private static Material _mistSource;
 
+        // Cork wisp (fix round 2, ruling 2): the opaque bottle hides interior mist, so a thin, slow wisp rises from the cork.
+        public const float WispRate = 2f;            // particles per second
+        public const float WispSizeMin = 0.03f;      // metres (ScalingMode.Shape: the item scale does not change the particle size)
+        public const float WispSizeMax = 0.06f;
+        public const float WispLifetime = 1.5f;      // seconds
+        public const float WispAlpha = 0.5f;
+        public const float WispRise = 0.06f;         // m/s upward in world space, so the wisp rises on the ground and on an item stand
+
         /// <summary>
-        /// Small local-space mist inside the bottle on every MistAnchor (the ground object and, inside "attach", the item-stand visual).
-        /// Colour from the bundle's disabled mist mesh (bottle_mist_tN), size from that mesh. Material: a copy of vfx_swamp_mist's
-        /// particle material, the same source FogVeil borrows (Visuals/FogVeil.cs SwampMistMaterial, copied here to keep Items
-        /// independent of Visuals).
+        /// A thin wisp rising from the cork on every MistAnchor. The anchors are moved to the top centre of the item's renderer bounds
+        /// (computed after the size factor), i.e. onto the cork. Colour = the tier colour of the bundle's disabled mist mesh
+        /// (bottle_mist_tN), alpha <see cref="WispAlpha"/>. Material: a copy of vfx_swamp_mist's particle material, the same source
+        /// FogVeil borrows (Visuals/FogVeil.cs SwampMistMaterial, copied here to keep Items independent of Visuals).
         /// </summary>
         public static int AddMist(GameObject item, int tier)
         {
             var mistRenderer = item.GetComponentsInChildren<MeshRenderer>(true).FirstOrDefault(r => r.name.StartsWith("mist_", StringComparison.Ordinal));
             var color = mistRenderer != null && mistRenderer.sharedMaterial != null && mistRenderer.sharedMaterial.HasProperty("_Color")
                 ? mistRenderer.sharedMaterial.color : new Color(0.7f, 0.75f, 0.8f);
-            var radius = 0.03f;
-            var mf = mistRenderer != null ? mistRenderer.GetComponent<MeshFilter>() : null;
-            if (mf != null && mf.sharedMesh != null)
-            {
-                var e = mf.sharedMesh.bounds.extents;
-                radius = Mathf.Clamp(Mathf.Min(e.x, e.z), 0.01f, 0.06f);
-            }
             var source = MistSourceMaterial();
             if (source == null)
             {
@@ -200,23 +201,28 @@ namespace InvisibilityPotion.Items
                 return 0;
             }
             var mat = new Material(source) { name = $"ip_mist_mat_t{tier}" };   // never mutate the vanilla shared material
-            if (mat.HasProperty("_Color")) mat.color = new Color(color.r, color.g, color.b, 0.8f);
+            if (mat.HasProperty("_Color")) mat.color = new Color(color.r, color.g, color.b, WispAlpha);
             if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.black);
 
+            // Top centre of the visible model (disabled mist mesh excluded), in the item root's space.
+            var bounds = LocalMeshBounds(item);
+            var top = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
             var n = 0;
             foreach (var anchor in item.GetComponentsInChildren<Transform>(true).Where(t => t.name == MistAnchorName).ToList())
             {
+                anchor.position = item.transform.TransformPoint(top);
                 var go = new GameObject(MistObjectName);
                 go.layer = anchor.gameObject.layer;
                 go.transform.SetParent(anchor, false);
-                ConfigureMist(go, mat, color, radius);
+                ConfigureMist(go, mat);
                 n++;
             }
-            Plugin.Log.LogInfo($"assets: T{tier} mist on {n} anchor(s): color {color}, radius {radius:F3} m, material {source.name} (shader {source.shader?.name})");
+            Plugin.Log.LogInfo($"assets: T{tier} cork wisp on {n} anchor(s) at {top:F3} (item space): color {color}, alpha {WispAlpha}, rate {WispRate}/s, " +
+                               $"size {WispSizeMin}..{WispSizeMax} m, lifetime {WispLifetime} s, material {source.name} (shader {source.shader?.name})");
             return n;
         }
 
-        private static void ConfigureMist(GameObject go, Material mat, Color color, float radius)
+        private static void ConfigureMist(GameObject go, Material mat)
         {
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
@@ -224,18 +230,28 @@ namespace InvisibilityPotion.Items
             main.playOnAwake = true;
             main.prewarm = true;
             main.simulationSpace = ParticleSystemSimulationSpace.Local;
-            main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.002f, 0.008f);
-            main.startSize = new ParticleSystem.MinMaxCurve(radius * 0.8f, radius * 1.6f);
+            main.scalingMode = ParticleSystemScalingMode.Shape;
+            main.startLifetime = WispLifetime;
+            main.startSpeed = 0f;
+            main.startSize = new ParticleSystem.MinMaxCurve(WispSizeMin, WispSizeMax);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-            main.startColor = new Color(1f, 1f, 1f, 0.7f);
-            main.maxParticles = 16;
+            main.startColor = Color.white;   // colour and alpha live on the material
+            main.maxParticles = Mathf.CeilToInt(WispRate * WispLifetime) + 2;
             var emission = ps.emission;
-            emission.rateOverTime = 4f;
+            emission.rateOverTime = WispRate;
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Sphere;
-            shape.radius = radius * 0.6f;
+            shape.radius = 0.005f;
+            // Rise straight up in world space with a little sideways sway; all axes in the same curve mode (TwoConstants).
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.World;
+            vel.x = new ParticleSystem.MinMaxCurve(-0.01f, 0.01f);
+            vel.y = new ParticleSystem.MinMaxCurve(WispRise * 0.7f, WispRise);
+            vel.z = new ParticleSystem.MinMaxCurve(-0.01f, 0.01f);
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(1f, 1f)));
             var rot = ps.rotationOverLifetime;
             rot.enabled = true;
             rot.z = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
@@ -243,7 +259,7 @@ namespace InvisibilityPotion.Items
             col.enabled = true;
             var g = new Gradient();
             g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                      new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.3f), new GradientAlphaKey(1f, 0.7f), new GradientAlphaKey(0f, 1f) });
+                      new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.25f), new GradientAlphaKey(0.6f, 0.6f), new GradientAlphaKey(0f, 1f) });
             col.color = g;
             var psr = go.GetComponent<ParticleSystemRenderer>();
             psr.sharedMaterial = mat;
