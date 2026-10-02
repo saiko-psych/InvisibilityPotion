@@ -7,10 +7,15 @@ using UnityEngine;
 
 namespace InvisibilityPotion.Items
 {
-    /// <summary>Placeholder potions: cloned vanilla meads, tinted per tier. Replaced by custom bottles in plan 4.</summary>
+    /// <summary>
+    /// The veil meads (bundle prefabs MeadBottle_T1..3 with a code-built mist) and their bases (MeadBowl_T1..3), built by
+    /// <see cref="ModelPrefabs.MakeItem"/> with the vanilla MeadHealthMinor / MeadBaseHealthMinor as data template. Without the
+    /// bundle they fall back to plain clones of those vanilla items, so saved items never vanish.
+    /// </summary>
     public static class PotionItems
     {
-        private static readonly Color[] Tints = { Color.white, new Color(0.5f, 0.9f, 0.5f), new Color(0.5f, 0.6f, 1f), new Color(0.7f, 0.4f, 0.9f) };
+        private const string MeadTemplate = "MeadHealthMinor";
+        private const string BaseTemplate = "MeadBaseHealthMinor";
 
         public static string BaseName(int tier) => $"MeadBaseInvisibility_T{tier}";
         public static string MeadName(int tier) => $"MeadInvisibility_T{tier}";
@@ -32,7 +37,7 @@ namespace InvisibilityPotion.Items
             }
             try { CopyConsumeEffects(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Copying potion start/stop effects failed: {e}"); }
-            // Icons: render the tinted bottles for the items and reuse them for the status effects.
+            // Icons: render the bottles for the items and reuse them for the status effects.
             for (var t = 1; t <= 3; t++)
             {
                 try
@@ -76,7 +81,7 @@ namespace InvisibilityPotion.Items
             foreach (var (item, amount) in parsed)
                 requirements.Add(new RequirementConfig { Item = item, Amount = amount });
 
-            var baseItem = new CustomItem(BaseName(t), "MeadBaseHealthMinor", new ItemConfig
+            var baseItem = NewItem(BaseName(t), $"MeadBowl_T{t}", BaseTemplate, t, mist: false, new ItemConfig
             {
                 Name = $"$item_meadbaseinvisibility_t{t}",
                 Description = $"$item_meadbaseinvisibility_t{t}_description",
@@ -84,10 +89,9 @@ namespace InvisibilityPotion.Items
                 MinStationLevel = 1,
                 Requirements = requirements.ToArray(),
             });
-            Tint(baseItem.ItemPrefab, Tints[t]);
             ItemManager.Instance.AddItem(baseItem);
 
-            var mead = new CustomItem(MeadName(t), "MeadHealthMinor", new ItemConfig
+            var mead = NewItem(MeadName(t), $"MeadBottle_T{t}", MeadTemplate, t, mist: true, new ItemConfig
             {
                 Name = $"$item_meadinvisibility_t{t}",
                 Description = $"$item_meadinvisibility_t{t}_description",
@@ -104,7 +108,6 @@ namespace InvisibilityPotion.Items
             shared.m_food = 0f;
             shared.m_foodStamina = 0f;
             shared.m_foodRegen = 0f;
-            Tint(mead.ItemPrefab, Tints[t]);
             ItemManager.Instance.AddItem(mead);
 
             ItemManager.Instance.AddItemConversion(new CustomItemConversion(new FermenterConversionConfig
@@ -155,20 +158,25 @@ namespace InvisibilityPotion.Items
                                $"effects from {source.name} to {copied} tier effects");
         }
 
-        private static void Tint(GameObject prefab, Color tint)
+        /// <summary>Item from the bundle model (mist on finished meads, shaders resolved before the icon render); vanilla clone as fallback.</summary>
+        private static CustomItem NewItem(string name, string bundlePrefab, string template, int tier, bool mist, ItemConfig config)
         {
-            foreach (var r in prefab.GetComponentsInChildren<Renderer>(true))
+            if (AssetBundles.Loaded)
             {
-                var mats = r.sharedMaterials;
-                for (var i = 0; i < mats.Length; i++)
+                try
                 {
-                    if (mats[i] == null) continue;
-                    var copy = new Material(mats[i]);   // never tint the vanilla shared material
-                    if (copy.HasProperty("_Color")) copy.color = tint;
-                    mats[i] = copy;
+                    var go = ModelPrefabs.MakeItem(bundlePrefab, name, template);
+                    if (mist) ModelPrefabs.AddMist(go, tier);
+                    // Icons are rendered right after registration, before Jötunn's own shader fix runs (ObjectDB registration).
+                    AssetBundles.FixShaders(go, name);
+                    return new CustomItem(go, true, config);
                 }
-                r.sharedMaterials = mats;
+                catch (System.Exception e)
+                {
+                    Plugin.Log.LogError($"{name}: building from {bundlePrefab} failed, falling back to a clone of {template}: {e}");
+                }
             }
+            return new CustomItem(name, template, config);
         }
     }
 }
