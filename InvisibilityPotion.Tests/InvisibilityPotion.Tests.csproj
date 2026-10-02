@@ -24,6 +24,7 @@
     <Compile Include="../InvisibilityPotion/Items/ModelScale.Core.cs" Link="ModelScale.Core.cs" />
     <Compile Include="../InvisibilityPotion/Goggles/GoggleLevel.Core.cs" Link="GoggleLevel.Core.cs" />
     <Compile Include="../InvisibilityPotion/Plants/HarvestStage.Core.cs" Link="HarvestStage.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Plants/TrunkCoords.Core.cs" Link="TrunkCoords.Core.cs" />
     <Compile Include="../InvisibilityPotion/Plants/LichenRoll.Core.cs" Link="LichenRoll.Core.cs" />
     <Compile Include="../InvisibilityPotion/Net/PlayerReveal.Core.cs" Link="PlayerReveal.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/MeadRecipes.Core.cs" Link="MeadRecipes.Core.cs" />
