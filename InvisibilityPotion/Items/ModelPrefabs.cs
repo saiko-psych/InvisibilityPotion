@@ -32,6 +32,7 @@ namespace InvisibilityPotion.Items
             var go = PrefabManager.Instance.CreateClonedPrefab(itemName, source)
                      ?? throw new InvalidOperationException($"cloning {bundlePrefab} as {itemName} failed (name taken?)");
             SetLayer(go, template.layer);
+            var scale = ApplyScale(go, bundlePrefab);   // before the box: the collider is sized from the scaled renderer bounds
 
             var tnv = template.GetComponent<ZNetView>();
             var nv = go.AddComponent<ZNetView>();
@@ -83,7 +84,7 @@ namespace InvisibilityPotion.Items
 
             AssetBundles.Track(go);
             Plugin.Log.LogInfo($"assets: item {itemName} <- {bundlePrefab} (template {template.name}: {ComponentList(template)}); " +
-                               $"layer {LayerMask.LayerToName(go.layer)}, rigidbody mass {rb.mass} damping {rb.linearDamping}/{rb.angularDamping}, " +
+                               $"scale x{scale:0.##}, layer {LayerMask.LayerToName(go.layer)}, rigidbody mass {rb.mass} damping {rb.linearDamping}/{rb.angularDamping}, " +
                                $"box {bounds.size:F3} at {bounds.center:F3}, persistent {nv.m_persistent}");
             return go;
         }
@@ -99,8 +100,29 @@ namespace InvisibilityPotion.Items
             var nv = go.GetComponent<ZNetView>();
             if (nv == null) nv = go.AddComponent<ZNetView>();   // no ?? on Unity objects (fake null)
             nv.m_persistent = false;
+            var scale = ApplyScale(go, bundlePrefab);
+            Plugin.Log.LogInfo($"assets: prop {bundlePrefab}: scale x{scale:0.##}, bounds {LocalMeshBounds(go).size:F3}");
             AssetBundles.Track(go);
             return go;
+        }
+
+        /// <summary>
+        /// Multiplies the localScale of the prefab's scaled child ("attach" for items, "model" for plants) by the group factor of
+        /// <see cref="ModelScale"/>. Called once per prefab (items: on the fresh clone; plants: on the loaded bundle prefab).
+        /// </summary>
+        public static float ApplyScale(GameObject go, string bundlePrefab)
+        {
+            var factor = ModelScale.For(bundlePrefab);
+            if (Mathf.Approximately(factor, 1f)) return 1f;
+            var childName = ModelScale.ScaledChild(bundlePrefab);
+            var child = go.transform.Find(childName);
+            if (child == null)
+            {
+                Plugin.Log.LogWarning($"assets: {bundlePrefab} has no direct child '{childName}'; size factor {factor} not applied");
+                return 1f;
+            }
+            child.localScale *= factor;
+            return factor;
         }
 
         /// <summary>The vanilla prefab through PrefabManager.Cache, else PrefabManager.GetPrefab; must carry an ItemDrop.</summary>
