@@ -11,6 +11,11 @@ Shader "JVLmock_Custom/Vegetation"
         _Metallic ("Metallic", Range(0,1)) = 0
         _BumpMap ("Normal", 2D) = "bump" {}
         _Cutoff ("Alpha cutoff", Range(0,1)) = 0.5
+        // Wind (items round L). _RippleDistance is a real vanilla vegetation property (Player.cs saves it from placement ghost
+        // materials and zeroes it to freeze them; Destructible.cs zeroes it on fragments); _RippleSpeed is a guess (?).
+        // Declared here so the material serializes the values; settle names and vanilla values with `ip_matdump Bush01`.
+        _RippleDistance ("Ripple distance (wind sway)", Float) = 0
+        _RippleSpeed ("Ripple speed (?)", Float) = 0
     }
     SubShader
     {

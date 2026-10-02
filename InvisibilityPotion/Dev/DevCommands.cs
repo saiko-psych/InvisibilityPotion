@@ -24,6 +24,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new FogUiCommand());
             AssetCommands.Register();
             MeshExport.Register();
+            MaterialDump.Register();
             EffectCommands.Register();
         }
 

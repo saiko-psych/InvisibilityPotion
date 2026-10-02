@@ -71,6 +71,15 @@ public static class AssetSetup
 
     static readonly string[] FoliageWords = { "strand", "tip", "leaf", "petal", "frond" };
 
+    // Wind (items round L, ruling 4). Vanilla vegetation sways through the material float _RippleDistance (verified in the
+    // decompile: Player.cs zeroes it on placement ghosts, Destructible.cs on fragments, both to stop the sway) driven by the global
+    // _GlobalWind* vectors that EnvMan sets. Values and the speed property are assumptions (?) until `ip_matdump Bush01` shows the
+    // vanilla numbers. The fern (helfern_) does not sway: its fronds keep Custom/Vegetation (single-sided leaflets need the
+    // double-sided foliage shader) with both values 0.
+    const float WindRippleDistance = 0.1f;   // (?)
+    const float WindRippleSpeed = 1f;        // (?) property name unverified
+    static bool Swaying(string name) => !name.StartsWith("helfern_", StringComparison.Ordinal);
+
     public static void Create()
     {
         try
@@ -202,9 +211,17 @@ public static class AssetSetup
             mat.SetFloat("_RefractionIntensity", 0.02f);
             mat.SetFloat("_Glossiness", 0.9f);
         }
+        var wind = "";
+        if (vanilla == "Custom/Vegetation")
+        {
+            var sway = Swaying(src.name);
+            mat.SetFloat("_RippleDistance", sway ? WindRippleDistance : 0f);
+            mat.SetFloat("_RippleSpeed", sway ? WindRippleSpeed : 0f);
+            wind = " wind _RippleDistance " + mat.GetFloat("_RippleDistance") + " _RippleSpeed " + mat.GetFloat("_RippleSpeed");
+        }
         EditorUtility.SetDirty(mat);
         Debug.Log("[AssetSetup]   material " + src.name + " -> JVLmock_" + vanilla + " color " + Fmt(color) + " (alpha: " + alphaSource +
-                  ", fbx _Mode " + mode + ") emission " + Fmt(emission));
+                  ", fbx _Mode " + mode + ") emission " + Fmt(emission) + wind);
         return mat;
     }
 
