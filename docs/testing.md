@@ -511,3 +511,37 @@ Setup: game closed, `make build`, `make run`, `ip_give 2` in daylight, later `ip
 - [ ] Tier I (`ip_end`, `ip_give 1`): the same, lighter (`alpha 0.5`, `radius 3.5 m`, `burst 30`), tier II visibly stronger
 - [ ] Tuning window (`ip_fogui`, "Wide fog" section): new row `Burst at start (volume)`; radius and size sliders reach 6 m
 - [ ] Night: the fog stays grey and matte (no glow)
+
+## Plan 5 – round Q (fog follows you, stamina drain, Veil Broken, Veil Cooldown)
+
+Setup: game closed, `make build`, `make run`. Spawn real meads to drink: `ip_spawn MeadInvisibility_T1 3`, `ip_spawn MeadInvisibility_T2 3`, `ip_spawn MeadInvisibility_T3 2` and pick them up (`ip_give` bypasses the drink check but also starts the cooldown). Paste the `Config migration`, `cooldown reference`, `veil fog spawned`, `auto fog dump` and `ip_state` lines.
+
+Config and log
+- [ ] `Config migration (look defaults revision 11): ...` once (tiers I/II reset, old values logged); `[Fog.Tier1/2] OuterFollowShare = 0.4` with the description "Share of the wide fog that moves with you; the rest stays behind as a trail", `OuterBurst` T1 40, T2 60
+- [ ] `Config migration (gameplay defaults revision 2): [TierN] DebuffStaminaRegenMultiplier 0.5 -> 0.25, DebuffDuration 20 -> 15, Cooldown 0 -> 90/180/240` once (values you changed yourself stay); `[General] DrainStaminaOnAttackReveal = true`
+- [ ] `cooldown reference: MeadHealthMinor -> ... category '...', ttl ..., cooldownIcon ..., healthOverTimeDuration ...` (the vanilla data the Veil Cooldown mirrors; paste it)
+
+Wide fog (tier II, then tier I)
+- [ ] `veil fog spawned T2`: two outer lines, `ip_fog_outer_follow [Outer] Hips follow: rate 4/s, Volume radius 2.8 m, ..., space Local, ..., burst 24, alive at spawn 24, max 48` and `ip_fog_outer [Outer] Hips trail: rate 6/s, radius 4 m, space World, + 4/m, burst 36, alive at spawn 36, max 72`; fade-in 0.08
+- [ ] Right after drinking: the wide fog is at full strength in the first frame (no fade-in over ~2 s), around you at once
+- [ ] Walking and sprinting: you never run out of the fog (the follow part stays around you), and a trail of fog stays behind and fades
+- [ ] Auto fog dump: both systems listed with live particles (follow `space Local`, trail `space World`)
+- [ ] `ip_fog outerfollowshare 0` (or the config key): one trail system as in round P; `1`: only the follow system, no trail
+- [ ] Tier I: the same, lighter (burst 16 + 24)
+
+Stamina drain and Veil Broken (tier II)
+- [ ] Hidden, hit a creature: stamina bar drops to 0 at once; status bar shows "Veil Broken" (red cracked veil icon) with a 15 s countdown; stamina regenerates at about a quarter of the normal speed; log `veil broken by an own action: stamina emptied`
+- [ ] While still revealed, hit again: the debuff restarts at 15 s but stamina is not emptied again
+- [ ] After re-hiding: bow draw, staff cast, axe/pickaxe swing and hammer placement each empty the stamina once
+- [ ] Revealed by taking damage or by blocking a hit: Veil Broken appears, stamina is not emptied
+- [ ] Tier I: one hit ends the veil, empties stamina and shows Veil Broken
+- [ ] `[General] DrainStaminaOnAttackReveal = false`, `ip_reload_config`: own attacks no longer empty stamina (debuff still applies)
+- [ ] Hover the Veil Broken icon in the inventory status list: name "Veil Broken", tooltip "Your veil was broken. Stamina regenerates slowly."
+
+Veil Cooldown
+- [ ] Drink tier II: "Veil Cooldown" appears in the status bar with the cooldown overlay and a 3:00 countdown (the clock icon), next to "Deep Veil"
+- [ ] During the cooldown, try tier I, II and III meads: each is refused with the vanilla "can't consume" message and stays in the inventory
+- [ ] `ip_state`: `cooldown: 1xx.xs of 180s left (config T1 90, T2 180, T3 240); veil broken: ...; stamina .../...`
+- [ ] After the cooldown runs out (shorten it: `[Tier2] Cooldown = 20`, `ip_reload_config`, drink again after the old one ends) any mead can be drunk again; an upgrade T1 -> T3 after the T1 cooldown works
+- [ ] `[TierN] Cooldown = 0`: no cooldown effect, drinking is only limited by the tier rules as before
+- [ ] Relog: the cooldown is gone (status effects are not saved, as for vanilla potions)
