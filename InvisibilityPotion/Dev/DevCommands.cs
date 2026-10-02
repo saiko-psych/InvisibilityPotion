@@ -168,7 +168,8 @@ namespace InvisibilityPotion.Dev
                 "outeranchors (comma list, e.g. Chest,Hips,Head), material (swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
                 "emitter (bones|mesh), meshoffset, meshrate (0 = rate x anchors), wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
                 "ip_fog alphamode <both|material|vertex> | ip_fog [tN] anchor <name> on|off | radius <v> | offset x y z | ip_fog [tN] save | ip_fog reset | " +
-                "ip_fog dump: log every fog emitter of your veil (state, counts, material, bounds, positions) | ip_fogui: tuning window";
+                "ip_fog dump: log every fog emitter of your veil (state, counts, material, bounds, positions; without a veil: the stray scan) | " +
+                "ip_fog strays: log every veil particle system in the scene (parents, state, particles, age, tracked or not) | ip_fogui: tuning window";
 
             private static readonly System.Collections.Generic.Dictionary<string, string> Aliases = new System.Collections.Generic.Dictionary<string, string>
             {
@@ -217,6 +218,9 @@ namespace InvisibilityPotion.Dev
                     case "dump":
                         Dump();
                         return;
+                    case "strays":
+                        Strays();
+                        return;
                 }
                 if (args.Length < 2) { Say(Help); return; }
                 var name = Aliases.TryGetValue(key, out var alias) ? alias : FindKey(key);
@@ -231,8 +235,22 @@ namespace InvisibilityPotion.Dev
                 if (p == null) { Say("no local player"); return; }
                 var lines = new System.Collections.Generic.List<string>();
                 VeilController.DumpFog(p, lines);
-                if (lines.Count == 0) { Say("fog dump: you have no veil (drink a potion or ip_give <1|2|3>)"); return; }
+                if (lines.Count == 0)
+                {
+                    Say("fog dump: you have no veil (drink a potion or ip_give <1|2|3>); running the stray scan instead");
+                    Strays();
+                    return;
+                }
                 Say($"fog dump at {Time.time:F1} s:");
+                foreach (var l in lines) Say(l);
+            }
+
+            /// <summary>ip_fog strays: every veil particle system in the scene, to the console and the log.</summary>
+            internal static void Strays()
+            {
+                var lines = new System.Collections.Generic.List<string>();
+                VeilController.ScanStrays(lines);
+                if (lines.Count == 0) { Say("fog strays: no veil controller"); return; }
                 foreach (var l in lines) Say(l);
             }
 
@@ -275,7 +293,7 @@ namespace InvisibilityPotion.Dev
             public override System.Collections.Generic.List<string> CommandOptionList() =>
                 new System.Collections.Generic.List<string> { "t1", "t2", "t3", "enabled", "rate", "size", "life", "speed", "alpha", "color", "dynamic", "emission", "spreadx", "spready", "spreadz",
                     "drift", "trail", "outer", "outerradius", "outeralpha", "outerrate", "outersize", "outerspready", "outerlife", "outertrail", "outerflat", "outeranchors",
-                    "ground", "groundrate", "grounddistance", "groundsize", "groundgrow", "groundlife", "groundalpha", "groundradius", "groundheight", "grounddrift", "dump",
+                    "ground", "groundrate", "grounddistance", "groundsize", "groundgrow", "groundlife", "groundalpha", "groundradius", "groundheight", "grounddrift", "dump", "strays",
                     "material", "emitter", "meshoffset", "meshrate", "wave", "alphamode", "anchor", "save", "reset" };
         }
 

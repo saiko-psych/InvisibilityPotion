@@ -114,6 +114,13 @@ namespace InvisibilityPotion.Visuals
             if (_instance == null) { into.Clear(); return; }
             _instance._veil.DumpFog(p, into);
         }
+
+        /// <summary>Every veil particle system in the scene, tracked or not (ip_fog strays, ip_fog dump without a veil).</summary>
+        public static void ScanStrays(List<string> into)
+        {
+            if (_instance == null) { into.Clear(); return; }
+            _instance._veil.ScanStrays(into);
+        }
 #endif
 
         private bool RemoveIfUnseen(Player p)

@@ -36,6 +36,8 @@ namespace InvisibilityPotion.Visuals
         private static readonly int CameraFadeMaxId = Shader.PropertyToID("_CameraFadeDistanceMax");
         private static readonly int CameraYFadeId = Shader.PropertyToID("_CameraYFadeDistance");
         private static readonly int BillboardId = Shader.PropertyToID("_Billboard");
+        private static readonly int LightNormalFactorId = Shader.PropertyToID("_LightNormalFactor");
+        private static readonly int SkyMaskId = Shader.PropertyToID("_SkyMask");
         // swamp_mist (Custom/LitParticles) ships _ZFadeDistance 1 (soft-particle fade within 1 m of the surface behind) and
         // _CameraFadeDistanceMin/Max 1/5 (fades particles within 5 m of the camera): made for a ground mist the camera walks
         // through, but our fog always sits 3-5 m from the third-person camera and close to the ground/body, so most of it was faded
@@ -487,10 +489,16 @@ namespace InvisibilityPotion.Visuals
         /// <summary>
         /// Per-veil copy of the borrowed material with the layer's alpha split between material and particle colour, the tier's
         /// emission (colour x Emission) and shorter soft/camera fades (see FogZFadeDistance).
+        /// Brightness (round I, matte fog): _Color rgb is the configured colour clamped to 0..1 (never HDR-brightened; the vanilla
+        /// swamp_mist value is white 1,1,1), the particle (vertex) colour rgb is white, and _EmissionColor is colour x Emission, i.e.
+        /// black at Emission 0 (the vanilla swamp_mist value is black 0,0,0,1). The lighting-related properties of the borrowed
+        /// material (_LightNormalFactor 0, _BumpScale 0.27, _NormalTex wave-normal, _SkyMask 0 in vanilla) are left as they are:
+        /// how Custom/LitParticles lights a particle is not known from the decompile, so their semantics are not guessed.
         /// </summary>
         private static Material MakeFogMaterial(Material source, Snapshot snap, Color color, float alpha, float emission, out float vertexAlpha)
         {
             var mat = new Material(source) { name = "ip_fog_mat" };   // never mutate the vanilla shared material
+            color = ClampRgb(color);
             var materialHasColor = mat.HasProperty(ColorId);
             float matAlpha;
             if (!materialHasColor || AlphaMode == FogAlphaMode.Vertex) { matAlpha = 1f; vertexAlpha = alpha; }
@@ -509,19 +517,24 @@ namespace InvisibilityPotion.Visuals
             return mat;
         }
 
+        /// <summary>_EmissionColor: colour x Emission, black (0,0,0,1, the vanilla swamp_mist value) at Emission 0.</summary>
         private static Color Emission(Color color, float emission)
         {
             var k = Mathf.Clamp01(emission);
+            color = ClampRgb(color);
             return new Color(color.r * k, color.g * k, color.b * k, 1f);
         }
+
+        /// <summary>The fog colour never goes above 1 (an HDR environment fog colour in the DynamicColor blend must not brighten it).</summary>
+        private static Color ClampRgb(Color c) => new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), c.a);
 
         /// <summary>The tier's fog colour; with DynamicColor blended 50/50 with the environment fog colour (EnvMan sets RenderSettings.fogColor).</summary>
         private static Color FogColor(FogSettings s)
         {
-            if (!s.DynamicColor) return new Color(s.R, s.G, s.B);
+            if (!s.DynamicColor) return ClampRgb(new Color(s.R, s.G, s.B));
             var env = RenderSettings.fogColor;
             var c = FogRgb.Blend(s.Color, new FogRgb(env.r, env.g, env.b), DynamicColorBlend);
-            return new Color(c.R, c.G, c.B);
+            return ClampRgb(new Color(c.R, c.G, c.B));
         }
 
         /// <summary>Follows the environment colour on the idempotent Apply path (every refresh) without rebuilding the emitters.</summary>
@@ -563,6 +576,7 @@ namespace InvisibilityPotion.Visuals
             follower.Bone = bone;
             follower.Root = root;
             follower.Offset = offset;
+            follower.SpawnedAt = Time.time;
             follower.Snap();
 
             var ps = ConfigureSystem(go, color, layer, s, materialHasColor);
@@ -595,6 +609,7 @@ namespace InvisibilityPotion.Visuals
             follower.Root = root;
             follower.Ground = true;
             follower.GroundHeight = s.GroundHeight;
+            follower.SpawnedAt = Time.time;
             follower.Snap();
 
             var ps = go.AddComponent<ParticleSystem>();
@@ -888,7 +903,9 @@ namespace InvisibilityPotion.Visuals
                              $"minParticleSize {F(psr.minParticleSize)}, layer {LayerMask.LayerToName(e.Go.layer)} ({e.Go.layer}), culling mask has layer {(cam != null ? ((cam.cullingMask & (1 << e.Go.layer)) != 0).ToString() : "-")}; " +
                              $"material '{(mat != null ? mat.name : "-")}' shader '{(mat != null && mat.shader != null ? mat.shader.name : "-")}' queue {(mat != null ? mat.renderQueue.ToString() : "-")}, " +
                              $"_Color {MatColor(mat, ColorId)}, _EmissionColor {MatColor(mat, EmissionColorId)}, _ZFadeDistance {MatFloat(mat, ZFadeDistanceId)}, " +
-                             $"_CameraFadeDistanceMin/Max {MatFloat(mat, CameraFadeMinId)}/{MatFloat(mat, CameraFadeMaxId)}, _CameraYFadeDistance {MatFloat(mat, CameraYFadeId)}, _Billboard {MatFloat(mat, BillboardId)}");
+                             $"_CameraFadeDistanceMin/Max {MatFloat(mat, CameraFadeMinId)}/{MatFloat(mat, CameraFadeMaxId)}, _CameraYFadeDistance {MatFloat(mat, CameraYFadeId)}, _Billboard {MatFloat(mat, BillboardId)}, " +
+                             $"_LightNormalFactor {MatFloat(mat, LightNormalFactorId)}, _BumpScale {MatFloat(mat, BumpScaleId)}, _SkyMask {MatFloat(mat, SkyMaskId)}, " +
+                             $"keywords [{(mat != null ? string.Join(" ", mat.shaderKeywords) : "-")}]");
                     var line = $"    bounds centre {(psr != null ? V(psr.bounds.center) : "-")} size {(psr != null ? V(psr.bounds.size) : "-")}; emitter {V(pos)} = player + {V(pos - playerPos)}" +
                                (cam != null ? $", {F(Vector3.Distance(camPos, pos))} m from the camera" : "");
                     var n = ps.GetParticles(ParticleBuf);
@@ -919,7 +936,52 @@ namespace InvisibilityPotion.Visuals
                 catch (Exception ex)
                 {
                     into.Add($"  [{e.Layer}] {e.Anchor}: dump failed: {ex.Message}");   // one bad emitter must not hide the others
-                }            }
+                }
+            }
+        }
+
+        /// <summary>
+        /// ip_fog strays: every ParticleSystem in the loaded scenes that is ours by object name (ip_fog*) or by renderer material
+        /// (ip_fog_mat*, ip_distortion_*), with its parent chain (3 levels), active state, particle count, emitting state, age (when
+        /// it has a follower) and whether a current veil snapshot tracks it. Emitters destroyed this frame are still listed
+        /// (inactive): Object.Destroy is deferred to the end of the frame.
+        /// </summary>
+        public void ScanStrays(List<string> into)
+        {
+            into.Clear();
+            var tracked = new HashSet<GameObject>();
+            foreach (var kv in _snapshots)
+                foreach (var e in kv.Value.Fog)
+                    if (e.Go != null) tracked.Add(e.Go);
+            int ours = 0, untracked = 0, visible = 0;
+            foreach (var ps in Resources.FindObjectsOfTypeAll<ParticleSystem>())
+            {
+                if (ps == null) continue;
+                var go = ps.gameObject;
+                if (!go.scene.IsValid()) continue;   // prefabs and other assets
+                var psr = go.GetComponent<ParticleSystemRenderer>();
+                var mat = psr != null ? psr.sharedMaterial : null;
+                var matName = mat != null ? mat.name : "";
+                var byMaterial = matName.StartsWith("ip_fog_mat", StringComparison.Ordinal) || matName.StartsWith("ip_distortion_", StringComparison.Ordinal);
+                if (!IsOurs(go) && !byMaterial) continue;
+                ours++;
+                var isTracked = tracked.Contains(go);
+                if (!isTracked) untracked++;
+                if (go.activeInHierarchy && psr != null && psr.enabled && ps.particleCount > 0) visible++;
+                var follower = go.GetComponent<FogAnchorFollower>();
+                into.Add($"  {go.name} under {ParentChain(go.transform, 3)}: activeSelf {go.activeSelf}, activeInHierarchy {go.activeInHierarchy}, " +
+                         $"particles {ps.particleCount}, emitting {ps.isEmitting}, playing {ps.isPlaying}, age {(follower != null ? F(Time.time - follower.SpawnedAt) + " s" : "-")}, " +
+                         $"renderer {(psr != null ? psr.enabled.ToString() : "none")}, material '{(mat != null ? matName : "-")}', {(isTracked ? "tracked" : "NOT TRACKED")}");
+            }
+            into.Insert(0, $"fog strays at {F(Time.time)} s: {ours} veil particle systems in the scene ({visible} active with live particles), {untracked} not tracked by a veil; " +
+                           $"{_snapshots.Count} veils tracking {tracked.Count} emitters");
+        }
+
+        private static string ParentChain(Transform t, int levels)
+        {
+            var parts = new List<string>();
+            for (var p = t.parent; p != null && parts.Count < levels; p = p.parent) parts.Add(p.name);
+            return parts.Count == 0 ? "(scene root)" : string.Join(" < ", parts);
         }
 #endif
 
@@ -1327,6 +1389,7 @@ namespace InvisibilityPotion.Visuals
         {
             if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
             _snapshots.Remove(p);
+            List<string> vanillaParticles = null;   // vanilla particle renderers hidden by a swap mode and shown again (summary line)
             try
             {
                 foreach (var kv in snap.Cutoffs) if (kv.Key != null) kv.Key.SetFloat(CutoffId, kv.Value);
@@ -1349,7 +1412,12 @@ namespace InvisibilityPotion.Visuals
                         Plugin.Log.LogError($"veil remove: restoring renderer '{kv.Key.name}' failed: {e}");
                     }
                 }
-                foreach (var r in snap.Hidden) if (r != null) r.enabled = true;
+                foreach (var r in snap.Hidden)
+                {
+                    if (r == null) continue;
+                    r.enabled = true;
+                    if (r is ParticleSystemRenderer) (vanillaParticles ?? (vanillaParticles = new List<string>())).Add(r.name);
+                }
             }
             catch (Exception e)
             {
@@ -1357,7 +1425,11 @@ namespace InvisibilityPotion.Visuals
             }
             finally
             {
-                DestroyFog(snap);
+                var destroyed = DestroyFog(snap);
+                // Belt and braces (round I): whatever path may have left an untracked ip_fog* child, it goes with the veil.
+                var swept = SweepStrayFog(p);
+                Plugin.Log.LogInfo($"veil removed T{snap.Tier} on {p.GetPlayerName()}: {destroyed} emitters destroyed, {swept} strays swept" +
+                                   (vanillaParticles != null ? $", {vanillaParticles.Count} vanilla particle renderers shown again ({string.Join(", ", vanillaParticles)})" : ""));
             }
         }
 
@@ -1427,38 +1499,56 @@ namespace InvisibilityPotion.Visuals
         }
 
         /// <summary>
-        /// Destroys any ip_fog* child of an unveiled player (safety net: fog must never outlive the veil, whatever path left it).
-        /// Only direct children are checked; the fog emitters are parented to the player root.
+        /// Destroys any active ip_fog* child of an unveiled player (safety net: fog must never outlive the veil, whatever path left
+        /// it). Only direct children are checked; the fog emitters are parented to the player root. Inactive ones are skipped:
+        /// DestroyFog deactivates the emitters it destroys (deferred to the end of the frame). Returns the number swept.
         /// </summary>
-        public void SweepStrayFog(Player p)
+        public int SweepStrayFog(Player p)
         {
-            if (p == null || _snapshots.ContainsKey(p)) return;
+            if (p == null || _snapshots.ContainsKey(p)) return 0;
+            var swept = 0;
             var root = p.transform;
             for (var i = root.childCount - 1; i >= 0; i--)
             {
                 var child = root.GetChild(i).gameObject;
                 if (!IsOurs(child) || !child.activeSelf) continue;
+                StopAndClear(child.GetComponent<ParticleSystem>());
                 child.SetActive(false);
                 Object.Destroy(child);
+                swept++;
                 Plugin.Log.LogWarning($"veil: destroyed stray fog object '{child.name}' on {p.GetPlayerName()} (no veil recorded)");
             }
+            return swept;
         }
 
-        private static void DestroyFog(Snapshot snap)
+        /// <summary>Stops emitting and removes every live particle at once (world-space trail particles included).</summary>
+        private static void StopAndClear(ParticleSystem ps)
+        {
+            if (ps == null) return;
+            try { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); }
+            catch (Exception e) { Plugin.Log.LogWarning($"veil: stopping fog '{ps.name}' failed: {e.Message}"); }
+        }
+
+        /// <summary>Destroys the veil's fog emitters and materials and its Spirit copies. Returns the number of emitters destroyed.</summary>
+        private static int DestroyFog(Snapshot snap)
         {
             // Spirit copies: the renderers already got their originals back (Remove restores before this runs).
             foreach (var m in snap.SpiritOwned) if (m != null) Object.Destroy(m);
             snap.SpiritOwned.Clear();
             snap.SpiritByOriginal.Clear();
+            var destroyed = 0;
             foreach (var e in snap.Fog)
             {
                 if (e.Go == null) continue;
+                StopAndClear(e.Ps);      // belt and braces (round I): no particle survives, whatever deactivation does
                 e.Go.SetActive(false);   // Destroy is deferred to the end of the frame; hide it now
                 Object.Destroy(e.Go);
+                destroyed++;
             }
             snap.Fog.Clear();
             foreach (var m in snap.FogMaterials) if (m != null) Object.Destroy(m);
             snap.FogMaterials.Clear();
+            return destroyed;
         }
     }
 
@@ -1473,6 +1563,7 @@ namespace InvisibilityPotion.Visuals
         public Vector3 Offset;
         public bool Ground;
         public float GroundHeight;
+        public float SpawnedAt;   // Time.time of the spawn; the Debug stray scan prints the age
 
         public void Snap()
         {
