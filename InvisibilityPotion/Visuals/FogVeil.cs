@@ -57,6 +57,8 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Every GameObject this veil creates starts with this name; ApplyBody and the particle hiding skip them.</summary>
         public const string FogObjectName = "ip_fog";
         private const string OuterObjectName = "ip_fog_outer";
+        /// <summary>Round Q ruling 1b: the follow part of the outer volume (local space, moves with the player).</summary>
+        private const string OuterFollowObjectName = "ip_fog_outer_follow";
         private const string GroundObjectName = "ip_fog_ground";
         private const string GroundAnchorName = "Ground";
         private const string GroundUpperAnchorName = "GroundUpper";
@@ -191,6 +193,7 @@ namespace InvisibilityPotion.Visuals
             public string Anchor;
             public FogLayerKind Layer;
             public float VertexAlpha;
+            public int Burst;   // particles emitted at once at spawn (outer volume), for the spawn log
         }
         private readonly Dictionary<Player, Snapshot> _snapshots = new Dictionary<Player, Snapshot>();
 
@@ -475,30 +478,45 @@ namespace InvisibilityPotion.Visuals
             // the sprites grow by OuterVolumeGrow over their life, and at most OuterVolumeParticleCap live per emitter.
             // Round P ruling 1: the volume emits OuterBurstCount particles at once when it is created (every spawn, so also every
             // rebuild after a look change), so the fog exists the moment the effect starts instead of filling up over seconds.
+            // Round Q ruling 1: the burst puffs start pre-aged (full alpha in the first frame), and the volume is two systems from
+            // the same keys and material: Follow (local space, OuterFollowShare of rate/burst/cap, radius 0.7 x OuterRadius, so the
+            // player is always inside fog) and Trail (world space as before, the rest, left behind). Without the split (Ring, or
+            // OuterTrail false, or share 0) the trail system is the only one, exactly as in round P.
             if (outer == null || animator == null) return;
             var volume = s.OuterShape == FogOuterShape.Volume;
-            var outerLayer = new FogLayer
+            FogLayer OuterLayer(bool follow)
             {
-                Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
-                Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
-                Ring = !volume, Volume = volume, Orbital = s.OuterOrbitalRadPerSecond,
-                RateDistance = s.OuterEffectiveRateDistance, MaxParticles = s.OuterMaxParticles,
-            };
-            if (volume)
-            {
-                outerLayer.SizeMinFactor = FogSettings.OuterVolumeSizeMinFactor;
-                outerLayer.SizeMaxFactor = FogSettings.OuterVolumeSizeMaxFactor;
-                outerLayer.Speed = FogSettings.OuterVolumeSpeed;
-                outerLayer.Grow = FogSettings.OuterVolumeGrow;
-                outerLayer.Burst = s.OuterBurstCount;
+                var l = new FogLayer
+                {
+                    Rate = follow ? s.OuterFollowRate : s.OuterTrailRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
+                    Trail = follow ? FogTrailMode.Follow : s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
+                    Ring = !volume, Volume = volume, Orbital = s.OuterOrbitalRadPerSecond,
+                    RateDistance = follow ? 0f : s.OuterEffectiveRateDistance,
+                    MaxParticles = follow ? s.OuterFollowMaxParticles : s.OuterTrailMaxParticles,
+                };
+                if (volume)
+                {
+                    l.SizeMinFactor = FogSettings.OuterVolumeSizeMinFactor;
+                    l.SizeMaxFactor = FogSettings.OuterVolumeSizeMaxFactor;
+                    l.Speed = FogSettings.OuterVolumeSpeed;
+                    l.Grow = FogSettings.OuterVolumeGrow;
+                    l.Burst = follow ? s.OuterFollowBurstCount : s.OuterTrailBurstCount;
+                }
+                return l;
             }
+            var trailLayer = s.OuterHasTrail ? OuterLayer(false) : null;
+            var followLayer = s.OuterHasFollow ? OuterLayer(true) : null;
             foreach (var name in s.OuterAnchors)
             {
                 var a = s.Anchor(name);
                 if (a == null) continue;
                 var bone = BoneFor(animator, a.Name);
                 if (bone == null) continue;
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, FogLayerKind.Outer, s.OuterRadius, new Vector3(a.X, a.Y + s.OuterOffsetY, a.Z), color, outerLayer, s, snap.MaterialHasColor));
+                var offset = new Vector3(a.X, a.Y + s.OuterOffsetY, a.Z);
+                if (followLayer != null)
+                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name + " follow", FogLayerKind.Outer, s.OuterFollowRadius, offset, color, followLayer, s, snap.MaterialHasColor, OuterFollowObjectName));
+                if (trailLayer != null)
+                    snap.Fog.Add(SpawnEmitter(p.transform, bone, followLayer != null ? a.Name + " trail" : a.Name, FogLayerKind.Outer, s.OuterRadius, offset, color, trailLayer, s, snap.MaterialHasColor));
             }
         }
 
@@ -610,9 +628,9 @@ namespace InvisibilityPotion.Visuals
         }
 
         private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, FogLayerKind kind, float radius, Vector3 offset,
-                                               Color color, FogLayer layer, FogSettings s, bool materialHasColor)
+                                               Color color, FogLayer layer, FogSettings s, bool materialHasColor, string objectName = null)
         {
-            var go = new GameObject(kind == FogLayerKind.Outer ? OuterObjectName : FogObjectName);
+            var go = new GameObject(objectName ?? (kind == FogLayerKind.Outer ? OuterObjectName : FogObjectName));
             go.SetActive(false);   // configure before the system starts playing
             go.transform.SetParent(root, false);   // destroyed with the player; position driven by the follower
             var follower = go.AddComponent<FogAnchorFollower>();
@@ -657,23 +675,28 @@ namespace InvisibilityPotion.Visuals
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
             ps.Play();
-            if (layer.Volume && layer.Burst > 0) EmitBurst(ps, layer.Burst, s);
-            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Layer = kind, VertexAlpha = layer.VertexAlpha };
+            var burst = layer.Volume && layer.Burst > 0 ? EmitBurst(ps, layer.Burst) : 0;
+            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Layer = kind, VertexAlpha = layer.VertexAlpha, Burst = burst };
         }
 
+        private static readonly ParticleSystem.Particle[] BurstBuf = new ParticleSystem.Particle[FogSettings.ParticleHardCap];
+
         /// <summary>
-        /// Round P ruling 1: fills the whole volume at once. The shape spreads the particles over the flattened sphere (EmitParams
-        /// only overrides the start lifetime: 40..100 % of OuterLifetime, random per particle, so the instant field does not fade out
-        /// all at the same moment); size, rotation, colour and speed come from the system as for normal emission.
+        /// Round P ruling 1: fills the whole volume at once; the shape spreads the particles over the flattened sphere, and size,
+        /// rotation, colour, speed and start lifetime come from the system as for normal emission. Round Q ruling 1a: the new
+        /// particles are then aged in place (GetParticles/SetParticles): remaining lifetime random 30..90 % of their start
+        /// lifetime, so they are past the fade-in and at full alpha in the first frame, and they do not all fade out together.
+        /// Returns the number emitted.
         /// </summary>
-        private static void EmitBurst(ParticleSystem ps, int count, FogSettings s)
+        private static int EmitBurst(ParticleSystem ps, int count)
         {
-            var ep = new ParticleSystem.EmitParams();
-            for (var i = 0; i < count; i++)
-            {
-                ep.startLifetime = s.OuterBurstLifetime(UnityEngine.Random.value);
-                ps.Emit(ep, 1);
-            }
+            var before = ps.particleCount;
+            ps.Emit(count);
+            var n = ps.GetParticles(BurstBuf);
+            for (var i = Mathf.Min(before, n); i < n; i++)
+                BurstBuf[i].remainingLifetime = FogSettings.OuterBurstRemainingLifetime(BurstBuf[i].startLifetime, UnityEngine.Random.value);
+            ps.SetParticles(BurstBuf, n);
+            return n - before;
         }
 
         /// <summary>
@@ -951,7 +974,7 @@ namespace InvisibilityPotion.Visuals
                 float rate, size, alpha;
                 switch (e.Layer)
                 {
-                    case FogLayerKind.Outer: rate = s.OuterRate; size = s.OuterSize; alpha = s.OuterAlpha; break;
+                    case FogLayerKind.Outer: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.OuterRate; size = s.OuterSize; alpha = s.OuterAlpha; break;
                     case FogLayerKind.Ground when e.Anchor == GroundUpperAnchorName: rate = s.GroundUpperRate; size = s.GroundSize; alpha = s.GroundUpperAlpha; break;
                     case FogLayerKind.Ground: rate = s.GroundRate; size = s.GroundSize; alpha = s.GroundAlpha; break;
                     default: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.Rate; size = s.Size; alpha = s.Alpha; break;
@@ -959,8 +982,9 @@ namespace InvisibilityPotion.Visuals
                 var upperGround = e.Anchor == GroundUpperAnchorName;
                 var extra = e.Layer == FogLayerKind.Ground ? $" + {F(upperGround ? s.GroundUpperRateDistance : s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, " +
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
-                          : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {F(s.OuterRadius)} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
-                                                            $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}, + {F(s.OuterEffectiveRateDistance)}/m, burst {s.OuterBurstCount}, " +
+                          : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {(e.Ps != null ? F(e.Ps.shape.radius) : "-")} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
+                                                            $"space {(e.Ps != null ? e.Ps.main.simulationSpace.ToString() : "-")}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}, " +
+                                                            $"+ {(e.Ps != null ? F(e.Ps.emission.rateOverDistance.constant) : "-")}/m, burst {e.Burst} (follow share {F(s.OuterFollowShareEffective)}, fade-in {F(FogSettings.OuterVolumeFadeIn)}), " +
                                                             $"alive at spawn {(e.Ps != null ? e.Ps.particleCount : 0)}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)}), " +
                           $"max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}");

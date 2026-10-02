@@ -186,7 +186,8 @@ namespace InvisibilityPotion.Config
         /// ruling: subtle mid-grey haze, low alphas, the fog volume left behind in world space; again a full [Fog.Tier1]/[Fog.Tier2]
         /// reset of every older file), revision 9 (plan 5, round O: fewer, larger particles per bone and halfway alphas, both tiers fully
         /// reset again), revision 10 (plan 5, round P: a strong, wide fog volume that is there the moment the effect starts (OuterBurst);
-        /// both tiers fully reset, old values logged). Existing files keep their old values, so once per
+        /// both tiers fully reset, old values logged), revision 11 (plan 5, round Q: the wide fog split into a part that moves with
+        /// the player and the trail, pre-aged larger bursts; both tiers fully reset). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -213,7 +214,7 @@ namespace InvisibilityPotion.Config
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
                 // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below FullResetRevision were reset above;
-                // since revision 7 (now 10) that is every older file, so this branch only runs if FullResetRevision is lowered again).
+                // since revision 7 (now 11) that is every older file, so this branch only runs if FullResetRevision is lowered again).
                 var outerReset = 0;
                 if (!LookDefaults.ResetsTiers(rev.Value))
                     foreach (var kv in _fogEntries[2])
