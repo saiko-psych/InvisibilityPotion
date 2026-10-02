@@ -23,6 +23,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new FogCommand());
             CommandManager.Instance.AddConsoleCommand(new FogUiCommand());
             AssetCommands.Register();
+            MeshExport.Register();
         }
 
         internal static void Say(string line)

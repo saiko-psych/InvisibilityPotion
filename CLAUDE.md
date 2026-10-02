@@ -6,7 +6,7 @@ Valheim mod (BepInEx 5.4.23.5 + Jötunn 2.30.2), C# net48, MIT. Everything in fi
 - `make build` – Debug build, deploys the DLL to `$VALHEIM_INSTALL/BepInEx/plugins/InvisibilityPotion/` (via `scripts/publish.sh`). `build`, `package` and `run` refuse while Valheim runs (overwriting the DLL crashes the game); `FORCE=1` overrides
 - `make run` – build, launch Valheim through Steam (windowed, console), auto-join world `$IP_DEV_WORLD` (default `testing`, character `$IP_DEV_CHARACTER`, empty = first), then tail the BepInEx log
 - `make log` – follow `BepInEx/LogOutput.log`
-- Dev console commands (Debug only, all log through `Plugin.Log`): `ip_state`, `ip_give <1|2|3>`, `ip_give goggles <1|2|3>`, `ip_spawn <prefab> [count] [level]` (any prefab, e.g. `Plant_T2`, `VeilGoggles_T3`), `ip_reload_config`, `ip_prefabs <substring>`, `ip_veil`, `ip_fog`, `ip_fogui`, `ip_components <prefab>`, `ip_shaderdump <prefab>`, `ip_bundle` (`Dev/DevCommands.cs` has the exact syntax in each `Help`)
+- Dev console commands (Debug only, all log through `Plugin.Log`): `ip_state`, `ip_give <1|2|3>`, `ip_give goggles <1|2|3>`, `ip_spawn <prefab> [count] [level]` (any prefab, e.g. `Plant_T2`, `VeilGoggles_T3`), `ip_reload_config`, `ip_prefabs <substring>`, `ip_veil`, `ip_fog`, `ip_fogui`, `ip_components <prefab>`, `ip_shaderdump <prefab>`, `ip_bundle`, `ip_exportmesh <prefab|head>` (OBJ to `BepInEx/export/`) (`Dev/DevCommands.cs` has the exact syntax in each `Help`)
 - `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0)
 - `make decompile` – regenerate `tools/decompiled/` from the installed game; rerun after game updates
 - `make package` – Release build + Thunderstore zip (`InvisibilityPotion/InvisibilityPotion.zip`)
