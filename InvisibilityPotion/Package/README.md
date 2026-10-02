@@ -14,13 +14,14 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 - Brew the mead base at the **Mead Ketill** (honey, thistle, bloodbag for II/III, Ymir flesh for III, and 2 of the tier's veil ingredient), then ferment it.
 - A chasing enemy gives up after a short while once it loses you.
-- You cannot drink a weaker or equal mead while a stronger veil is active. There is no cooldown between meads.
+- You cannot drink a weaker or equal mead while a stronger veil is active.
+- **Veil Cooldown**: drinking a veil mead starts one shared cooldown (tier I 90 s, II 180 s, III 240 s, counted from drinking) that blocks all three meads until it runs out. `[TierN] Cooldown`, 0 = off.
 
 ### What reveals you
 
 - Dealing damage, taking damage, blocking or parrying, drawing a bow, casting with a staff.
 - Tool use: swinging an axe or pickaxe (at anything, even air), building with the hammer, using the hoe or the cultivator. Picking plants by hand does not reveal you.
-- A reveal gives the **Revealed** debuff: stamina regenerates at half speed for 20 s (restarted on every reveal).
+- A reveal gives the **Veil Broken** debuff: stamina regenerates at a quarter of the usual speed for 15 s (restarted on every reveal).
 
 Each trigger can be switched off in the config (`RevealOnDamage`, `RevealOnBlock`, `RevealOnBowDraw`, `RevealOnToolUse`).
 
@@ -58,7 +59,7 @@ Sprouts are veil plants too: you need goggles to see them grow.
 
 Highlights:
 
-- `[TierN]` `Duration`, `RehideDelay`, `AggroLossTime`, `CarryWeightMultiplier`, `DebuffStaminaRegenMultiplier`, `DebuffDuration`, `Recipe`.
+- `[TierN]` `Duration`, `Cooldown`, `RehideDelay`, `AggroLossTime`, `CarryWeightMultiplier`, `DebuffStaminaRegenMultiplier`, `DebuffDuration`, `Recipe`.
 - `[General]` the reveal switches above, `AllowPvpInvisibility` (server switch for tier III hiding from players).
 - `[Goggles]` `RecipeT1..3`, `RevealHiddenPlayers`.
 - `[Plants]` lichen chance per tree, zone chances for the ground plants, growth and regrowth times, yields.

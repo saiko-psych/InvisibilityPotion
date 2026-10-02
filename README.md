@@ -1,6 +1,6 @@
 # Invisibility Potion (Valheim mod)
 
-Status: tiers I–III work in singleplayer with placeholder meads; multiplayer and custom bottles pending. Licence: MIT.
+Status: 0.3.0 release candidate (custom models, veil plants, goggles, cultivation); tested in singleplayer, multiplayer pending the dedicated server. Licence: MIT.
 
 Three potions that hide the player from enemies. Attacking reveals the player and slows stamina regeneration. Higher tiers re-hide after a short time and also hide the player from other players.
 
@@ -10,6 +10,9 @@ Three potions that hide the player from enemies. Attacking reveals the player an
 - [Technical concept](docs/concept.md) – original draft the spec grew from
 - [Overview sketch](docs/overview.excalidraw) – open in Excalidraw (the SVG also contains the scene)
 - [Decision records](docs/decisions/)
+- [Mod compatibility](docs/compatibility.md) – patches, prefab changes, known interactions
+- [Dedicated server](docs/server.md) – BepInEx + Jötunn setup and deploy scripts
+- Player-facing description: [Package/README.md](InvisibilityPotion/Package/README.md)
 
 ## Targets
 
