@@ -35,6 +35,8 @@ Two clients (pending, needs plan 3 server):
 
 ## Plan 2 – Round C: veil look tuning (Debug console)
 
+> Historical round record. Current defaults: body mode Distortion for all tiers (the `LookDefaultsRevision` migration moves an old T1 Off to Distortion); fog look per tier in `[Fog.TierN]`. The per-tier text below describes the state when this round ran.
+
 Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog dense (0.7); T3 body Distortion, no fog. Config: `[TierN] BodyVeilMode/FogEnabled/FogDensity` (admin), look in `[Fog]` and `[Veil]` (local, not synced).
 
 - `ip_fog` prints the fog look; `ip_fog <rate|size|life|speed|alpha|drift> <v>`, `ip_fog color r g b`, `ip_fog alphamode both|material|vertex`, `ip_fog anchor <Head|Chest|Hips|LeftHand|RightHand|LeftFoot|RightFoot> on|off|radius <v>|offset x y z`; `ip_fog save` writes `[Fog]`, `ip_fog reset` re-reads the file. Every change re-applies at once.
@@ -47,6 +49,8 @@ Per-tier defaults: T1 fog light (density 0.35), body Off; T2 body Ghost + fog de
 - [ ] Listen host: a remote T3 player is not drawn at their real position
 
 ## Plan 2 – Round E: per-tier fog, tuning window (task 10d)
+
+> Historical round record. Current defaults: body mode Distortion for all tiers (the `LookDefaultsRevision` migration moves an old T1 Off to Distortion); see Round G for the current fog defaults. The defaults below are those of round E.
 
 Defaults: T1 body Off + light flattened fog (alpha 0.5, size 1.5, rate 4, life 5, no drift); T2 body Distortion (0.1, alpha 0.08) + two fog layers (dense thin inner, wide faint outer on head/chest/hips); T3 body Distortion (0.03, alpha 0.02), no fog. Look per tier in `[Fog.Tier1..3]` (local, not synced), `[Fog] FogAlphaMode` global, `[Veil]` ghost look only. `[TierN] BodyVeilMode` stays admin. Old keys (`[Fog] FogRate/Anchor.*`, `[TierN] FogEnabled/FogDensity`, `[Veil] Distortion*`, stray `[General]` keys) are removed on the first start; the log lists them. A tier II still on the old default Ghost is switched to Distortion once.
 
@@ -124,6 +128,8 @@ What to compare:
 - [ ] `Emission`: in the dark or in rain set it 0 → fog turns grey/dark, 0.25 → whitish, 1 → bright; `DynamicColor` on → fog takes on the environment tint
 - [ ] Window sliders: press on the thumb and drag left/right → the value follows the mouse; press anywhere on the track → jumps there and keeps following while dragging; release outside the window → the slider lets go. Wheel, `-`/`+`, typed field and `R` work as before
 - [ ] T3 unchanged (Distortion 0.03, alpha 0.02, no fog)
+- [ ] Given a Greydwarf set on fire by your torch hit while hidden, do re-hide (T2) and wait, expect no re-reveal from the burn ticks (burning/poison/freezing hits are ignored by the reveal hook)
+- Dev-only: saving from the Debug tuning window (or `ip_veil save`) while connected to a server writes the server's synced admin values into the local config file.
 
 ## Plan 2 – gameplay core (tasks 2, 4-10)
 
@@ -168,3 +174,18 @@ Potions and recipes (Task 10):
 - [x] Given a crafted mead, do drink, expect it drinks, plays the drink sound and particles
 - [x] Given a higher tier active, do drink a lower tier, expect it is refused
 - Note: the networked mead start vfx reveals a drinker's spot once at drink time (ruling from Task 10c, intended).
+
+## Known limitations and notes (final fix wave)
+
+- Recipes: the `Recipe` entries are read once at startup from the local config file, apply locally and are not server-controlled yet; `ip_reload_config` does not apply them. The entry is still marked admin-only.
+- The first hit from hiding on an unalerted monster gets the vanilla backstab bonus (`CanSeeTarget` is false for a hidden attacker). Intended.
+- Out-of-range `IP_Tier` values in a ZDO (not 1..3) count as not hidden and never throw.
+
+## Plan 3 backlog
+
+- [ ] Recipes: rebuild the three recipes' `m_resources` in `ObjectDB.instance.m_recipes` on config sync / `Changed`, so the admin recipe is authoritative.
+- [ ] Reveal on projectile launch (crossbow, thrown weapons, bombs), not only on hit.
+- [ ] Remote tier III player's torch `Light` still lights the surroundings under the forced Hide mode.
+- [ ] Veil code (VeilController/FogVeil) should not run on a headless dedicated server.
+- [ ] Balancing of recipes and fermenter output (plan 4).
+- [ ] Two-client check: inject an out-of-range `IP_Tier` with a debug command and confirm nothing throws.
