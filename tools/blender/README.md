@@ -9,7 +9,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 |---|---|---|---|---|
 | `make_bottle.py` (v5) | `bottle_t1..3.fbx`, `bottles.blend`, `bottles.log` | `preview-bottles-v5.png` | base | `MistAnchor`, `attach` (neck) |
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
-| `make_plants.py` (v3) | `plant_t1..3.fbx`, `plant_t1_flat.fbx`, `plants.blend`, `plants.log` | `preview-plants-v3.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
+| `make_plants.py` (v4) | `plant_t1_s1..s3.fbx`, `plant_t1.fbx`, `plant_t1_flat.fbx`, `plant_t2.fbx`, `plant_t3.fbx`, `plants.blend`, `plants.log` | `preview-plants-v4.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_goggles.py` (v2) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v2.png` | head centre | `attach` (head centre) |
 
 ## Shared conventions (`common.py`)
@@ -25,14 +25,14 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 - `common.Builder(mats, rng)` holds one bmesh with named material slots and the primitives (lathe with optional
   half-step ring twist for cut-glass facets, tube, ico, prism, ring, disc, box, ribbon, bipyramid, torus, raised
   `strokes` for runes). Preview helpers: `ground`, `ruler`, `light`, `camera`, `world`, `render`, `render_panels`
-  (several camera views side by side in one PNG); `tri_count` and
+  (several camera views side by side, optionally in rows, in one PNG); `tri_count` and
   `write_log` for the log.
 
 ## Tri counts
 
 | Tier | Bottle (incl. 80-tri mist mesh) | Bowl | Plant | Goggles |
 |---|---|---|---|---|
-| 1 | 370 | 297 | 640 | 490 |
+| 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284) | 490 |
 | 2 | 448 | 488 | 484 | 1112 |
 | 3 | 560 | 488 | 1196 | 1216 |
 
@@ -75,37 +75,54 @@ Knobs at the top of `make_bowl.py`: `FILL`, `LIQUID_SINK`, `SWIRL_W` (start/end 
 the tints), and per tier `segs`, `rot`, `vjitter` (unevenness), `grain` (share of dark columns), `profile` with
 `rim`/`inner` indices, `carve` (band range), `silver` (rim band profile), `swirls`, `attach_side`.
 
-# Ingredient plants (v3)
+# Ingredient plants (v4)
 
-Outputs `plant_t1.fbx`, `plant_t1_flat.fbx`, `plant_t2.fbx`, `plant_t3.fbx`, `preview-plants.png`, `plants.blend`; the
-preview is copied to `tools/blender/preview-plants-v3.png`. It is three panels rendered by `common.render_panels`:
-tier 1 on a grey 0.5 m trunk (2 m ruler in 0.5 m bands), the flat tier 1 variant on a plank, and tiers 2 and 3
-(0.5 m ruler in 0.1 m bands). Each FBX is one mesh with named materials plus an empty `PickAnchor`; tier 3 also has
-`EmberAnchor`. Leaves, cards and strands are single-sided: they need a double-sided (cull off) shader in Unity.
+Outputs `plant_t1_s1.fbx`, `plant_t1_s2.fbx`, `plant_t1_s3.fbx`, `plant_t1.fbx` (a copy of s3), `plant_t1_flat.fbx`,
+`plant_t2.fbx`, `plant_t3.fbx`, `preview-plants.png`, `plants.blend`; the preview is copied to
+`tools/blender/preview-plants-v4.png` (1280x1080, rendered by `common.render_panels`). Top row: two full lichen patches
+overlapping on one 0.5 m trunk (the second turned 0.3 m round the trunk and 0.12 m lower), and stages 1-3 on three
+trunks. Bottom row: the flat full patch on a plank, and tiers 2 and 3 with a 0.5 m ruler in 0.1 m bands. Each FBX is one
+mesh with named materials plus an empty `PickAnchor`; tier 3 also has `EmberAnchor`. Leaves and cards are
+single-sided except the lichen beards (two opposite faces); use a double-sided (cull off) shader in Unity.
 
-Tier 1 convention: the pivot is the patch centre on the bark, +Y up, and the patch's outward normal is Unity +Z
-(Blender -Y). `plant_t1` is curved for a trunk of 0.5 m diameter whose axis is 0.25 m behind the pivot (Unity -Z);
-`plant_t1_flat` has the same layout on a plane (plank, wall, cultivation). Everything sits 2.5 mm off the surface.
-`PickAnchor` is at the patch centre, 1 cm out. No stubs, collar or stone: nothing on the trunk but the lichen.
+Tier 1 convention (all stages and the flat variant): the pivot is the patch centre on the bark, +Y up, and the patch's
+outward normal is Unity +Z (Blender -Y). The curved files fit a trunk of 0.5 m diameter whose axis is 0.25 m behind the
+pivot (Unity -Z); `plant_t1_flat` is the full stage on a plane (plank, wall, cultivation). Everything sits 2.5 mm off
+the surface. `PickAnchor` is at the patch centre, 1 cm out. Nothing else is on the trunk (no stubs, collar or stone).
+
+Tier 1 growth: one skeleton of 10 main runners radiating from the centre (in growth order) with 2 branches each is
+generated once. Stage s keeps the first `stage_runners[s]` runners with their branches, cut at `stage_reach[s]` of their
+length; leaves at the growth front are smaller and beards appear a little behind it. Each stage therefore contains
+the previous one and grows outward from the same centre, so swapping the model in place reads as growth. Leaf clusters
+overlap into a continuous mat in the centre (up to 4 leaves per node plus a 14-leaf rosette at the germination point)
+and thin out to single leaves on the runner tips, so the silhouette is irregular and the edges sparse: neighbouring
+patches about 0.3 m apart overlap naturally.
+
+| Stage | File | Runners | Reach | Tris |
+|---|---|---|---|---|
+| 1 sprout | `plant_t1_s1.fbx` | 2 | 38 % | 114 |
+| 2 half-grown | `plant_t1_s2.fbx` | 7 | 68 % | 546 |
+| 3 full (harvestable) | `plant_t1_s3.fbx` = `plant_t1.fbx`, `plant_t1_flat.fbx` | 10 | 100 % | 1284 |
 
 | Tier | Name | Biome | Size | Look | Tris |
 |---|---|---|---|---|---|
-| 1 | Huldra's Hair (Huldrelokk) | Black Forest | 0.40 x 0.52 m patch | rare creeping lichen growing on fir/pine bark like Ashvine on walls: 4 thin raised runners climbing the bark with 3 side branches, clusters of small grey-green diamond leaves with pale tips at the nodes, short hanging beard tufts (6-11 cm) under the lower nodes, 4 faint cold tip glints | 640 (each variant) |
+| 1 | Huldra's Hair (Huldrelokk) | Black Forest | 0.34 x 0.40 m patch (full stage) | rare dense creeping lichen on fir/pine bark like Ashvine on walls: thin runners radiating from a centre and branching, leaf clusters in two grey-green shades with paler tips forming a mat in the centre, many short double-sided hanging beard tufts, 6 faint cold tip glints; 3 growth stages | 114 / 546 / 1284 |
 | 2 | Baldr's Tear (Baldrsgrat) | Mountains | 0.44 m | unchanged: nodding white snowdrop-like bell with a glowing blue cup and teardrop, closed bud, frosted leaves, 3 white mistletoe berries, snow mound | 484 |
 | 3 | Hel's Ember Fern (Helfern) | Ashlands | 0.43 m (0.75 m across) | 6 large charcoal fronds arching out (80 to 12 deg) and 4 smaller steeper inner fronds, sawtooth leaflets shrinking toward the tips, glowing ember spore capsules under the outer leaflets, two red-brown fiddleheads curling in the centre, glowing heart in a charred root crown, gnarled roots crawling over hex basalt columns into lava-glow cracks, a few ember dots | 1196 |
 
 Knobs at the top of `make_plants.py`:
 1. `MATS`: colour, roughness, metallic, emission per material (`huldra_*`, `baldr_*`, `helfern_*`).
-2. `T1`: `trunk_r`, `patch_w`, `patch_h`, `surface_off`, `runners`, `runner_steps`, `runner_step`, `runner_w`,
-   `branches`, `branch_steps`, `leaves_per_node`, `leaf_len`, `leaf_w`, `beards`, `beard_strands`, `beard_len`,
-   `beard_w`, `glints`, `pick_off`.
+2. `T1`: `trunk_r`, `surface_off`, `pick_off`; skeleton `headings` (growth order), `reach_up`, `reach_side`,
+   `reach_down`, `step`, `branches_per_runner`, `runner_w`, `ridge_until` (raised runners near the centre);
+   `node_step`, `leaves_min`, `leaves_max`, `rosette`, `leaf_len`, `leaf_w`, `mature_dist`; beards `beard_zmax`,
+   `beard_p`, `beard_strands`, `beard_len`, `beard_w`, `beard_delay`, `glints`; stages `stage_runners`, `stage_reach`.
 3. `T2`: mound size, `stem_h`, `nod` (how far the head bends over), bell length/radius/petals, bud stem, leaves, berries.
 4. `T3`: `columns`, `crack_r`, `crown_z`, `roots`, `root_len`, `heart_r`, `heart_z`, `ember_anchor_dz` (EmberAnchor
    height above the heart), `stem_r`, `leaflet_droop`, `teeth_min` (no saw teeth on shorter leaflets), `outer` and
    `inner` frond layers (`n`, `phase`, `len`, `angle` start/end elevation, `segs`, `leaflets`, `leaflet_len`, `fwd`,
    `start_r`), `spore_leaflets`, `spore_r`, `crozier_h`, `crozier_az`, `crozier_r`, `crozier_turns`, `crozier_w`,
    `embers`. `SEED` for all.
-Preview-only placement (`TRUNK_X`, `PLANK_X`, `PATCH_Z`, plant locations), cameras and lights near the end.
+Preview-only placement (`XA`, `XB`, `XP`, `PATCH_Z`, `on_trunk`, plant locations), cameras and lights near the end.
 
 # Veil goggles (v2)
 

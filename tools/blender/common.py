@@ -265,8 +265,9 @@ class Builder:
             s = d.cross(n)
             self.box((p0 + p1)/2 + n*height/2, d*(L + width*0.6), s*width, n*height, m)
 
-    def finish(self, name, collection=None):
-        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
+    def finish(self, name, collection=None, recalc=True):
+        """recalc=False keeps the winding as built (needed for double-sided cards made of two opposite faces)."""
+        if recalc: bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
         me = bpy.data.meshes.new(name); self.bm.to_mesh(me); self.bm.free()
         for f in me.polygons: f.use_smooth = False
         for s in self.slots: me.materials.append(mat_from(s, self.mats[s]))
@@ -400,29 +401,34 @@ def render(png_name, preview=None, blend_name=None, res=(1280, 720), volumetrics
 def render_panels(panels, png_name, preview=None, blend_name=None, height=720):
     """Render several camera views side by side into one PNG (out/<png_name>, copied to `preview`).
     panels: dicts with `width` (px), `cam` = (location, target, lens) and `show` = the objects visible in that view
-    (every other mesh, empty and light is hidden for the panel). Panel widths should add up to the image width."""
+    (every other mesh, empty and light is hidden for the panel). For several rows pass a list of
+    dict(height=px, panels=[...]) instead (top row first). All rows must add up to the same width."""
     import numpy as np
     scene = bpy.context.scene
     cam = scene.camera or camera((0, -1, 0), (0, 0, 0), 50)
     togglable = [o for o in scene.objects if o.type in ('MESH', 'LIGHT', 'EMPTY')]
-    parts = []
-    for i, p in enumerate(panels):
-        show = set()
-        for o in p["show"]:
-            show.add(o); show.update(o.children_recursive)
-        for o in togglable: o.hide_render = o not in show
-        loc, tgt, lens = p["cam"]
-        cam.location = loc; cam.data.lens = lens
-        cam.rotation_euler = (Vector(tgt) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
-        path = os.path.join(OUT, f"_panel{i}.png")
-        render(f"_panel{i}.png", res=(p["width"], height))
-        img = bpy.data.images.load(path)
-        parts.append(np.array(img.pixels[:], dtype=np.float32).reshape(height, p["width"], 4))
-        bpy.data.images.remove(img); os.remove(path)
+    rows = panels if "panels" in panels[0] else [dict(height=height, panels=panels)]
+    images, n = [], 0
+    for row in rows:
+        h, parts = row["height"], []
+        for p in row["panels"]:
+            show = set()
+            for o in p["show"]:
+                show.add(o); show.update(o.children_recursive)
+            for o in togglable: o.hide_render = o not in show
+            loc, tgt, lens = p["cam"]
+            cam.location = loc; cam.data.lens = lens
+            cam.rotation_euler = (Vector(tgt) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+            name = f"_panel{n}.png"; n += 1
+            render(name, res=(p["width"], h))
+            img = bpy.data.images.load(os.path.join(OUT, name))
+            parts.append(np.array(img.pixels[:], dtype=np.float32).reshape(h, p["width"], 4))
+            bpy.data.images.remove(img); os.remove(os.path.join(OUT, name))
+        images.append(np.concatenate(parts, axis=1))
     for o in togglable: o.hide_render = False
-    full = np.concatenate(parts, axis=1)
-    W = full.shape[1]
-    out = bpy.data.images.new("panels", W, height, alpha=True)
+    full = np.concatenate(images[::-1], axis=0)          # Blender images start at the bottom row
+    H, W = full.shape[:2]
+    out = bpy.data.images.new("panels", W, H, alpha=True)
     out.pixels = full.ravel().tolist()
     out.filepath_raw = os.path.join(OUT, png_name); out.file_format = 'PNG'
     out.save()

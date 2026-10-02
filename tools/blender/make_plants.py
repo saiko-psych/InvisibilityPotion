@@ -7,14 +7,14 @@ Tier III Ashlands      Hel's Ember Fern (Helfern)   black fern, two frond layers
                                                      glowing heart in a charred root crown on cracked basalt
 Lore: docs/ideas/2026-10-01-norse-lore-research.md section 3.
 """
-import math, os, random, sys
+import math, os, random, shutil, sys
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import OUT, HERE, Builder as _Builder, bezier, empty, export_fbx, tri_count, write_log, reset, \
     ground, ruler, light, camera, world, render_panels
 
-PREVIEW = os.path.join(HERE, "preview-plants-v3.png")
+PREVIEW = os.path.join(HERE, "preview-plants-v4.png")
 
 # ==== KNOBS (lengths in metres; Blender Z-up, FBX exported Y-up, 1 unit = 1 m, pivot at ground) ====
 SEED = 11                # deterministic; each plant uses SEED + tier index
@@ -23,9 +23,9 @@ SEED = 11                # deterministic; each plant uses SEED + tier index
 MATS = {
     # Tier I: Huldra's Hair (grey-green, pale tips)
     "huldra_runner":  ((0.27, 0.30, 0.24, 1), 0.9, 0.0, 0.0),   # creeping runners
-    "huldra_strand":  ((0.46, 0.52, 0.42, 1), 0.85, 0.0, 0.0),  # pale grey-green leaves and strands
-    "huldra_strand_shade": ((0.38, 0.44, 0.35, 1), 0.9, 0.0, 0.0),  # second shade
-    "huldra_tip":     ((0.66, 0.70, 0.60, 1), 0.8, 0.0, 0.0),   # pale tips
+    "huldra_strand":  ((0.34, 0.42, 0.30, 1), 0.85, 0.0, 0.0),  # pale grey-green leaves and strands
+    "huldra_strand_shade": ((0.24, 0.30, 0.21, 1), 0.9, 0.0, 0.0),  # second shade
+    "huldra_tip":     ((0.55, 0.60, 0.47, 1), 0.8, 0.0, 0.0),   # pale tips
     "huldra_glint":   ((0.45, 0.68, 0.72, 1), 0.5, 0.0, 0.7),   # faint cold shimmer at a few strand tips
     # Tier II: Baldr's Tear
     "baldr_snow":    ((0.72, 0.75, 0.81, 1), 0.7, 0.0, 0.0),
@@ -46,12 +46,16 @@ MATS = {
     "helfern_ember":  ((1.00, 0.33, 0.04, 1), 0.5, 0.0, 2.5),   # ember dots
 }
 
-T1 = dict(  # Huldra's Hair: creeping lichen on bark (like Ashvine on walls), patch ~0.35 x 0.5 m, pivot = patch centre
-    trunk_r=0.25, patch_w=0.35, patch_h=0.50, surface_off=0.0025,
-    runners=4, runner_steps=5, runner_step=0.10, runner_w=0.009, branches=3, branch_steps=3,
-    leaves_per_node=4, leaf_len=0.040, leaf_w=0.018,
-    beards=8, beard_strands=(2, 2), beard_len=(0.06, 0.11), beard_w=(0.006, 0.010), glints=4,
-    pick_off=0.01,
+T1 = dict(  # Huldra's Hair: dense creeping lichen on bark (like Ashvine on walls), 3 growth stages, pivot = patch centre
+    trunk_r=0.25, surface_off=0.0025, pick_off=0.01,
+    # skeleton: main runners radiate from the centre (headings in degrees, in growth order), then branch
+    headings=(95, 265, 30, 150, 215, 325, 60, 120, 185, 355),
+    reach_up=0.27, reach_side=0.19, reach_down=0.15, step=0.04, branches_per_runner=2, runner_w=0.008, ridge_until=0.07,
+    node_step=0.03, leaves_min=1, leaves_max=4, rosette=14, leaf_len=0.034, leaf_w=0.016, mature_dist=0.07,
+    beard_zmax=0.06, beard_p=0.2, beard_strands=(1, 3), beard_len=(0.04, 0.09), beard_w=(0.005, 0.009),
+    beard_delay=0.02, glints=6,
+    # growth stages s1..s3: number of runners (in heading order) and fraction of each runner's length
+    stage_runners=(2, 7, 10), stage_reach=(0.38, 0.68, 1.0),
 )
 T2 = dict(  # Baldr's Tear, ~0.45 m
     mound_r=0.11, mound_h=0.035,
@@ -81,7 +85,10 @@ def Builder():
 # ---------------------------------------------------------------- Tier I
 # Frame: the patch lies on a surface facing -Y (outward normal; Unity +Z after the FBX export), pivot = patch centre on
 # the surface (origin). Curved variant: a vertical trunk of radius trunk_r whose axis is at (0, +trunk_r, 0).
-# Flat variant (plant_t1_flat): the plane y = 0, for a plank or wall. Both use the same layout (same seed).
+# Flat variant: the plane y = 0 (plank, wall, cultivation).
+# Growth: one skeleton of runners radiating from the centre is generated once; stage s keeps the first
+# T1["stage_runners"][s] runners (with their branches) cut at T1["stage_reach"][s] of their length, so every stage
+# contains the previous one and swapping the models in place reads as growth.
 def surface_fn(trunk_r):
     def surf(u, z, off=0.0):
         """Point at arc length u (sideways) and height z, `off` metres out from the surface; plus the normal."""
@@ -101,84 +108,131 @@ def strip(B, pts, widths, side, mats):
         (a0, a1), (b0, b1) = rows[i], rows[i+1]
         B.face([a0, a1, b1, b0], mats[i])
 
-def runner_path(rng, start, heading, steps, step, hw, hh):
-    """Random creeping walk in (u, z) space, steered back inside the patch."""
-    pts = [start]; h = heading
-    for _ in range(steps):
-        u, z = pts[-1]
-        target = math.radians(90 - 70*u/hw)                       # lean back toward the middle near the edges
-        h = 0.65*h + 0.35*target + math.radians(rng.uniform(-28, 28))
-        h = max(math.radians(20), min(math.radians(160), h))      # keep climbing (up or across, never down)
-        pts.append((max(-hw, min(hw, u + math.cos(h)*step)), min(hh, z + math.sin(h)*step)))
-    return pts
+def face_to(B, vs, m, n):
+    """Face whose normal points along n (the mesh is finished without normal recalculation)."""
+    a, b, c = (Vector(v) for v in vs[:3])
+    if (b - a).cross(c - a).dot(n) < 0: vs = list(reversed(vs))
+    B.face(vs, m)
 
-def huldra(rng, flat=False):
-    t = T1; B = Builder(); surf = surface_fn(None if flat else t["trunk_r"])
-    hw, hh = t["patch_w"]/2, t["patch_h"]/2; off = t["surface_off"]
-    # main runners climbing from the lower edge, plus side branches
-    paths = []
-    for k in range(t["runners"]):
-        u0 = (k - (t["runners"] - 1)/2)*t["patch_w"]/(t["runners"] + 0.5) + rng.uniform(-0.02, 0.02)
-        p = runner_path(rng, (u0, -hh + rng.uniform(0.0, 0.06)), math.radians(90 + rng.uniform(-25, 25)),
-                        t["runner_steps"], t["runner_step"], hw, hh)
-        paths.append((p, t["runner_w"]))
-    for k in range(t["branches"]):
-        base, _ = paths[k % len(paths)]
-        i0 = rng.randint(2, len(base) - 3)
-        side = rng.choice((-1, 1))
-        p = runner_path(rng, base[i0], math.radians(90 + side*rng.uniform(35, 60)), t["branch_steps"],
-                        t["runner_step"]*0.8, hw, hh)
-        paths.append((p, t["runner_w"]*0.7))
-    nodes = []                                         # (point, normal, along, thickness) for leaves and beards
-    for pi, (path, w0) in enumerate(paths):
-        smooth = bezier([Vector((u, z, 0)) for u, z in path], len(path)*2 - 1)
-        n = len(smooth)
-        P, N = zip(*[surf(q.x, q.y, off) for q in smooth])
-        ridge_l, ridge_t, ridge_r = [], [], []
+def huldra_skeleton(rng):
+    """Full-grown layout in (u, z) surface coordinates with all random choices made up front."""
+    t = T1; step = t["step"]
+    runners = []
+    for k, h0 in enumerate(t["headings"]):
+        h = math.radians(h0 + rng.uniform(-12, 12))
+        s, c = math.sin(h), math.cos(h)
+        rz = t["reach_up"] if s > 0 else t["reach_down"]
+        reach = math.hypot(t["reach_side"]*c, rz*s)*rng.uniform(0.65, 1.0)     # irregular silhouette
+        pts = [(math.cos(h)*0.008, math.sin(h)*0.008)]; dist = [0.008]
+        while dist[-1] < reach:
+            h += math.radians(rng.uniform(-22, 22))
+            u, z = pts[-1]
+            pts.append((u + math.cos(h)*step, z + math.sin(h)*step)); dist.append(dist[-1] + step)
+        runners.append(dict(pts=pts, dist=dist, rank=k, main=True, L=dist[-1]))
+        for b in range(t["branches_per_runner"]):              # side branches off this runner
+            if len(pts) < 4: break
+            i0 = rng.randint(2, len(pts) - 2)
+            hb = math.atan2(pts[i0][1] - pts[i0-1][1], pts[i0][0] - pts[i0-1][0]) + math.radians(rng.choice((-1, 1))*rng.uniform(35, 65))
+            bp, bd = [pts[i0]], [dist[i0]]
+            n = max(2, int((dist[-1] - dist[i0])*rng.uniform(0.5, 0.8)/step))
+            for _ in range(n):
+                hb += math.radians(rng.uniform(-20, 20))
+                bp.append((bp[-1][0] + math.cos(hb)*step*0.85, bp[-1][1] + math.sin(hb)*step*0.85)); bd.append(bd[-1] + step*0.85)
+            runners.append(dict(pts=bp, dist=bd, rank=k, main=False, L=dist[-1]))
+    # nodes (leaf clusters, beards) every node_step along each runner, with their random attributes
+    nodes = []
+    R = max(t["reach_up"], t["reach_side"])
+    for ri, r in enumerate(runners):
+        d = r["dist"][0] + (0.0 if r["main"] else t["node_step"]*0.5)
+        while d <= r["dist"][-1]:
+            u, z = path_at(r, d)
+            near = 1 - min(1.0, math.hypot(u, z)/R)                 # 1 at the centre, 0 at the rim
+            nl = max(1, round(t["leaves_min"] + (t["leaves_max"] - t["leaves_min"])*near**1.3))
+            leaves = [dict(ang=rng.uniform(0, 2*math.pi), lift=math.radians(rng.uniform(8, 35)),
+                           L=t["leaf_len"]*rng.uniform(0.7, 1.15)*(0.7 + 0.7*near), w=t["leaf_w"]*rng.uniform(0.8, 1.2)*(0.8 + 0.5*near),
+                           shade=rng.random() < 0.45) for _ in range(nl)]
+            beard = None
+            if z < t["beard_zmax"] and rng.random() < t["beard_p"]*(0.5 + near):
+                beard = [dict(L=rng.uniform(*t["beard_len"]), w=rng.uniform(*t["beard_w"]), sway=rng.uniform(-0.005, 0.005),
+                              lift=rng.uniform(0.004, 0.010), du=rng.uniform(-0.005, 0.005), glint=False)
+                         for _ in range(rng.randint(*t["beard_strands"]))]
+            nodes.append(dict(r=ri, d=d, u=u, z=z, leaves=leaves, beard=beard, rank=r["rank"], L=r["L"]))
+            d += t["node_step"]
+    # centre rosette: the germination point, a dense ring of leaves present from the first stage on
+    rosette = [dict(ang=2*math.pi*k/t["rosette"] + rng.uniform(-0.25, 0.25), lift=math.radians(rng.uniform(10, 30)),
+                    L=t["leaf_len"]*rng.uniform(0.9, 1.25), w=t["leaf_w"]*rng.uniform(0.9, 1.2), shade=k % 2 == 0)
+               for k in range(t["rosette"])]
+    nodes.insert(0, dict(r=0, d=0.0, u=0.0, z=0.0, leaves=rosette, rank=0, L=runners[0]["L"],
+                         beard=[dict(L=rng.uniform(*t["beard_len"]), w=rng.uniform(*t["beard_w"]), sway=rng.uniform(-0.005, 0.005),
+                                     lift=rng.uniform(0.004, 0.010), du=rng.uniform(-0.008, 0.008), glint=False) for _ in range(2)]))
+    strands = [s for n in nodes if n["beard"] for s in n["beard"]]
+    for s in rng.sample(strands, min(t["glints"], len(strands))): s["glint"] = True
+    return runners, nodes
+
+def path_at(r, d):
+    """(u, z) at distance d along runner r (clamped)."""
+    ds, ps = r["dist"], r["pts"]
+    if d <= ds[0]: return ps[0]
+    for i in range(len(ds) - 1):
+        if ds[i] <= d <= ds[i+1]:
+            f = (d - ds[i])/(ds[i+1] - ds[i])
+            return (ps[i][0] + (ps[i+1][0] - ps[i][0])*f, ps[i][1] + (ps[i+1][1] - ps[i][1])*f)
+    return ps[-1]
+
+def huldra(skel, stage, flat=False, name=None):
+    """Mesh for growth stage `stage` (0-based) of the skeleton."""
+    t = T1; B = Builder(); surf = surface_fn(None if flat else t["trunk_r"]); off = t["surface_off"]
+    runners, nodes = skel
+    nr, g = t["stage_runners"][stage], t["stage_reach"][stage]
+    for r in runners:
+        if r["rank"] >= nr: continue
+        cut = g*r["L"]
+        ds = [d for d in r["dist"] if d < cut]
+        if len(ds) < 1: continue
+        ds = ds + [cut]
+        if ds[-1] - ds[0] < 0.004: continue
+        P, N = zip(*[surf(*path_at(r, d), off) for d in ds])
+        n = len(P); w0 = t["runner_w"]*(1.0 if r["main"] else 0.7)
+        rows = []
         for i in range(n):
             tg = (P[min(i+1, n-1)] - P[max(i-1, 0)]).normalized()
             sd = tg.cross(N[i]).normalized()
-            w = w0*(1 - 0.75*i/(n - 1)) if i < n - 1 else 0.0005
-            ridge_l.append(B.v(P[i] - sd*w/2)); ridge_r.append(B.v(P[i] + sd*w/2))
-            ridge_t.append(B.v(P[i] + N[i]*w*0.5))
-            if 0 < i < n - 1 and i % 2 == 1:
-                nodes.append((P[i], N[i], tg, w, pi < t["runners"] and i <= n//2))
-        for i in range(n - 1):
-            B.face([ridge_l[i], ridge_l[i+1], ridge_t[i+1], ridge_t[i]], "huldra_runner")
-            B.face([ridge_t[i], ridge_t[i+1], ridge_r[i+1], ridge_r[i]], "huldra_runner")
-    # leaf/tuft clusters on the nodes: small diamond leaves lifted off the surface, pale tips
-    for ni, (p, nrm, tg, w, thick) in enumerate(nodes):
-        for k in range(t["leaves_per_node"]):
-            ang = math.radians(rng.choice((-1, 1))*rng.uniform(35, 80) + rng.uniform(-10, 10))
-            d = (tg*math.cos(ang) + tg.cross(nrm).normalized()*math.sin(ang)).normalized()
-            lift = math.radians(rng.uniform(15, 40))
-            L = t["leaf_len"]*rng.uniform(0.7, 1.2); lw = t["leaf_w"]*rng.uniform(0.8, 1.2)
-            base = p + nrm*w*0.3
-            ax = (d*math.cos(lift) + nrm*math.sin(lift)).normalized()
-            sd = ax.cross(nrm).normalized()
-            mid = base + ax*L*0.45; tip = base + ax*L
-            m = "huldra_strand" if (ni + k) % 2 else "huldra_strand_shade"
-            B.face([base, mid - sd*lw/2, mid + sd*lw/2], m)
-            B.face([mid + sd*lw/2, mid - sd*lw/2, tip], "huldra_tip")
-    # short hanging beard tufts under the thicker (lower, main-runner) nodes
-    thick = [x for x in nodes if x[4]]
-    rng.shuffle(thick)
-    glint_left = t["glints"]
-    for p, nrm, tg, w, _ in thick[:t["beards"]]:
-        for k in range(rng.randint(*t["beard_strands"])):
-            L = rng.uniform(*t["beard_len"]); segs = 3
-            sway = rng.uniform(-0.006, 0.006)
-            sd0 = tg.cross(nrm).normalized()
-            a = p + nrm*rng.uniform(0.006, 0.012) + sd0*rng.uniform(-0.006, 0.006)
-            pts = [p + nrm*w*0.3] + [a + Vector((0, 0, -L*s/segs)) + sd0*sway*math.sin(math.pi*s/segs) for s in range(segs + 1)]
-            bw = rng.uniform(*t["beard_w"])
-            widths = [bw*0.8, bw, bw*0.85, bw*0.65, bw*0.35]
-            last = "huldra_glint" if glint_left > 0 else "huldra_tip"; glint_left -= last == "huldra_glint"
-            mats = ["huldra_strand_shade", "huldra_strand", "huldra_strand", last]
-            strip(B, pts, widths, sd0, mats)
-            if k == 0:
-                strip(B, pts[1:], widths[1:], nrm, mats[1:])
-    ob = B.finish("plant_t1_flat" if flat else "plant_t1")
+            w = max(0.0012, w0*(1 - 0.75*ds[i]/cut)*(0.55 + 0.45*g))   # runners thicken as the patch grows
+            rows.append((P[i] - sd*w/2, P[i] + N[i]*w*0.5, P[i] + sd*w/2, N[i]))
+        for i, ((al, at, ar, an), (bl, bt, br, bn)) in enumerate(zip(rows, rows[1:])):
+            if r["main"] and ds[i] < t["ridge_until"]:      # raised ridge only near the centre, flat beyond
+                face_to(B, [al, bl, bt, at], "huldra_runner", an)
+                face_to(B, [at, bt, br, ar], "huldra_runner", an)
+            else:
+                face_to(B, [al, bl, br, ar], "huldra_runner", an)
+    for nd in nodes:
+        if nd["rank"] >= nr: continue
+        cut = g*nd["L"]
+        if nd["d"] > cut: continue
+        m = min(1.0, 0.4 + (cut - nd["d"])/t["mature_dist"])      # young leaves at the growth front are small
+        p, nrm = surf(nd["u"], nd["z"], off)
+        tu = (surf(nd["u"] + 0.001, nd["z"], off)[0] - p).normalized(); tz = nrm.cross(tu).normalized()
+        if tz.z < 0: tz = -tz
+        for li, lf in enumerate(nd["leaves"]):
+            if m < 0.45 and li >= 2 and nd["d"] > 0: break
+            d = tu*math.cos(lf["ang"]) + tz*math.sin(lf["ang"])
+            ax = (d*math.cos(lf["lift"]) + nrm*math.sin(lf["lift"])).normalized()
+            sd = ax.cross(nrm).normalized(); L, lw = lf["L"]*m, lf["w"]*m
+            base = p + nrm*0.0015; mid = base + ax*L*0.45; tip = base + ax*L
+            face_to(B, [base, mid - sd*lw/2, mid + sd*lw/2], "huldra_strand_shade" if lf["shade"] else "huldra_strand", nrm)
+            face_to(B, [mid + sd*lw/2, mid - sd*lw/2, tip], "huldra_tip", nrm)
+        if nd["beard"] and nd["d"] <= cut - t["beard_delay"]:
+            bm = min(1.0, 0.4 + (cut - t["beard_delay"] - nd["d"])/t["mature_dist"])
+            for s in nd["beard"]:
+                L = s["L"]*bm; segs = 3
+                a = p + nrm*s["lift"] + tu*s["du"]
+                pts = [p + nrm*0.002] + [a + Vector((0, 0, -L*k/segs)) + tu*s["sway"]*math.sin(math.pi*k/segs) for k in range(segs + 1)]
+                wd = [s["w"]*f for f in (0.8, 1.0, 0.85, 0.6, 0.3)]
+                mats = ["huldra_strand_shade", "huldra_strand", "huldra_strand", "huldra_glint" if s["glint"] else "huldra_tip"]
+                for i in range(len(pts) - 1):              # double-sided card: both windings
+                    q = [pts[i] - tu*wd[i]/2, pts[i] + tu*wd[i]/2, pts[i+1] + tu*wd[i+1]/2, pts[i+1] - tu*wd[i+1]/2]
+                    face_to(B, q, mats[i], nrm); face_to(B, q, mats[i], -nrm)
+    ob = B.finish(name or f"plant_t1_s{stage + 1}", recalc=False)
     pick = empty("PickAnchor", surf(0, 0, t["pick_off"])[0], ob)
     return ob, [pick]
 
@@ -366,9 +420,12 @@ def helfern(rng):
 
 # ---------------------------------------------------------------- build + export
 plants = {}
-for i, (k, fn) in enumerate((("t1", huldra), ("t2", baldr), ("t3", helfern))):
+skel = huldra_skeleton(random.Random(SEED))
+for st in range(3):
+    plants[f"t1_s{st + 1}"] = huldra(skel, st)
+plants["t1_flat"] = huldra(skel, 2, flat=True, name="plant_t1_flat")     # full stage on a flat surface
+for i, (k, fn) in enumerate((("t2", baldr), ("t3", helfern)), start=1):
     plants[k] = fn(random.Random(SEED + i))
-plants["t1_flat"] = huldra(random.Random(SEED), flat=True)     # same layout on a flat surface (plank, wall)
 
 log = []
 for k, (ob, kids) in plants.items():
@@ -376,40 +433,60 @@ for k, (ob, kids) in plants.items():
     zs = [v.co.z for v in ob.data.vertices]
     log.append(f"TRIS plant_{k}: {tri_count(ob)}  z {min(zs):.3f}..{max(zs):.3f} m  spread {max(xs)-min(xs):.2f} x {max(ys)-min(ys):.2f} m")
     export_fbx(os.path.join(OUT, f"plant_{k}.fbx"), ob)
+shutil.copyfile(os.path.join(OUT, "plant_t1_s3.fbx"), os.path.join(OUT, "plant_t1.fbx"))   # alias of the full stage
+log.append("plant_t1.fbx = copy of plant_t1_s3.fbx")
 write_log("plants", log)
 
-# ---- preview: three panels (lichen on a trunk | lichen on a plank | Baldr's Tear + Helfern) ----
+# ---- preview (1280 x 1080), top row: two full patches overlapping on a trunk | stages 1-3 on three trunks;
+# bottom row: full flat patch on a plank | Baldr's Tear + Helfern ----
 from common import mat
 import bpy
-TRUNK_X, PLANK_X, PATCH_Z = -3.0, -6.0, 1.30     # preview only: tier 1 on a grey 0.5 m trunk and on a plank
-t1 = plants["t1"][0]; t1.location = (TRUNK_X, 0, PATCH_Z)
-t1f = plants["t1_flat"][0]; t1f.location = (PLANK_X, 0, PATCH_Z)
+PATCH_Z, TR = 1.30, T1["trunk_r"]
+def trunk_ref(x, name):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=TR, depth=2.2, location=(x, TR, 1.1))
+    o = bpy.context.active_object; o.name = name; o.data.materials.append(trunk_mat); return o
+trunk_mat = mat("trunk_ref", (0.20, 0.19, 0.18, 1), rough=0.9)
+def on_trunk(ob, x, z, turn=0.0):
+    """Place a trunk-curved patch on the trunk whose axis is at (x, TR), turned `turn` radians around that axis."""
+    from mathutils import Matrix
+    ob.rotation_euler.z = turn
+    ob.location = Vector((x, TR, z)) + Matrix.Rotation(turn, 3, 'Z') @ Vector((0, -TR, 0))
+# A: two full patches on one trunk, the second turned 0.3 m round the trunk and 0.12 m lower
+XA, XB, XP = -3.0, -6.0, -9.0
+trunkA = trunk_ref(XA, "trunk_a")
+pA1 = huldra(skel, 2, name="plant_t1_s3_left")[0]; on_trunk(pA1, XA, PATCH_Z, -0.55)
+pA2 = huldra(skel, 2, name="plant_t1_s3_right")[0]; on_trunk(pA2, XA, PATCH_Z - 0.12, 0.65)
+# B: stages 1-3 side by side on three trunks
+trunksB = [trunk_ref(XB + (k - 1)*0.62, f"trunk_b{k}") for k in range(3)]
+for k in range(3): on_trunk(plants[f"t1_s{k + 1}"][0], XB + (k - 1)*0.62, PATCH_Z)
+# C: flat full patch on a plank
+pF = plants["t1_flat"][0]; pF.location = (XP, 0, PATCH_Z)
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(XP, 0.02, PATCH_Z))
+plank = bpy.context.active_object; plank.name = "plank_ref"; plank.scale = (0.60, 0.04, 0.80)
+plank.data.materials.append(mat("plank_ref", (0.36, 0.27, 0.18, 1), rough=0.85))
 plants["t2"][0].location = (-0.26, 0, 0); plants["t2"][0].rotation_euler.z = -1.0
 plants["t3"][0].location = (0.24, 0.10, 0); plants["t3"][0].rotation_euler.z = 0.75
-bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=T1["trunk_r"], depth=2.2, location=(TRUNK_X, T1["trunk_r"], 1.1))
-trunk = bpy.context.active_object; trunk.name = "trunk_ref"; trunk.data.materials.append(mat("trunk_ref", (0.20, 0.19, 0.18, 1), rough=0.9))
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(PLANK_X, 0.02, PATCH_Z))
-plank = bpy.context.active_object; plank.name = "plank_ref"; plank.scale = (0.55, 0.04, 0.80)
-plank.data.materials.append(mat("plank_ref", (0.36, 0.27, 0.18, 1), rough=0.85))
 g = ground()
-r1 = ruler((TRUNK_X - 0.40, 0.05, 0), height=2.0, band=0.5, r=0.015)   # 2 m in 0.5 m bands
-r2 = ruler((-0.05, 0.25, 0))                                            # 0.5 m in 0.1 m bands
+rB = ruler((XB - 0.98, 0.05, 0), height=2.0, band=0.5, r=0.015)      # 2 m in 0.5 m bands
+r2 = ruler((-0.05, 0.25, 0))                                          # 0.5 m in 0.1 m bands
 L_far = [light("key", 'AREA', (1.5, -2.0, 2.0), 160, (1.0, 0.85, 0.7), 1.5),
          light("fill", 'AREA', (-2.2, -1.5, 1.0), 40, (0.7, 0.8, 1.0), 2.0),
          light("rim", 'AREA', (0.0, 2.0, 1.6), 80, (1.0, 0.9, 0.8), 1.5)]
-def side_lights(x, tag):
+def side_lights(x, tag, e=70):
     tz = (x, 0, PATCH_Z)
-    return [light("key_" + tag, 'AREA', (x + 1.4, -2.0, 2.6), 70, (1.0, 0.85, 0.7), 1.5, tz),
-            light("fill_" + tag, 'AREA', (x - 2.0, -1.6, 1.4), 18, (0.7, 0.8, 1.0), 2.0, tz)]
-L_trunk, L_plank = side_lights(TRUNK_X, "trunk"), side_lights(PLANK_X, "plank")
+    return [light("key_" + tag, 'AREA', (x + 1.4, -2.0, 2.6), e, (1.0, 0.85, 0.7), 1.5, tz),
+            light("fill_" + tag, 'AREA', (x - 2.0, -1.6, 1.4), e*0.26, (0.7, 0.8, 1.0), 2.0, tz)]
+LA, LB, LC = side_lights(XA, "a", 55), side_lights(XB, "b", 85), side_lights(XP, "c", 55)
 sky = light("sky", 'SUN', (0.0, 0.0, 5.0), 1.2, (0.9, 0.92, 1.0))
 world((0.16, 0.155, 0.15, 1))
 both = [g, sky]
 render_panels([
-    dict(width=400, cam=((TRUNK_X - 0.10, -1.6, PATCH_Z + 0.1), (TRUNK_X - 0.10, 0, PATCH_Z - 0.12), 38),
-         show=both + [trunk, t1, r1] + L_trunk),
-    dict(width=330, cam=((PLANK_X + 0.15, -1.25, PATCH_Z + 0.2), (PLANK_X, 0, PATCH_Z - 0.05), 45),
-         show=both + [plank, t1f] + L_plank),
-    dict(width=550, cam=((0.06, -1.45, 0.55), (0.06, 0, 0.20), 40),
-         show=both + [plants["t2"][0], plants["t3"][0], r2] + L_far),
+    dict(height=540, panels=[
+        dict(width=480, cam=((XA, -0.95, PATCH_Z + 0.12), (XA, 0, PATCH_Z + 0.10), 40), show=both + [trunkA, pA1, pA2] + LA),
+        dict(width=800, cam=((XB, -1.9, PATCH_Z + 0.14), (XB, 0, PATCH_Z + 0.12), 42),
+             show=both + trunksB + [plants[f"t1_s{k + 1}"][0] for k in range(3)] + LB)]),
+    dict(height=540, panels=[
+        dict(width=480, cam=((XP, -0.95, PATCH_Z + 0.1), (XP, 0, PATCH_Z + 0.04), 40), show=both + [plank, pF] + LC),
+        dict(width=800, cam=((0.06, -1.6, 0.55), (0.06, 0, 0.20), 40),
+             show=both + [plants["t2"][0], plants["t3"][0], r2] + L_far)]),
 ], "preview-plants.png", PREVIEW, "plants.blend")
