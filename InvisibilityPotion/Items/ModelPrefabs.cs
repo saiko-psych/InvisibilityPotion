@@ -32,7 +32,9 @@ namespace InvisibilityPotion.Items
             var go = PrefabManager.Instance.CreateClonedPrefab(itemName, source)
                      ?? throw new InvalidOperationException($"cloning {bundlePrefab} as {itemName} failed (name taken?)");
             SetLayer(go, template.layer);
-            var scale = ApplyScale(go, bundlePrefab);   // before the box: the collider is sized from the scaled renderer bounds
+            // Worn / stand size on the prefab's attach; dropped instances grow to the world size (DroppedItemScale, see ModelScale).
+            var attachFactor = ApplyScale(go, bundlePrefab, ModelScale.AttachFactor(bundlePrefab));
+            var ratio = ModelScale.DroppedRatio(bundlePrefab);
 
             var tnv = template.GetComponent<ZNetView>();
             var nv = go.AddComponent<ZNetView>();
@@ -70,7 +72,7 @@ namespace InvisibilityPotion.Items
             }
 
             var box = go.AddComponent<BoxCollider>();
-            var bounds = LocalMeshBounds(go);
+            var bounds = DroppedBounds(go, ratio);                      // the collider only matters for the dropped item
             box.center = bounds.center;
             box.size = Vector3.Max(bounds.size, new Vector3(0.02f, 0.02f, 0.02f));
             var tcol = template.GetComponentInChildren<Collider>(true);
@@ -81,10 +83,20 @@ namespace InvisibilityPotion.Items
             drop.m_autoDestroy = templateDrop.m_autoDestroy;
             drop.m_itemData.m_shared = CloneShared(templateDrop.m_itemData.m_shared);
             drop.m_itemData.m_dropPrefab = go;
+            var shared = drop.m_itemData.m_shared;
+            if (shared.m_itemType == ItemDrop.ItemData.ItemType.Helmet)
+            {
+                // Round L: the HelmetLeather template wears down and shows a durability bar (InventoryGrid/HotkeyBar draw it only
+                // when m_useDurability is set); the goggles never break.
+                shared.m_useDurability = false;
+                shared.m_maxDurability = 100f;
+                drop.m_itemData.m_durability = 100f;
+            }
+            if (!Mathf.Approximately(ratio, 1f)) go.AddComponent<DroppedItemScale>().m_ratio = ratio;
 
             AssetBundles.Track(go);
             Plugin.Log.LogInfo($"assets: item {itemName} <- {bundlePrefab} (template {template.name}: {ComponentList(template)}); " +
-                               $"scale x{scale:0.##}, layer {LayerMask.LayerToName(go.layer)}, rigidbody mass {rb.mass} damping {rb.linearDamping}/{rb.angularDamping}, " +
+                               $"scale world x{attachFactor * ratio:0.##} / attach x{attachFactor:0.##}, durability {shared.m_useDurability}, layer {LayerMask.LayerToName(go.layer)}, rigidbody mass {rb.mass} damping {rb.linearDamping}/{rb.angularDamping}, " +
                                $"box {bounds.size:F3} at {bounds.center:F3}, persistent {nv.m_persistent}");
             return go;
         }
@@ -100,19 +112,19 @@ namespace InvisibilityPotion.Items
             var nv = go.GetComponent<ZNetView>();
             if (nv == null) nv = go.AddComponent<ZNetView>();   // no ?? on Unity objects (fake null)
             nv.m_persistent = false;
-            var scale = ApplyScale(go, bundlePrefab);
+            var scale = ApplyScale(go, bundlePrefab, ModelScale.WorldFactor(bundlePrefab));
             Plugin.Log.LogInfo($"assets: prop {bundlePrefab}: scale x{scale:0.##}, bounds {LocalMeshBounds(go).size:F3}");
             AssetBundles.Track(go);
             return go;
         }
 
         /// <summary>
-        /// Multiplies the localScale of the prefab's scaled child ("attach" for items, "model" for plants) by the group factor of
-        /// <see cref="ModelScale"/>. Called once per prefab (items: on the fresh clone; plants: on the loaded bundle prefab).
+        /// Multiplies the localScale of the prefab's scaled child ("attach" for items, "model" for plants) by
+        /// <paramref name="factor"/> (from <see cref="ModelScale"/>). Called once per prefab (items: on the fresh clone with the
+        /// attach factor; plants: on the loaded bundle prefab with the world factor).
         /// </summary>
-        public static float ApplyScale(GameObject go, string bundlePrefab)
+        public static float ApplyScale(GameObject go, string bundlePrefab, float factor)
         {
-            var factor = ModelScale.For(bundlePrefab);
             if (Mathf.Approximately(factor, 1f)) return 1f;
             var childName = ModelScale.ScaledChild(bundlePrefab);
             var child = go.transform.Find(childName);
@@ -139,6 +151,17 @@ namespace InvisibilityPotion.Items
         /// <summary>Shallow copy (lists, arrays and effect lists stay shared with the template; callers replace what they change).</summary>
         public static ItemDrop.ItemData.SharedData CloneShared(ItemDrop.ItemData.SharedData src) =>
             (ItemDrop.ItemData.SharedData)MemberwiseCloneMethod.Invoke(src, null);
+
+        /// <summary>Mesh bounds of the item as a dropped instance shows it: attach grown by <paramref name="ratio"/> (restored afterwards).</summary>
+        private static Bounds DroppedBounds(GameObject item, float ratio)
+        {
+            var attach = item.transform.Find("attach");
+            if (attach == null || Mathf.Approximately(ratio, 1f)) return LocalMeshBounds(item);
+            var keep = attach.localScale;
+            attach.localScale = keep * ratio;
+            try { return LocalMeshBounds(item); }
+            finally { attach.localScale = keep; }
+        }
 
         /// <summary>Bounds of all enabled MeshRenderers in the root's local space, from mesh bounds (works on inactive prefabs).</summary>
         public static Bounds LocalMeshBounds(GameObject root)
@@ -301,6 +324,24 @@ namespace InvisibilityPotion.Items
                 catch (Exception e) { Plugin.Log.LogError($"assets: plant {name} failed: {e}"); }
             }
             Plugin.Log.LogInfo($"assets: {ok.Count} plant prefabs registered: {string.Join(", ", ok)}");
+        }
+    }
+
+    /// <summary>
+    /// On the root of an item whose world size differs from its worn size (ModelScale.DroppedRatio != 1): every world instance
+    /// (dropped item, loaded from the ZDO, icon render) multiplies its own "attach" by <see cref="m_ratio"/> in Awake. The prefab
+    /// itself never wakes (Jötunn keeps it under an inactive container), and VisEquipment / ItemStand / ArmorStand clone only
+    /// "attach", which does not carry this component, so worn and stand views keep the attach size. The root scale cannot carry
+    /// it: ItemDrop.SetQuality resets the root localScale to ItemData.GetScale() (docs/decompile-notes.md, round L).
+    /// </summary>
+    public sealed class DroppedItemScale : MonoBehaviour
+    {
+        public float m_ratio = 1f;
+
+        private void Awake()
+        {
+            var attach = transform.Find("attach");
+            if (attach != null && !Mathf.Approximately(m_ratio, 1f)) attach.localScale *= m_ratio;
         }
     }
 }
