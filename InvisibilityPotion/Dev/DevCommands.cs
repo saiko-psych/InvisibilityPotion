@@ -323,17 +323,20 @@ namespace InvisibilityPotion.Dev
                 if (prefab == null) { Say($"unknown prefab {args[0]}"); return; }
                 var count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1;
                 var level = args.Length > 2 && int.TryParse(args[2], out var l) ? l : 1;
+                var physics = prefab.GetComponent<Rigidbody>() != null;
                 for (var i = 0; i < count; i++)
                 {
                     var pos = p.transform.position + p.transform.forward * 5f + p.transform.right * i;
                     // Terrain height only when it is near the player: in a dungeon or a building the terrain lies far below the floor.
-                    if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground) && Mathf.Abs(ground - p.transform.position.y) < 3f) pos.y = ground + 0.3f;
+                    // Physics objects (a Rigidbody on the root: items, creatures) drop from 0.3 m; plants and props sit exactly on the ground.
+                    if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground) && Mathf.Abs(ground - p.transform.position.y) < 3f)
+                        pos.y = ground + (physics ? 0.3f : 0f);
                     var facing = Vector3.ProjectOnPlane(-p.transform.forward, Vector3.up);
                     var go = Object.Instantiate(prefab, pos, facing.sqrMagnitude > 0.001f ? Quaternion.LookRotation(facing) : Quaternion.identity);
                     var ch = go.GetComponent<Character>();
                     if (ch != null && level > 1) ch.SetLevel(level);
                 }
-                Say($"spawned {count} x {args[0]} (level {level})");
+                Say($"spawned {count} x {args[0]} (level {level}, {(physics ? "rigidbody: 0.3 m above the ground" : "no rigidbody: on the ground")})");
             }
 
             public override System.Collections.Generic.List<string> CommandOptionList() => ZNetScene.instance?.GetPrefabNames() ?? new System.Collections.Generic.List<string>();
