@@ -23,6 +23,11 @@ namespace InvisibilityPotion.Plants
         public const string TakenToken = "$ip_sapling_tree_taken";
 
         private static readonly Collider[] Hits = new Collider[64];
+        // Trunk colliders of FirTree/Pinetree_01/FirTree_big sit on Default (round N log: CapsuleCollider 'Pine_tree'/'trunk' layer Default);
+        // static_solid covers trunks of other tree prefabs. Resolved lazily: LayerMask needs the Unity runtime.
+        private static int _trunkMask = -1;
+        private static int TrunkMask => _trunkMask >= 0 ? _trunkMask : (_trunkMask = LayerMask.GetMask("Default", "static_solid"));
+        private static readonly Dictionary<TreeLichen, float> Distances = new Dictionary<TreeLichen, float>();   // reused per frame while a ghost shows
         private static readonly List<TreeLichen> Trees = new List<TreeLichen>();
         private static readonly List<TreeSaplingRule.Candidate> Candidates = new List<TreeSaplingRule.Candidate>();
         private static string _pendingMessage;
@@ -69,8 +74,9 @@ namespace InvisibilityPotion.Plants
             tree = null;
             Trees.Clear();
             Candidates.Clear();
-            var distances = new Dictionary<TreeLichen, float>();
-            var n = Physics.OverlapSphereNonAlloc(pos, TreeSaplingRule.TrunkRadius, Hits, ~0, QueryTriggerInteraction.Ignore);
+            var distances = Distances;
+            distances.Clear();
+            var n = Physics.OverlapSphereNonAlloc(pos, TreeSaplingRule.TrunkRadius, Hits, TrunkMask, QueryTriggerInteraction.Ignore);
             for (var i = 0; i < n; i++)
             {
                 var c = Hits[i];
