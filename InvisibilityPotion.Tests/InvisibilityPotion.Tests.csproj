@@ -16,6 +16,7 @@
     <Compile Include="../InvisibilityPotion/PatchHealth.Core.cs" Link="PatchHealth.Core.cs" />
     <!-- Wrapped in #if DEBUG; DEBUG is defined above so this compiles in any configuration -->
     <Compile Include="../InvisibilityPotion/Dev/AutoJoinConfig.Core.cs" Link="AutoJoinConfig.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Dev/SpawnRing.Core.cs" Link="SpawnRing.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/TierConfig.Core.cs" Link="TierConfig.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/TierRange.Core.cs" Link="TierRange.Core.cs" />
     <Compile Include="../InvisibilityPotion/Effects/InvisibilityStateMachine.Core.cs" Link="InvisibilityStateMachine.Core.cs" />

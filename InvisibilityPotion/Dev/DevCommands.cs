@@ -317,7 +317,10 @@ namespace InvisibilityPotion.Dev
         private class SpawnCommand : ConsoleCommand
         {
             public override string Name => "ip_spawn";
-            public override string Help => "ip_spawn <prefab> [count] [level]: spawn any prefab (creature, item, Plant_*, VeilGoggles_*) on the ground 5 m in front of you, facing you, 1 m apart";
+            public override string Help => "ip_spawn <prefab> [count] [level]: spawn any prefab (creature, item, Plant_*, VeilGoggles_*) on the ground 5 m in front of you, facing you, 1 m apart; " +
+                                           "plants (IP_BaldrsTear, IP_HelsEmberFern, Plant_*) as a group on a jittered ring (1.5-4 m) round that spot, tilted onto the ground like wild ones";
+
+            private static readonly System.Random Rng = new System.Random();
 
             public override void Run(string[] args)
             {
@@ -328,11 +331,14 @@ namespace InvisibilityPotion.Dev
                 var count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1;
                 var level = args.Length > 2 && int.TryParse(args[2], out var l) ? l : 1;
                 var physics = prefab.GetComponent<Rigidbody>() != null;
+                var harvest = prefab.GetComponent<Plants.VeilHarvest>();
+                var plant = !physics && (harvest != null || prefab.name.StartsWith("Plant_", System.StringComparison.Ordinal));
+                if (plant) { SpawnPlants(p, prefab, harvest, count); return; }
                 for (var i = 0; i < count; i++)
                 {
                     var pos = p.transform.position + p.transform.forward * 5f + p.transform.right * i;
                     // Terrain height only when it is near the player: in a dungeon or a building the terrain lies far below the floor.
-                    // Physics objects (a Rigidbody on the root: items, creatures) drop from 0.3 m; plants and props sit exactly on the ground.
+                    // Physics objects (a Rigidbody on the root: items, creatures) drop from 0.3 m; props sit exactly on the ground.
                     if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground) && Mathf.Abs(ground - p.transform.position.y) < 3f)
                         pos.y = ground + (physics ? 0.3f : 0f);
                     var facing = Vector3.ProjectOnPlane(-p.transform.forward, Vector3.up);
@@ -341,6 +347,44 @@ namespace InvisibilityPotion.Dev
                     if (ch != null && level > 1) ch.SetLevel(level);
                 }
                 Say($"spawned {count} x {args[0]} (level {level}, {(physics ? "rigidbody: 0.3 m above the ground" : "no rigidbody: on the ground")})");
+            }
+
+            /// <summary>
+            /// Plant group like ZoneSystem.PlaceVegetation (ZoneSystem.cs:1428-1555): ground point and normal from GetGroundData
+            /// (:2903), PlantVegetation.GroundOffset added, rotation onto the normal with a random yaw (:1534-1537), wild size
+            /// roll for VeilHarvest ground plants through ZNetView.SetLocalScale (:1555). One plant stays on the centre spot.
+            /// </summary>
+            private static void SpawnPlants(Player p, GameObject prefab, Plants.VeilHarvest harvest, int count)
+            {
+                var centre = p.transform.position + p.transform.forward * 5f;
+                var offsets = SpawnRing.Offsets(count, Rng);
+                var scaled = harvest != null && !harvest.OnTree && harvest.Tier >= 2 && harvest.Tier <= 3;
+                var lines = new System.Collections.Generic.List<string>();
+                foreach (var (x, z) in offsets)
+                {
+                    var pos = centre + new Vector3(x, 0f, z);
+                    var normal = Vector3.up;
+                    var onTerrain = false;
+                    if (ZoneSystem.instance != null)
+                    {
+                        var g = pos;
+                        ZoneSystem.instance.GetGroundData(ref g, out var n, out _, out _, out _);
+                        // terrain only when it is near the player (not in a dungeon or on a floor high above the terrain)
+                        if (Mathf.Abs(g.y - p.transform.position.y) < 8f) { pos.y = g.y + Plants.PlantVegetation.GroundOffset; normal = n; onTerrain = true; }
+                    }
+                    var yaw = Quaternion.Euler(0f, (float)(Rng.NextDouble() * 360.0), 0f);
+                    var rot = Quaternion.LookRotation(Vector3.Cross(normal, yaw * Vector3.forward), normal);
+                    var go = Object.Instantiate(prefab, pos, rot);
+                    var scale = 1f;
+                    var nv = go.GetComponent<ZNetView>();
+                    if (scaled && nv != null)
+                    {
+                        scale = Plants.PlantYield.RollScale(harvest.Tier, Rng.NextDouble());
+                        nv.SetLocalScale(Vector3.one * scale);
+                    }
+                    lines.Add($"({x:F1},{z:F1}) tilt {Vector3.Angle(Vector3.up, normal):F0}deg scale {scale:F2}{(onTerrain ? "" : " no terrain")}");
+                }
+                Say($"spawned {count} x {prefab.name} on a ring {SpawnRing.MinRadius}-{SpawnRing.MaxRadius} m round 5 m ahead (ground offset {Plants.PlantVegetation.GroundOffset} m, tilted onto the ground): {string.Join("; ", lines)}");
             }
 
             public override System.Collections.Generic.List<string> CommandOptionList() => ZNetScene.instance?.GetPrefabNames() ?? new System.Collections.Generic.List<string>();

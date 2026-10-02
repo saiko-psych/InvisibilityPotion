@@ -11,7 +11,7 @@ namespace InvisibilityPotion.Plants
     /// <summary>
     /// Builds the plan 5 runtime prefabs from the bundle plant models (spec §3.2-§3.4), after ModelPrefabs.RegisterPlants applied the
     /// size factors to the bundle prefabs' "model" children and before AssetBundles.Unload:
-    /// ground plants IP_BaldrsTear_a/b/c (T2) and IP_HelsEmberFern_a/b/c (T3) with a fixed model variant (ip_spawn), plus the mixed
+    /// ground plants IP_BaldrsTear_a..e (T2) and IP_HelsEmberFern_a..e (T3) with a fixed model variant (ip_spawn), plus the mixed
     /// IP_BaldrsTear / IP_HelsEmberFern used for wild spawning (one prefab per plant, so a vegetation group of 3-6 mixes variants:
     /// each instance picks its variant in VeilHarvest.Awake from its position). Root ZNetView (persistent, m_syncInitialScale) +
     /// VeilHarvest + VeilSight, children "picked" and "ripe" (hover collider; T3 an ember light); the Huldra's Hair trunk patch
@@ -24,7 +24,14 @@ namespace InvisibilityPotion.Plants
         public const string FernName = "IP_HelsEmberFern";
         public const string LichenName = "IP_Lichen";
         public const string HoverLayerName = "item";
+        /// <summary>Huldra's Hair model variants (trunk patch and the cultivated ground lichen).</summary>
         public static readonly string[] Variants = { "a", "b", "c" };
+        /// <summary>
+        /// Baldr's Tear and Hel's Ember Fern model variants (make_plants.py VARIANTS): T2 a/b/c differ in the blossom angle
+        /// (60/30/10 degrees below the horizontal), d has two blossoms, e only a closed bud; T3 d is a young fern (3 fronds,
+        /// cold heart, no ember light), e an old one (8 fronds, charred tips, strong heart and light).
+        /// </summary>
+        public static readonly string[] GroundVariants = { "a", "b", "c", "d", "e" };
         public static readonly string[] PickEffectSources = { "Pickable_Thistle", "Pickable_Dandelion", "Pickable_Mushroom" };
 
         /// <summary>Pick sound/particles borrowed from a vanilla pickable's m_pickEffector (Pickable.cs:36).</summary>
@@ -61,7 +68,7 @@ namespace InvisibilityPotion.Plants
             Step("lichen template", BuildLichenTemplate);
             foreach (var tier in new[] { 2, 3 })
             {
-                foreach (var v in Variants)
+                foreach (var v in GroundVariants)
                     Step($"ground plant T{tier}{v}", () => PrefabManager.Instance.AddPrefab(new CustomPrefab(BuildGround(tier, v), true)));
                 Step($"ground plant T{tier} mixed", () => PlantVegetation.Add(BuildGround(tier, null), tier));
             }
@@ -146,7 +153,7 @@ namespace InvisibilityPotion.Plants
 
         // ---------- ground plants (T2, T3) ----------
 
-        /// <summary>Ground plant prefab; <paramref name="v"/> null = mixed (all three variants under "ripe", one kept per instance).</summary>
+        /// <summary>Ground plant prefab; <paramref name="v"/> null = mixed (all <see cref="GroundVariants"/> under "ripe", one kept per instance).</summary>
         private static GameObject BuildGround(int tier, string v)
         {
             var baseName = tier == 2 ? BaldrName : FernName;
@@ -159,17 +166,17 @@ namespace InvisibilityPotion.Plants
             {
                 ripe = StageFrom($"Plant_T{tier}_{v}", root.transform, "ripe");
                 AddHoverBox(ripe, new Vector3(0.3f, 0.3f, 0.3f));
-                if (tier == 3) AddEmberLight(ripe);
+                if (tier == 3) AddEmberLight(ripe, v);
             }
             else
             {
                 ripe = new GameObject("ripe");
                 ripe.transform.SetParent(root.transform, false);
-                foreach (var each in Variants)
+                foreach (var each in GroundVariants)
                 {
                     var sub = StageFrom($"Plant_T{tier}_{each}", ripe.transform, each);
                     AddHoverBox(sub, new Vector3(0.3f, 0.3f, 0.3f));
-                    if (tier == 3) AddEmberLight(sub);
+                    if (tier == 3) AddEmberLight(sub, each);
                     variants.Add(sub);
                 }
             }
@@ -187,21 +194,24 @@ namespace InvisibilityPotion.Plants
             harvest.Variants = variants.ToArray();
             AssetBundles.Track(root);
             GroundPrefabs.Add(root);
-            Plugin.Log.LogInfo($"plants: {name} built (T{tier}, stages picked/ripe, {(v == null ? "variants a/b/c mixed by position" : "variant " + v)}, " +
+            Plugin.Log.LogInfo($"plants: {name} built (T{tier}, stages picked/ripe, {(v == null ? $"variants {string.Join("/", GroundVariants)} mixed by position" : "variant " + v)}, " +
                                $"hover layer {HoverLayerName}{(tier == 3 ? ", ember light" : "")}, size {PlantYield.ScaleRanges[tier].min}-{PlantYield.ScaleRanges[tier].max})");
             return root;
         }
 
-        private static void AddEmberLight(GameObject ripe)
+        /// <summary>Ember light per fern variant: none on the young fern d (its heart does not glow), stronger on the old fern e.</summary>
+        private static void AddEmberLight(GameObject ripe, string variant)
         {
+            if (variant == "d") return;
+            var strong = variant == "e";
             var anchor = ripe.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "EmberAnchor") ?? ripe.transform;
             var go = new GameObject("ember_light");
             go.transform.SetParent(anchor, false);
             var light = go.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = new Color(1f, 0.42f, 0.08f);
-            light.range = 1.6f;
-            light.intensity = 0.9f;
+            light.range = strong ? 2.2f : 1.6f;
+            light.intensity = strong ? 1.4f : 0.9f;
             light.shadows = LightShadows.None;
         }
 

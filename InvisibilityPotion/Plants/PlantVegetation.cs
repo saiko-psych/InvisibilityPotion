@@ -10,11 +10,21 @@ namespace InvisibilityPotion.Plants
     /// <summary>
     /// Wild spawning of the ground plants (spec §3.3) through Jötunn's ZoneManager.AddCustomVegetation (which also registers the
     /// prefab). ZoneSystem.PlaceVegetation treats m_max &lt; 1 as the chance per zone for one placement batch (ZoneSystem.cs:1399-1405);
-    /// the three variants share the zone chance, so each gets Max = chance / 3. Only zones generated after installing the mod get
-    /// plants (ZoneSystem.cs:1337). Zone chances are read here, once (restart to change).
+    /// one mixed prefab per plant carries the zone chance, each group member picks its model variant from its own position
+    /// (VeilHarvest). Only zones generated after installing the mod get plants (ZoneSystem.cs:1337). Zone chances are read here,
+    /// once (restart to change). Group members sit <see cref="GroundOffset"/> in the ground and follow the slope
+    /// (<see cref="GroundTiltChance"/>), so a group looks embedded rather than stamped (ZoneSystem.cs:1532-1541).
     /// </summary>
     public static class PlantVegetation
     {
+        /// <summary>ZoneVegetation.m_groundOffset (ZoneSystem.cs:104, added to the ground height at :1532): slightly sunk.</summary>
+        public const float GroundOffset = -0.03f;
+        /// <summary>
+        /// ZoneVegetation.m_chanceToUseGroundTilt (ZoneSystem.cs:54, :1534-1537): 1 = every plant is rotated onto the ground normal.
+        /// Jötunn 2.30.2's VegetationConfig has no property for it (ilspy), so it is set on CustomVegetation.Vegetation.
+        /// </summary>
+        public const float GroundTiltChance = 1f;
+
         public static readonly List<CustomVegetation> Registered = new List<CustomVegetation>();
         private static bool _hooked;
 
@@ -42,6 +52,7 @@ namespace InvisibilityPotion.Plants
                 MaxTilt = tier == 2 ? 25f : 30f,
                 ScaleMin = PlantYield.ScaleRanges[tier].min,
                 ScaleMax = PlantYield.ScaleRanges[tier].max,
+                GroundOffset = GroundOffset,
             };
             var veg = new CustomVegetation(prefab, true, cfg);
             if (!ZoneManager.Instance.AddCustomVegetation(veg))
@@ -51,6 +62,7 @@ namespace InvisibilityPotion.Plants
                 return;
             }
             Registered.Add(veg);
+            veg.Vegetation.m_chanceToUseGroundTilt = GroundTiltChance;
             if (tier == 3)
             {
                 // Ashlands lava is painted into the vegetation mask; PlaceVegetation checks the mask only when min != max
@@ -60,7 +72,8 @@ namespace InvisibilityPotion.Plants
                 Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: vegetation mask {veg.Vegetation.m_minVegetation}-{veg.Vegetation.m_maxVegetation} (keeps ferns off lava)");
             }
             Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: biome {cfg.Biome}, max {cfg.Max:0.###} per zone, " +
-                               $"group {cfg.GroupSizeMin}-{cfg.GroupSizeMax} r {cfg.GroupRadius} m, tilt {cfg.MinTilt}-{cfg.MaxTilt}, scale {cfg.ScaleMin}-{cfg.ScaleMax}");
+                               $"group {cfg.GroupSizeMin}-{cfg.GroupSizeMax} r {cfg.GroupRadius} m, tilt {cfg.MinTilt}-{cfg.MaxTilt}, scale {cfg.ScaleMin}-{cfg.ScaleMax}, " +
+                               $"ground offset {veg.Vegetation.m_groundOffset} m, ground tilt chance {veg.Vegetation.m_chanceToUseGroundTilt}");
             if (!_hooked)
             {
                 _hooked = true;
@@ -87,7 +100,7 @@ namespace InvisibilityPotion.Plants
                 if (zv == null) { yield return $"{cv.Name}: not in ZoneSystem"; continue; }
                 var inSystem = ZoneSystem.instance != null && ZoneSystem.instance.m_vegetation.Contains(zv);
                 yield return $"{cv.Name}: biome {zv.m_biome}, area {zv.m_biomeArea}, max {zv.m_max:0.###}/zone, group {zv.m_groupSizeMin}-{zv.m_groupSizeMax} r {zv.m_groupRadius}, " +
-                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, vegetation mask {zv.m_minVegetation}-{zv.m_maxVegetation}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude}, block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
+                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, ground offset {zv.m_groundOffset}, ground tilt chance {zv.m_chanceToUseGroundTilt}, vegetation mask {zv.m_minVegetation}-{zv.m_maxVegetation}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude}, block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
             }
         }
     }
