@@ -28,10 +28,12 @@ SEED = 5
 # in joint space. See README "Head fit".
 REF_ALIGN = dict(scale=0.0095, offset=(-0.129, -1.603, -0.115))
 EYE = (0.040, 0.002)          # eye centre x (half the eye distance) and height, from the helmet eye holes / eye slits
-RIM_GAP = 0.004               # rim back face this far in front of the face (brow ridge / nose) inside the rim disc
+RAISE_12 = 0.008              # T1/T2 sit this much above the measured eye centre (in-game: the measured eyes are ~8 mm low)
+RIM_GAP = 0.004               # T1/T2 rim back face this far in front of the face everywhere inside the (tilted) rim disc
+TILT_MAX = 15.0               # T1/T2 rim plane follows the eye-socket surface, tilted at most this many degrees off -y
 STRAP_OFF = 0.0025            # strap inner face off the head surface
 STRAP_Z = (0.004, 0.030)      # strap height above the eyes at the temples and at the back of the head (above the ears)
-MASK_CLEAR = 0.005            # T3 mask inner face off the smoothed head surface
+MASK_CLEAR = 0.003            # T3 mask inner face off the smoothed head surface
 
 # Material table: name -> (colour RGBA, roughness, metallic, emission strength, alpha)
 MATS = {
@@ -90,8 +92,8 @@ def measure(body, helm):
     """Measure the aligned head in joint space and write head_fit.json."""
     bm = bmesh.new(); bm.from_mesh(body.data); bm.transform(body.matrix_world); tree = BVHTree.FromBMesh(bm)
     cy = -0.005                                                     # vertical head axis at (0, cy)
-    heights = [round(-0.045 + 0.015*i, 3) for i in range(11)]
-    angles = list(range(-180, 180, 15))
+    heights = [round(-0.045 + 0.005*i, 3) for i in range(31)]     # 5 mm x 5 deg: fine enough for the ears and brow
+    angles = list(range(-180, 180, 5))
     radii = []
     for h in heights:
         row = []
@@ -111,7 +113,10 @@ def measure(body, helm):
     hole = sum((v.co for v in hv), Vector())/max(1, len(hv))
     fit = dict(align=REF_ALIGN, cy=cy, heights=heights, angles=angles, radii=radii, face_xs=xs, face_zs=zs, face_y=face,
                helmet_eye_hole=[round(hole.x, 4), round(hole.y, 4), round(hole.z, 4)])
-    with open(FIT_JSON, "w") as f: json.dump(fit, f, indent=1)
+    with open(FIT_JSON, "w") as f:                                  # one table row per line
+        f.write("{\n" + ",\n".join(f' "{k}": ' + ("[\n  " + ",\n  ".join(json.dumps(r) for r in v) + "\n ]"
+                                                     if isinstance(v, list) and v and isinstance(v[0], list) else json.dumps(v))
+                                     for k, v in fit.items()) + "\n}\n")
     return fit
 
 def lerp_table(xs, ys, table, x, y):
@@ -145,21 +150,45 @@ def face_front(cx, cz, r):
     return min(face_y(x, z) for x, z in pts)
 
 REF_BODY, REF_HELM = load_ref()
+FIT_CHECK = {"t3 mask back": []}                  # vertex groups whose clearance to the reference head is logged
 FIT = measure(REF_BODY, REF_HELM) if REF_BODY else json.load(open(FIT_JSON))
 EX, EZ = EYE
 
-def strap_pt(th, off):
+def strap_pt(th, off, ez=None):
     back = (1 + math.sin(math.radians(th)))/2
-    return head_pt(th, EZ + STRAP_Z[0] + (STRAP_Z[1] - STRAP_Z[0])*back**1.5, off)
+    return head_pt(th, (EZ if ez is None else ez) + STRAP_Z[0] + (STRAP_Z[1] - STRAP_Z[0])*back**1.5, off, 8, 0.012)
 
-def strap_path(th_start, th_end, off, n=24):
+def strap_path(th_start, th_end, off, n=24, ez=None):
     """Strap centre line hugging the head from th_start to th_end (degrees; -90 front, 90 back), rising from
     STRAP_Z[0] above the eyes at the temples to STRAP_Z[1] at the back (above the ears)."""
-    return [strap_pt(th_start + (th_end - th_start)*i/n, off)[0] for i in range(n + 1)]
+    return [strap_pt(th_start + (th_end - th_start)*i/n, off, ez)[0] for i in range(n + 1)]
+
+def rim_frame(sx, ez, r_out, depth):
+    """T1/T2 rim for the eye at x = sx*EX, height ez: (centre, fwd, M). The rim plane follows the eye-socket surface:
+    fwd is the outward normal of a plane fitted to the face inside the rim disc (tilt clamped to TILT_MAX); the centre
+    stays on the eye's line of sight (x, z fixed) and moves back until the rim's back face is RIM_GAP in front of the
+    face everywhere inside the disc. M maps the untilted rim frame (x right, y back, z up) to the tilted one."""
+    import numpy as np
+    ex = sx*EX
+    smp = [(ex + r_out*f*math.cos(a), ez + r_out*f*math.sin(a)) for f in (0.0, 0.4, 0.75, 1.0)
+           for a in [k*math.pi/6 for k in range(12)]]
+    fit = [(x, z, face_y(x, z)) for x, z in smp if abs(x) <= 0.062]
+    A = np.array([[1, x - ex, z - ez] for x, z, _ in fit]); yv = np.array([y for _, _, y in fit])
+    _, b, c = np.linalg.lstsq(A, yv, rcond=None)[0]
+    fwd = Vector((b, -1.0, c)).normalized()
+    ang = math.degrees(fwd.angle(Vector((0, -1, 0))))
+    if ang > TILT_MAX: fwd = Vector((0, -1, 0)).slerp(fwd, TILT_MAX/ang).normalized()
+    yax = -fwd; xax = (Vector((1, 0, 0)) - yax*yax.x).normalized(); zax = xax.cross(yax)
+    from mathutils import Matrix
+    M = Matrix((xax, yax, zax)).transposed()
+    yc = min(face_y(ex + o.x, ez + o.z) - RIM_GAP - o.y
+             for o in [M @ Vector((r_out*f*math.cos(a), depth/2, r_out*f*math.sin(a)))
+                       for f in (0.0, 0.5, 0.8, 1.0) for a in [k*math.pi/8 for k in range(16)]])
+    return Vector((ex, yc, ez)), fwd, M
 
 def rim_y(r_out, depth):
-    """Rim centre plane: the rim's back face RIM_GAP in front of the face inside the rim disc."""
-    return face_front(EX, EZ, r_out) - RIM_GAP - depth/2
+    """Old untilted rim centre plane (v4: back face 4 mm in front of the face), kept for the log comparison."""
+    return face_front(EX, EZ, r_out) - 0.004 - depth/2
 
 # ---------------------------------------------------------------- lenses, clamps, buckles
 def lens(B, c, fwd, r, dome, back, segs, m):
@@ -194,27 +223,29 @@ def buckle(B, pts, i, width, th, m):
 
 # ---------------------------------------------------------------- Tier I
 def watchman(rng):
-    t = T1; B = Builder(rng); fwd = Vector((0, -1, 0))
-    r_in, r_out = t["rim_r"]; ex = EX; ry = rim_y(r_out, t["rim_depth"])
+    t = T1; B = Builder(rng); ez = EZ + RAISE_12
+    r_in, r_out = t["rim_r"]; ex = EX; ends = {}
     for sx in (-1, 1):
-        c = Vector((sx*ex, ry, EZ))
+        c, fwd, M = rim_frame(sx, ez, r_out, t["rim_depth"])
+        ends[sx] = c + M @ Vector((sx*(r_out + 0.014), 0.024, 0))
         B.ring(c, fwd, r_in, r_out, t["rim_depth"], t["rim_segs"], "bronze", t["jitter"], rot=rng.uniform(0, 1))
         lens(B, c + fwd*(t["rim_depth"]/2 + 0.0005), fwd, t["lens_r"], t["lens_dome"], t["lens_back"], t["rim_segs"], "amber_lens")
         clamps(B, c, fwd, r_in, r_out, t["rim_depth"], [a if sx > 0 else 180 - a for a in t["clamps"]], "bronze", "bronze")
         # rough wood block at the temple, riveted between rim and strap
-        B.box(c + Vector((sx*(r_out + 0.007), 0.010, 0.0)), (0.016, 0, 0), (0, 0.03, 0), (0, 0, 0.028), "wood")
-        B.box(c + Vector((sx*(r_out + 0.007), -0.006, 0.0)), (0.006, 0, 0), (0, 0.004, 0), (0, 0, 0.007), "bronze")
+        B.box(c + M @ Vector((sx*(r_out + 0.007), 0.010, 0.0)), M @ Vector((0.016, 0, 0)), M @ Vector((0, 0.03, 0)),
+              M @ Vector((0, 0, 0.028)), "wood")
+        B.box(c + M @ Vector((sx*(r_out + 0.007), -0.006, 0.0)), M @ Vector((0.006, 0, 0)), M @ Vector((0, 0.004, 0)),
+              M @ Vector((0, 0, 0.007)), "bronze")
     # bronze bridge: a flat riveted bar over the nose between the rims
-    bz = EZ + 0.012; by = face_y(0, bz) - 0.0035                     # rests on the nose bridge
+    bz = ez + 0.012; by = face_y(0, bz) - 0.0035                     # rests on the nose bridge
     B.box((0, by, bz), (2*(ex - r_out*0.75), 0, 0), (0, 0.005, 0), (0, 0, 0.007), "bronze")
     for sx in (-1, 1):
         B.disc((sx*(ex - r_out*0.95), by - 0.0025, bz), (0, -1, 0), 0.002, 5, "bronze", dome=0.0016)
     B.tube([(-0.006, by - 0.003, bz + 0.0045), (0.0, by - 0.006, bz + 0.0015), (0.006, by - 0.003, bz + 0.0045)],
            [0.0022]*3, 4, "twine")                                    # twine wrap on the bridge
     # leather strap around the head with a bronze buckle on the right side
-    xs = ex + r_out + 0.014
-    pts = strap_path(-140, -400, STRAP_OFF + t["strap_th"]/2)
-    pts = [Vector((-xs, ry + 0.024, EZ))] + pts + [Vector((xs, ry + 0.024, EZ))]
+    pts = strap_path(-140, -400, STRAP_OFF + t["strap_th"]/2, ez=ez)
+    pts = [ends[-1]] + pts + [ends[1]]
     B.ribbon(pts, t["strap_w"], t["strap_th"], "rough_leather", jitter=0.15)
     buckle(B, pts, t["buckle_at"], t["strap_w"], t["strap_th"], "bronze")
     # twine wraps on the strap behind each block
@@ -225,34 +256,35 @@ def watchman(rng):
 
 # ---------------------------------------------------------------- Tier II
 def mimir(rng):
-    t = T2; B = Builder(rng); fwd = Vector((0, -1, 0))
+    t = T2; B = Builder(rng); ez = EZ + RAISE_12
     r_in, r_out = t["rim_r"]
-    ex = EX; ry = rim_y(t["bezel_r"], t["rim_depth"])
+    ex = EX; ends, inner = {}, {}
     for sx in (-1, 1):
-        c = Vector((sx*ex, ry, EZ))
+        c, fwd, M = rim_frame(sx, ez, t["bezel_r"], t["rim_depth"])
+        ends[sx] = c + M @ Vector((sx*(r_out + 0.022), 0.018, 0))
+        inner[sx] = c + M @ Vector((-sx*r_out*0.8, -t["rim_depth"]/2, 0.012))
         B.ring(c, fwd, r_in, r_out, t["rim_depth"], t["rim_segs"], "silver")
         B.ring(c + fwd*0.004, fwd, r_out - 0.001, t["bezel_r"], 0.004, t["rim_segs"], "silver")   # raised bezel
         lens(B, c + fwd*(t["rim_depth"]/2 + 0.0005), fwd, t["lens_r"], t["lens_dome"], t["lens_back"], t["rim_segs"], "crystal_lens")
         clamps(B, c, fwd, r_in, t["bezel_r"], t["rim_depth"], [a if sx > 0 else 180 - a for a in t["clamps"]], "silver", "frost_crystal")
         # silver temple arm from rim to strap, with a frost shard sweeping back and up
-        side = Vector((sx*(r_out + 0.010), 0.004, 0.004))
-        B.tube([c + Vector((sx*r_out*0.9, 0.0, 0.004)), c + side, c + Vector((sx*(r_out + 0.022), 0.018, 0.002))],
+        side = M @ Vector((sx*(r_out + 0.010), 0.004, 0.004))
+        B.tube([c + M @ Vector((sx*r_out*0.9, 0.0, 0.004)), c + side, c + M @ Vector((sx*(r_out + 0.022), 0.018, 0.002))],
                [0.004, 0.0045, 0.004], 6, "silver")
-        B.bipyramid(c + side + Vector((sx*0.004, 0.006, 0.012)), Vector((sx*0.35, 0.8, 0.75)), 0.006, 0.040, 0.008, 6, "frost_crystal")
-        B.bipyramid(c + side + Vector((sx*0.006, 0.010, 0.004)), Vector((sx*0.6, 0.9, 0.2)), 0.004, 0.024, 0.006, 5, "frost_crystal")
+        B.bipyramid(c + side + M @ Vector((sx*0.004, 0.006, 0.012)), M @ Vector((sx*0.35, 0.8, 0.75)), 0.006, 0.040, 0.008, 6, "frost_crystal")
+        B.bipyramid(c + side + M @ Vector((sx*0.006, 0.010, 0.004)), M @ Vector((sx*0.6, 0.9, 0.2)), 0.004, 0.024, 0.006, 5, "frost_crystal")
     # silver bridge: a high arch with a small frost crystal set in the middle
-    bz = EZ + 0.014; by = min(face_y(0, bz) - 0.004, ry - t["rim_depth"]/2)   # arch rests on the nose bridge
-    B.tube([(-ex + r_out*0.8, ry - t["rim_depth"]/2, EZ + 0.012), (0, by, bz),
-            (ex - r_out*0.8, ry - t["rim_depth"]/2, EZ + 0.012)], [0.0032, 0.0036, 0.0032], 6, "silver")
+    bz = ez + 0.014; by = min(face_y(0, bz) - 0.004, inner[-1].y, inner[1].y)   # arch rests on the nose bridge
+    B.tube([inner[-1], (0, by, bz), inner[1]], [0.0032, 0.0036, 0.0032], 6, "silver")
     B.bipyramid((0, by - 0.004, bz + 0.002), (0, -1, 0), 0.004, 0.005, 0.002, 6, "frost_crystal")
     # dark leather strap with wolf-pelt trim along the top edge
-    xs = ex + r_out + 0.022
-    pts = strap_path(-140, -400, STRAP_OFF + t["strap_th"]/2)
-    pts = [Vector((-xs, ry + 0.018, EZ))] + pts + [Vector((xs, ry + 0.018, EZ))]
+    pts = strap_path(-140, -400, STRAP_OFF + t["strap_th"]/2, ez=ez)
+    pts = [ends[-1]] + pts + [ends[1]]
     B.ribbon(pts, t["strap_w"], t["strap_th"], "dark_leather")
     buckle(B, pts, t["buckle_at"], t["strap_w"], t["strap_th"], "silver")
     # fur: short pelt band (ribbon) plus tufts (4-sided cones) leaning back
-    fur_pts = [p + Vector((0, 0, t["strap_w"]*0.55)) for p in pts[2:-2]]
+    fur_pts = [p + Vector((0, 0, t["strap_w"]*0.55)) + Vector((p.x, p.y - FIT["cy"], 0)).normalized()*0.0045
+               for p in pts[2:-2]]                                  # out by the band's half thickness: no part in the head
     B.ribbon(fur_pts, 0.010, t["strap_th"]*4.0, "wolf_pelt")
     n = t["fur_tufts"]
     for i in range(n):
@@ -262,7 +294,7 @@ def mimir(rng):
         L = t["fur_len"]*rng.uniform(0.7, 1.15)
         tip = p + Vector((0, 0, L*0.45)) + outv*L*0.6 + Vector((0, L*0.45, 0)) + tng*rng.uniform(-0.25, 0.25)*L  # brushed back
         r = 0.0075
-        base = [p + tng*r, p + outv*r*0.8, p - tng*r, p - outv*r*0.8]
+        base = [p + tng*r, p + outv*r*0.8, p - tng*r, p - outv*r*0.2]   # inner corner stays outside the head
         for k in range(4): B.face([base[k], base[(k+1) % 4], tip], "wolf_pelt")
     return B.finish("goggles_t2")
 
@@ -274,9 +306,13 @@ def allfather(rng):
     zs = [z0, z0*0.35 + z1*0.0, z1*0.6, z1, z1 + 0.006]
     bulge = [0.0, 0.004, 0.006, 0.010, 0.004]      # brow ridge pushed forward
     def mask_pt(th, z):
-        """Mask inner surface: the head smoothed over the eye sockets, MASK_CLEAR out."""
-        p, d = head_pt(th, EZ + z, MASK_CLEAR, 15, 0.018)
-        return p, d
+        """Mask inner surface, MASK_CLEAR out: the head smoothed over the eye sockets (wide smoothing at the front,
+        narrow at the temples and below the eyes, so the edges and the cheek guards lie on the face)."""
+        front = max(0.0, 1 - abs(th + 90)/50)                       # 1 at the nose, 0 from 50 deg off the front
+        socket = front if -0.008 <= z <= 0.020 else 0.0             # wide smoothing only across the eye sockets
+        dth = max(15*socket, 6*front)                              # a little at the nose so the notch clears it
+        dz = 0.018*socket
+        return head_pt(th, EZ + z, MASK_CLEAR, dth, dz)
     front, back = [], []
     for zi, z in enumerate(zs):
         fr, bk = [], []
@@ -292,8 +328,8 @@ def allfather(rng):
                 zz -= 0.012*cx**2                                 # brow follows the head
                 if cx < 0.3: zz -= 0.010*(1 - cx/0.3)             # stern V between the brows
             p, nrm = mask_pt(th, zz)
-            q = p + nrm*(t["mask_th"] + bulge[zi]*(1 - 0.6*cx))
-            fr.append(B.v(q)); bk.append(B.v(q - nrm*t["mask_th"]))
+            q = p + nrm*(t["mask_th"] + bulge[zi]*(1 - 0.6*cx))      # the bulge thickens the front only
+            fr.append(B.v(q)); bk.append(B.v(p)); FIT_CHECK["t3 mask back"].append(p)
         front.append(fr); back.append(bk)
     for zi in range(len(zs)-1):
         B.bridge(front[zi], front[zi+1], "flametal", closed=False)
@@ -303,26 +339,56 @@ def allfather(rng):
     for c in (0, cols):
         for zi in range(len(zs)-1):
             B.face([front[zi][c], back[zi][c], back[zi+1][c], front[zi+1][c]], "flametal")
-    def on_mask(x, z, extra):
-        """Point on the mask front at x (found by bisection over the angle) and height z above the eyes."""
+    def bulge_at(z, th):
+        """Front bulge of the mask at height z (interpolated over the rows) and angle th."""
+        cx = min(1.0, abs((th - th0)/(th1 - th0) - 0.5)*2)
+        if z <= zs[0]: b = bulge[0]
+        elif z >= zs[-1]: b = bulge[-1]
+        else:
+            i = max(k for k in range(len(zs) - 1) if zs[k] <= z); f = (z - zs[i])/(zs[i+1] - zs[i])
+            b = bulge[i]*(1 - f) + bulge[i+1]*f
+        return b*(1 - 0.6*cx)
+    def mask_th_at(x, z):
+        """Angle at which the mask passes x at height z (bisection)."""
         lo, hi = (-180.0, -90.0) if x < 0 else (-90.0, 0.0)
         for _ in range(30):
             mid = (lo + hi)/2
-            px = mask_pt(mid, z)[0].x
-            if px < x: lo = mid                                   # x grows with the angle on both halves
+            if mask_pt(mid, z)[0].x < x: lo = mid                   # x grows with the angle on both halves
             else: hi = mid
-        p, d = mask_pt((lo + hi)/2, z)
-        return p + d*(t["mask_th"] + extra), d
-    # both eyes: obsidian lens in a raised flametal bezel with an ember rim
+        return (lo + hi)/2
+    def on_mask_th(th, z, extra):
+        p, d = mask_pt(th, z)
+        return p + d*(t["mask_th"] + bulge_at(z, th) + extra), d
+    def on_mask(x, z, extra):
+        """Point on the mask front at x and height z above the eyes."""
+        return on_mask_th(mask_th_at(x, z), z, extra)
+    def surf(c_th, cz, u, v, h):
+        """Point u metres round the mask (arc length) and v metres up from (c_th, cz), h off the mask front: shapes
+        laid out this way stay round on the curved mask instead of stretching round the temple."""
+        r = (mask_pt(c_th, cz)[0] - Vector((0, FIT["cy"], EZ + cz))).length
+        return on_mask_th(c_th + math.degrees(u/r), cz + v, h)[0]
+    def conform_ring(c_th, cz, r_in, r_out, h0, h1, segs, m):
+        """Annulus lying on the curved mask front (back face h0, front face h1 off it), so no edge floats."""
+        loops = [[], [], [], []]
+        for k in range(segs):
+            a = 2*math.pi*k/segs
+            for li, (r, h) in enumerate(((r_out, h0), (r_out, h1), (r_in, h1), (r_in, h0))):
+                loops[li].append(B.v(surf(c_th, cz, r*math.cos(a), r*math.sin(a), h)))
+        for a_, b_ in zip(loops, loops[1:] + loops[:1]): B.bridge(a_, b_, m)
+    def conform_disc(c_th, cz, r, h, dome, segs, m):
+        rim = [B.v(surf(c_th, cz, r*math.cos(2*math.pi*k/segs), r*math.sin(2*math.pi*k/segs), h)) for k in range(segs)]
+        mid = B.v(surf(c_th, cz, 0, 0, h + dome))
+        for k in range(segs): B.face([rim[k], rim[(k+1) % segs], mid], m)
+    # both eyes: obsidian lens in a raised flametal bezel with an ember rim, all following the mask round the temple
     lr = t["lens_r"]
     for sx in (-1, 1):
-        c, nrm = on_mask(sx*EX, 0.002, 0.004)
-        B.ring(c, nrm, lr - 0.001, lr + 0.007, 0.012, 12, "flametal")
-        B.ring(c + nrm*0.0055, nrm, lr - 0.0015, lr + 0.0005, 0.002, 12, "ember_rim")
-        B.disc(c + nrm*0.004, nrm, lr, 12, "obsidian_lens", dome=0.003)
+        c_th = mask_th_at(sx*EX, 0.002)
+        conform_ring(c_th, 0.002, lr - 0.001, lr + 0.007, -0.002, 0.008, 12, "flametal")
+        conform_ring(c_th, 0.002, lr - 0.0015, lr + 0.0005, 0.007, 0.0095, 12, "ember_rim")
+        conform_disc(c_th, 0.002, lr, 0.0075, 0.003, 12, "obsidian_lens")
     # small flametal crest plate in the brow V carrying an Ansuz mark (stave + two branches) in ember inlay
     c, nrm = on_mask(0.0, t["rune_z"], 0.0)
-    c = c + nrm*0.0045
+    c = c + nrm*0.0005
     up = Vector((0, 0, 1)); rt = up.cross(nrm).normalized()
     B.box(c + nrm*0.0015, rt*t["crest_w"], up*t["crest_h"], nrm*0.003, "flametal")
     c = c + nrm*0.003
@@ -358,8 +424,38 @@ log = [f"HEAD FIT (joint space, Blender axes: x = wearer's left, -y = front, z =
        f"head half-width at the temples = {r_head(0, EZ + 0.01):.3f} / {r_head(180, EZ + 0.01):.3f} (axis at y {FIT['cy']:+.3f})",
        f"head radius at the back (strap height) = {r_head(90, EZ + STRAP_Z[1]):.3f}; front at the brow = {r_head(-90, EZ + 0.01):.3f}",
        f"helmet eye-hole centre = {FIT['helmet_eye_hole']}",
-       f"rim centre planes: T1 y = {rim_y(T1['rim_r'][1], T1['rim_depth']):+.4f}, T2 y = {rim_y(T2['bezel_r'], T2['rim_depth']):+.4f}",
+       f"v4 rim centre planes (untilted, 4 mm gap): T1 y = {rim_y(T1['rim_r'][1], T1['rim_depth']):+.4f}, T2 y = {rim_y(T2['bezel_r'], T2['rim_depth']):+.4f}",
+       *[f"T{n} rim (right eye, raised {RAISE_12*1000:.0f} mm): centre {tuple(round(v, 4) for v in c)}, tilt {math.degrees(f.angle(Vector((0, -1, 0)))):.1f} deg, "
+         f"normal {tuple(round(v, 3) for v in f)}"
+         for n, (c, f, _) in ((1, rim_frame(1, EZ + RAISE_12, T1['rim_r'][1], T1['rim_depth'])),
+                              (2, rim_frame(1, EZ + RAISE_12, T2['bezel_r'], T2['rim_depth'])))],
        f"source: {'ref/ meshes (re-measured)' if REF_BODY else 'head_fit.json'}"]
+if REF_BODY:                                      # clearance to the reference head (negative = inside the head)
+    hb_ = bmesh.new(); hb_.from_mesh(REF_BODY.data); hb_.transform(REF_BODY.matrix_world); HEAD = BVHTree.FromBMesh(hb_)
+    def signed(co):
+        """Radial gap: distance from the head axis minus the head surface radius at the same angle and height, the
+        surface found by an exact ray cast from outside (the body has inner meshes, so nearest-point tests fail)."""
+        d = Vector((co.x, co.y - FIT["cy"], 0)); r = d.length; d.normalize()
+        hit = HEAD.ray_cast(Vector((0, FIT["cy"], co.z)) + d*0.4, -d)[0]
+        return r - (Vector((hit.x, hit.y - FIT["cy"], 0)).length if hit else 0.0)
+    for k, ob in models.items():
+        d = sorted(signed(ob.matrix_world @ v.co) for v in ob.data.vertices)
+        log.append(f"CLEAR goggles_{k}: min {d[0]*1000:+.1f} mm over {len(d)} verts, {sum(1 for x in d if x < 0)} inside the head")
+        per = {}
+        for poly in ob.data.polygons:
+            m_ = ob.data.materials[poly.material_index].name
+            for vi in poly.vertices:
+                co = ob.matrix_world @ ob.data.vertices[vi].co
+                per[m_] = min(per.get(m_, (1.0, None)), (signed(co), tuple(round(c_, 3) for c_ in co)))
+        log.append("  min per material: " + ", ".join(f"{m_} {v*1000:+.1f}" + (f" at {at}" if v < 0 else "")
+                                                       for m_, (v, at) in sorted(per.items())))
+    if os.environ.get("GOGGLES_FIT_DEBUG"):                       # per-row mask clearance table
+        pts = FIT_CHECK["t3 mask back"]; cols = 21
+        for zi in range(len(pts)//cols):
+            log.append("  row %d z %+.3f: " % (zi, pts[zi*cols].z) + " ".join("%+5.1f" % (signed(p)*1000) for p in pts[zi*cols:(zi+1)*cols]))
+    for name, pts in FIT_CHECK.items():
+        d = sorted(signed(p) for p in pts)
+        log.append(f"CLEAR {name}: min {d[0]*1000:+.1f} / median {d[len(d)//2]*1000:+.1f} / max {d[-1]*1000:+.1f} mm")
 for k, ob in models.items():
     log.append(f"TRIS goggles_{k}: {tri_count(ob)}")
     export_fbx(os.path.join(OUT, f"goggles_{k}.fbx"), ob)
@@ -385,7 +481,8 @@ lights = [light("key", 'AREA', (-0.5, -0.8, 0.6), 14, (1.0, 0.88, 0.75), 0.8, tg
           light("fill", 'AREA', (0.8, -0.6, 0.2), 4, (0.75, 0.82, 1.0), 1.0, tgt),
           light("rim", 'AREA', (0.2, 0.8, 0.6), 10, (1.0, 0.9, 0.8), 0.8, tgt)]
 world((0.16, 0.155, 0.15, 1))
-cams = [((0.0, -0.62, 0.05), (0.0, -0.02, 0.005), 55), ((0.47, -0.40, 0.10), (0.0, 0.0, 0.0), 55)]
+cams = [((0.0, -0.62, 0.05), (0.0, -0.02, 0.005), 55), ((0.47, -0.40, 0.10), (0.0, 0.0, 0.0), 55),
+        ((0.60, -0.06, 0.02), (0.0, -0.06, 0.005), 70)]                     # front, 3/4, side (fit check)
 render_panels([dict(height=420, panels=[dict(width=w, cam=cam, show=[head, ob] + lights)
                                         for w, ob in zip((427, 427, 426), models.values())]) for cam in cams],
               "preview-goggles.png", PREVIEW, "goggles.blend")

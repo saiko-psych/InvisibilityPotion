@@ -11,7 +11,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v5) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3_a/b/c`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v5.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_ingredients.py` (v1) | `ingredient_t1..3.fbx`, `ingredients.blend`, `ingredients.log` | `preview-ingredients-v1.png` | base centre (lying as dropped) | `attach` (bounding-box centre) |
-| `make_goggles.py` (v4) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v4.png` | helmet joint `Helmet_attach` | `attach` (joint origin) |
+| `make_goggles.py` (v4, round L fit) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v4.png` | helmet joint `Helmet_attach` | `attach` (joint origin) |
 
 ## Shared conventions (`common.py`)
 
@@ -184,15 +184,25 @@ each FBX has an `attach` empty at that origin. Blender frame: the wearer faces -
    helmet's eye holes and the face just behind its face plate (checked in front and side renders; about 1 cm
    uncertainty). The exporter should be fixed to bake into joint space; then set `REF_ALIGN` to scale 1, offset 0.
 3. With `ref/` present the script measures the aligned head and rewrites `head_fit.json` (committed): a polar radius
-   table around a vertical head axis (11 heights x 24 angles), a face depth grid (front-most face y over x/z) and the
+   table around a vertical head axis (31 heights x 72 angles, 5 mm x 5 deg, fine enough for the ears), a face depth grid (front-most face y over x/z) and the
    helmet eye-hole centre. Without `ref/` it reads `head_fit.json`, so `make models` works anywhere (the preview then
    uses a coarse proxy head built from the table).
-4. Placement: the lens rims are centred on the eyes with their back face `RIM_GAP` (4 mm) in front of the face inside
-   the rim disc (the brow ridge, which is 1.4 cm in front of the eye surface, decides it); the bridges rest on the nose
-   bridge; the straps run along the head surface (radius smoothed outwards over 15 deg / 1.2 cm so they bridge the
-   eye sockets and crevices) `STRAP_OFF` (2.5 mm) off it, from the temples (`STRAP_Z[0]` = 4 mm above the eyes) round
-   the back above the ears (`STRAP_Z[1]` = 3 cm above the eyes); the T3 half-mask follows the smoothed head surface
-   with `MASK_CLEAR` (5 mm) and its lenses are found on the mask at the eye x.
+4. Placement (round L, after the in-game check of v4: T1/T2 sat slightly low, T3 a few mm off the cheeks):
+   - T1/T2 sit `RAISE_12` (8 mm) above the measured eye centre (so at z +0.010, next to the helmet eye holes at
+     +0.014). Each rim is tilted to follow the eye socket: its axis is the outward normal of a plane fitted to the
+     face inside the rim disc, clamped to `TILT_MAX` (15 deg; the fit asks for about 30 deg outward, which looked
+     insect-like). The rim centre stays on the eye's line of sight and moves back until the rim's back face is
+     `RIM_GAP` (4 mm) in front of the face everywhere inside the tilted disc. Result: rims 4.6 mm closer than v4.
+     Temple blocks, arms, shards and strap ends follow the tilted rim frame; the bridges rest on the nose bridge.
+   - Straps run along the head surface `STRAP_OFF` (2.5 mm) off it (radius smoothed outwards over 8 deg / the strap's
+     half width 1.2 cm, so they ride over the ears), from the temples (`STRAP_Z[0]` = 4 mm above the eyes) round the
+     back above the ears (`STRAP_Z[1]` = 3 cm above the eyes).
+   - T3: the half-mask's inner face is `MASK_CLEAR` (3 mm) off the head. Wide smoothing (15 deg / 1.8 cm, max of the
+     neighbours) only across the eye sockets, none at the temples, cheeks and forehead; the brow bulge thickens the
+     front only. The lens bezels, ember rims and lenses are laid out on the curved mask front by arc length round the
+     head, so they bend with the mask at the temples instead of floating there.
+   - Every run logs the clearance to the reference head per material (`CLEAR ...`: radial gap to an exact ray cast,
+     negative = inside the head); `GOGGLES_FIT_DEBUG=1` adds the T3 mask clearance per row.
 
 Measured (joint space, Blender axes, metres; `goggles.log` prints them on every run):
 
@@ -204,7 +214,8 @@ Measured (joint space, Blender axes, metres; `goggles.log` prints them on every 
 | nose bridge | x 0, y = -0.098, z +0.012 |
 | head half-width at the temples | 0.071 (head axis at y -0.005) |
 | head radius at the back, strap height | 0.100; front at the brow 0.092 |
-| rim centre planes | T1 y = -0.109, T2 y = -0.107 |
+| rim centres (round L) | T1 (+-0.040, -0.1046, +0.010), T2 (+-0.040, -0.1028, +0.010), tilted 15 deg outward (v4: y -0.109 / -0.107, untilted, z +0.002) |
+| clearance to the head | T1 min 2.5 mm, T2 min 0.7 mm, T3 min 2.3 mm (no vertex inside); T3 mask back 2.5 / 3.2 / 14.6 mm (min / median / max, the max is the bridge over the eye socket by the nose) |
 
 | Tier | Name | Biome | Look | Tris |
 |---|---|---|---|---|
@@ -213,12 +224,12 @@ Measured (joint space, Blender axes, metres; `goggles.log` prints them on every 
 | 3 | Allfather's Eye | Ashlands | black flametal half-mask with brow V and cheek guards, two obsidian lenses in flametal bezels with ember rims, small crest plate in the brow V with an ember Ansuz mark, black leather strap starting under the mask edges with 3 riveted flametal plates per side | 1216 |
 
 Knobs at the top of `make_goggles.py`:
-1. Fit: `REF_ALIGN`, `EYE`, `RIM_GAP`, `STRAP_OFF`, `STRAP_Z`, `MASK_CLEAR` (and `head_fit.json`).
+1. Fit: `REF_ALIGN`, `EYE`, `RAISE_12`, `RIM_GAP`, `TILT_MAX`, `STRAP_OFF`, `STRAP_Z`, `MASK_CLEAR` (and `head_fit.json`).
 2. `MATS`: colour, roughness, metallic, emission, alpha (`bronze`, `amber_lens`, `silver`, `crystal_lens`, `flametal`, `obsidian_lens`, `ember_rim`, `rune_inlay` ...).
 3. `T1`: rim segments/radii/depth/`jitter`, strap size, `lens_r`, `lens_dome`, `lens_back`, `clamps` (angles), `buckle_at` (strap point). `T2`: the same plus `bezel_r`, `fur_tufts`, `fur_len`.
    `T3`: `mask_span` (degrees round the head), `mask_z` (relative to the eyes), thickness, `lens_r`, strap, `plates` (degrees back from each
    mask edge), `plate_len`, `rivets`, `rune_z`, `rune_h`, `crest_w`, `crest_h`.
-Preview-only: cameras and lights near the end.
+Preview-only: cameras and lights near the end (rows: front, 3/4, side).
 
 # Known gaps
 
