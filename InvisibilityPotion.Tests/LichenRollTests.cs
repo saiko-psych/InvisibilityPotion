@@ -101,4 +101,20 @@ public class LichenRollTests
         Assert.InRange(a, 0f, 360f);
         Assert.NotEqual(LichenRoll.Value(3, 10f, 20f) * 360.0, (double)a, 3);
     }
+
+    [Fact]
+    public void Plant_yaw_is_deterministic_spread_and_independent_of_variant()
+    {
+        Assert.Equal(LichenRoll.YawDegrees(12.3f, -45.6f), LichenRoll.YawDegrees(12.3f, -45.6f));
+        var buckets = new int[4];
+        var rng = new Random(7);
+        for (var i = 0; i < 4000; i++)
+        {
+            var y = LichenRoll.YawDegrees((float)(rng.NextDouble() * 2000 - 1000), (float)(rng.NextDouble() * 2000 - 1000));
+            Assert.InRange(y, 0f, 359.9999f);
+            buckets[(int)(y / 90f)]++;
+        }
+        foreach (var b in buckets) Assert.InRange(b, 850, 1150);
+        Assert.NotEqual(LichenRoll.Value(0, 10f, 20f, LichenRoll.VariantSalt) * 360.0, (double)LichenRoll.YawDegrees(10f, 20f), 3);
+    }
 }

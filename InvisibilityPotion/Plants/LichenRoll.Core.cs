@@ -11,6 +11,9 @@ namespace InvisibilityPotion.Plants
     {
         public const string Salt = "IP_Lichen";
         public const string AngleSalt = "IP_LichenAngle";
+        /// <summary>Salt of the ground plant model variant (VeilHarvest.Variants).</summary>
+        public const string VariantSalt = "IP_PlantVariant";
+        public const string YawSalt = "IP_PlantYaw";
         public const float CellSize = 0.1f;
 
         /// <summary>Position in 0.1 m cells, rounding half up (floor(v * 10 + 0.5)); identical for the same float everywhere.</summary>
@@ -30,6 +33,12 @@ namespace InvisibilityPotion.Plants
 
         /// <summary>Angle around the trunk in degrees [0, 360), independent of the presence roll.</summary>
         public static float AngleDegrees(int seed, float x, float z) => (float)(Value(seed, x, z, AngleSalt) * 360.0);
+
+        /// <summary>
+        /// Yaw of a ground plant's models in degrees [0, 360) from its position (round N ruling 4): stored nowhere, every client
+        /// derives the same value from the ZDO position. World seed 0 (positions differ anyway), own salt (independent of the variant).
+        /// </summary>
+        public static float YawDegrees(float x, float z) => (float)(Value(0, x, z, YawSalt) * 360.0);
 
         /// <summary>splitmix64 finaliser (Steele, Lea, Flood 2014; public domain constants).</summary>
         public static ulong Mix(ulong z)

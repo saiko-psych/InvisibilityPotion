@@ -132,7 +132,7 @@ namespace InvisibilityPotion.Dev
             var minutes = HarvestStage.MinutesToNext(h.BaseStage, ZNet.instance != null ? HarvestStage.ElapsedMinutes(ZNet.instance.GetTime().Ticks, h.BaseTicks) : 0, h.StageMinutes, h.MaxStage);
             return $"{Prefab(h)}{(h.OnTree ? " (lichen)" : "")} at {Vector3.Distance(pos, me):F1} m {Compass(me, pos)} ({pos.x:F0}, {pos.y:F0}, {pos.z:F0}): " +
                    $"stage {h.Stage}/{h.MaxStage}{(h.IsRipe ? " ripe" : $" next in {minutes:F0} min")}, base {h.BaseStage} @ {(h.BaseTicks == 0 ? "-" : new DateTime(h.BaseTicks).ToString("HH:mm"))}, " +
-                   $"needs goggles {h.Tier}, revealed {(sight != null && sight.Revealed)}, scale {h.PlantScale:F2}{(h.VariantIndex >= 0 ? $", variant {"abc"[h.VariantIndex]}" : "")}, owner {Owner(h.View)}";
+                   $"needs goggles {h.Tier}, revealed {(sight != null && sight.Revealed)}, scale {h.PlantScale:F2}{(h.VariantIndex >= 0 ? $", variant {"abc"[h.VariantIndex]}" : "")}{(h.OnTree ? "" : $", yaw {h.Yaw:F0}")}, owner {Owner(h.View)}";
         }
 
         private class GrowCommand : ConsoleCommand

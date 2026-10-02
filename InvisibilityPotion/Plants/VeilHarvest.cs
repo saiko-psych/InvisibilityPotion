@@ -21,7 +21,7 @@ namespace InvisibilityPotion.Plants
         public static readonly int PlantStageHash = "IP_PlantStage".GetStableHashCode();
         public static readonly int PlantTimeHash = "IP_PlantTime".GetStableHashCode();
         public static readonly int PlantScaleHash = "IP_PlantScale".GetStableHashCode();
-        public const string VariantSalt = "IP_PlantVariant";
+        public const string VariantSalt = LichenRoll.VariantSalt;
         private const float StageInterval = 5f;
         private const float LocalPickHold = 6f;
 
@@ -54,6 +54,8 @@ namespace InvisibilityPotion.Plants
         /// <summary>Uniform size of a ground plant (IP_PlantScale), 1 for the lichen and plants without a size range.</summary>
         public float PlantScale { get; private set; } = 1f;
         public int VariantIndex { get; private set; } = -1;
+        /// <summary>Model yaw around the root's up axis (ground plants), see ApplyYaw.</summary>
+        public float Yaw { get; private set; }
         public int BaseStage { get; private set; }
         public long BaseTicks { get; private set; }
         public ZNetView View => _nview;
@@ -73,6 +75,25 @@ namespace InvisibilityPotion.Plants
                 VariantIndex = Mathf.Min(Variants.Length - 1, (int)(LichenRoll.Value(0, p.x, p.z, VariantSalt) * Variants.Length));
                 for (var i = 0; i < Variants.Length; i++)
                     if (Variants[i] != null) Variants[i].SetActive(i == VariantIndex);
+            }
+            if (!OnTree) ApplyYaw();
+        }
+
+        /// <summary>
+        /// Random yaw for every ground plant (round N ruling 4): wild spawns already get Random.Range(0, 360) from PlaceVegetation
+        /// (ZoneSystem.cs:1430, 1530-1541), but ip_spawn places them unrotated and Plant.Grow keeps the sapling's yaw +-11.25 deg
+        /// (Plant.cs:191-195). The root keeps its ZDO rotation; the direct children (picked, ripe, hover) turn around the root's up
+        /// axis by LichenRoll.YawDegrees of the position, identical on every client, nothing stored.
+        /// </summary>
+        private void ApplyYaw()
+        {
+            var p = transform.position;
+            Yaw = LichenRoll.YawDegrees(p.x, p.z);
+            var q = Quaternion.Euler(0f, Yaw, 0f);
+            foreach (Transform child in transform)
+            {
+                child.localPosition = q * child.localPosition;
+                child.localRotation = q * child.localRotation;
             }
         }
 
