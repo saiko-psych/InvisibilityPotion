@@ -166,7 +166,7 @@ namespace InvisibilityPotion.Dev
                 "dynamic, emission (0..1), spreadx, spready, spreadz, drift, trail (on|off), outer (on|off), outerradius (m), outeralpha, outerrate (/s per anchor), outersize (m), " +
                 "outerspready, outerlife (s), outertrail (on|off), outerflat (on|off: quads parallel to the ground), ground (on|off), groundrate (/s), grounddistance (/m), groundsize (m), groundgrow (x), groundlife (s), " +
                 "groundalpha, groundradius (m), groundheight (m), grounddrift (m/s), " +
-                "outeranchors (comma list, e.g. Chest,Hips,Head), material (swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
+                "outeranchors (comma list, e.g. Chest,Hips,Head), material (soft|swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
                 "emitter (bones|mesh), meshoffset, meshrate (0 = rate x anchors), wave (-1 = borrowed) | ip_fog [tN] color r g b | " +
                 "ip_fog alphamode <both|material|vertex> | ip_fog [tN] anchor <name> on|off | radius <v> | offset x y z | ip_fog [tN] save | ip_fog reset | " +
                 "ip_fog dump: log every fog emitter of your veil (state, counts, material, bounds, positions; without a veil: the stray scan) | " +

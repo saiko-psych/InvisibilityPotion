@@ -169,7 +169,8 @@ namespace InvisibilityPotion.Config
         /// The tier I and II looks changed on the user's request: revision 1 (round F, task 10f), revision 2 (round G, task 10g:
         /// absolute outer-layer keys, Emission, DynamicColor off), revision 3 (round H, task 10h: tier I = normal body in a thin
         /// fog layer that follows the body, ground fog field for tiers I and II), revision 4 (round I, task 10i: matte fog, tier II
-        /// = the user's saved tuning, so a revision 3 file of that user loses nothing). Existing files keep their old values, so once per
+        /// = the user's saved tuning, so a revision 3 file of that user loses nothing), revision 5 (plan 4 fix round 2: FogMaterial soft;
+        /// only files below revision 4 get the full reset, a revision 4 file keeps its tuning). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -186,7 +187,8 @@ namespace InvisibilityPotion.Config
             {
                 // Log what is about to be overwritten so a user's tuned values can be recovered from the log.
                 var differing = 0;
-                foreach (var t in LookDefaults.ResetTiers)
+                var resetTiers = LookDefaults.ResetsTiers(rev.Value) ? LookDefaults.ResetTiers : new int[0];
+                foreach (var t in resetTiers)
                     foreach (var kv in _fogEntries[t])
                     {
                         if (Equals(kv.Value.BoxedValue, kv.Value.DefaultValue)) continue;
@@ -205,11 +207,23 @@ namespace InvisibilityPotion.Config
                 var newMode = LookDefaults.MigrateBodyVeilMode(1, oldMode, rev.Value);
                 var modeChanged = newMode != oldMode;
                 if (modeChanged) t1Mode.Value = newMode;
+                // Revision 5: FogMaterial swamp_mist (the old default) becomes soft on every tier; other choices stay.
+                var materialsChanged = 0;
+                for (var t = 1; t <= 3; t++)
+                {
+                    var entry = (ConfigEntry<string>)_fogEntries[t]["FogMaterial"];
+                    var migrated = LookDefaults.MigrateFogMaterial(entry.Value, rev.Value);
+                    if (migrated == entry.Value) continue;
+                    Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] FogMaterial {entry.Value} -> {migrated}");
+                    entry.Value = migrated;
+                    materialsChanged++;
+                }
                 rev.Value = LookDefaultsRevision;
-                Plugin.Log?.LogInfo(differing == 0 && !modeChanged
-                    ? $"Config migration (look defaults revision {LookDefaultsRevision}): nothing to change, [Fog.Tier1] and [Fog.Tier2] already hold the defaults"
+                Plugin.Log?.LogInfo(differing == 0 && !modeChanged && materialsChanged == 0
+                    ? $"Config migration (look defaults revision {LookDefaultsRevision}): nothing to change, the file already holds the defaults"
                     : $"Config migration (look defaults revision {LookDefaultsRevision}): {differing} [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults" +
-                      (modeChanged ? $"; [Tier1] BodyVeilMode {oldMode} -> {newMode}" : ""));
+                      (modeChanged ? $"; [Tier1] BodyVeilMode {oldMode} -> {newMode}" : "") +
+                      (materialsChanged > 0 ? $"; FogMaterial -> soft on {materialsChanged} tier(s)" : ""));
             }
             catch (Exception ex)
             {

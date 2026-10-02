@@ -80,11 +80,26 @@ namespace InvisibilityPotion.Visuals
     /// Revision of the per-tier look defaults and what a migration to it changes (pure; PluginConfig applies it to the file).
     /// Revision 3 (round H, task 10h): tier I is the normal body in a thin fog layer plus a ground fog field, tier II gets the
     /// ground field too. Revision 4 (round I, task 10i): matte fog (Emission 0), tier I fainter and greyer, tier II = the values
-    /// the user saved from the tuning window.
+    /// the user saved from the tuning window. Revision 5 (plan 4 fix round 2): FogMaterial soft is the default of every tier;
+    /// files at revision 4 keep their tuning and only move FogMaterial swamp_mist to soft (all three tiers).
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 4;
+        public const int Revision = 5;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults.</summary>
+        public const int FullResetRevision = 4;
+        /// <summary>First revision whose FogMaterial default is soft.</summary>
+        public const int SoftFogRevision = 5;
+
+        /// <summary>True when a file at <paramref name="fromRevision"/> gets the full reset of <see cref="ResetTiers"/>.</summary>
+        public static bool ResetsTiers(int fromRevision) => fromRevision < FullResetRevision;
+
+        /// <summary>
+        /// FogMaterial after the migration from <paramref name="fromRevision"/>: swamp_mist (the default before revision 5) becomes
+        /// soft; any other value, and swamp_mist chosen in a revision 5 file, is kept.
+        /// </summary>
+        public static string MigrateFogMaterial(string current, int fromRevision) =>
+            fromRevision < SoftFogRevision && FogSettings.NormalizeFogMaterial(current) == "swamp_mist" ? "soft" : current;
         /// <summary>First revision whose [Tier1] BodyVeilMode default is Off; files from it on keep their tier I body mode.</summary>
         public const int Tier1BodyOffRevision = 3;
         /// <summary>[Fog.TierN] sections reset to the new defaults when a file is below <see cref="Revision"/>; tier III is untouched.</summary>
@@ -186,13 +201,20 @@ namespace InvisibilityPotion.Visuals
         public float MeshOffset = 0.03f;
         public List<FogAnchor> Anchors = new List<FogAnchor>();
 
-        public const string DefaultFogMaterial = "swamp_mist";
+        public const string DefaultFogMaterial = "soft";
 
         /// <summary>
-        /// Selectable fog materials (config names). slowwispysmoke stands for the Ghost's slowwispysmoke_gradient_alphablend;
+        /// The vanilla material the "soft" fog material is made from (FogVeil: a copy of swamp_mist, same Custom/LitParticles
+        /// shader and lighting properties, with a generated white radial-falloff _MainTex instead of the brownish dust02 and a
+        /// flat _NormalTex).
+        /// </summary>
+        public const string SoftFogBase = "swamp_mist";
+
+        /// <summary>
+        /// Selectable fog materials (config names). soft is generated from swamp_mist (see <see cref="SoftFogBase"/>). slowwispysmoke stands for the Ghost's slowwispysmoke_gradient_alphablend;
         /// FogVeil maps each name to the vanilla material and its source prefab.
         /// </summary>
-        public static readonly string[] FogMaterialNames = { "swamp_mist", "ghost_smoke", "wraith_smoke", "slowwispysmoke" };
+        public static readonly string[] FogMaterialNames = { "soft", "swamp_mist", "ghost_smoke", "wraith_smoke", "slowwispysmoke" };
 
         /// <summary>
         /// Former [Fog.TierN] keys that are no longer bound (round G replaced the relative outer factors by the absolute
@@ -319,6 +341,49 @@ namespace InvisibilityPotion.Visuals
         /// <summary>maxParticles of the ground emitter (budget rate x lifetime with headroom, hard-capped).</summary>
         public int GroundMaxParticles => MaxParticles(GroundBudgetRate, GroundLifetime);
 
+        // ---- ground field look (plan 4 fix round 2, ruling 5): two height layers so the patches overlap into a volume ----
+
+        /// <summary>Start size of a ground particle: random in [min, max] x GroundSize.</summary>
+        public const float GroundSizeMinFactor = 0.7f;
+        public const float GroundSizeMaxFactor = 1.3f;
+        /// <summary>The upper layer floats this many metres above GroundHeight (0.45 m at the default 0.15 m).</summary>
+        public const float GroundUpperOffset = 0.3f;
+        /// <summary>The upper layer emits this fraction of the ground rates (over time and over distance).</summary>
+        public const float GroundUpperRateFactor = 0.5f;
+        /// <summary>The upper layer's alpha is this fraction of GroundAlpha.</summary>
+        public const float GroundUpperAlphaFactor = 0.7f;
+        /// <summary>maxParticles of both ground emitters together.</summary>
+        public const int GroundParticleBudget = 300;
+
+        public float GroundUpperHeight => GroundHeight + GroundUpperOffset;
+        public float GroundUpperAlpha => GroundAlpha * GroundUpperAlphaFactor;
+        public float GroundUpperRate => Math.Max(0f, GroundRate) * GroundUpperRateFactor;
+        public float GroundUpperRateDistance => Math.Max(0f, GroundRateDistance) * GroundUpperRateFactor;
+
+        /// <summary>maxParticles of both layers together: headroom over (1 + upper factor) x budget rate x lifetime, capped at <see cref="GroundParticleBudget"/>.</summary>
+        private int GroundTotalMaxParticles
+        {
+            get
+            {
+                var expected = GroundBudgetRate * (1f + GroundUpperRateFactor) * Math.Max(0f, GroundLifetime) * 1.3f + 12f;
+                return (int)Math.Min(GroundParticleBudget, Math.Max(12f, Math.Ceiling(expected)));
+            }
+        }
+
+        /// <summary>maxParticles of the lower ground emitter: its rate share of the combined budget (at least 8).</summary>
+        public int GroundLowerMaxParticles
+        {
+            get
+            {
+                var total = GroundTotalMaxParticles;
+                var lower = (int)Math.Round(total / (1f + GroundUpperRateFactor));
+                return Math.Min(total - 4, Math.Max(8, lower));
+            }
+        }
+
+        /// <summary>maxParticles of the upper ground emitter: the rest of the combined budget (at least 4).</summary>
+        public int GroundUpperMaxParticles => GroundTotalMaxParticles - GroundLowerMaxParticles;
+
         /// <summary>Rate of the single Mesh emitter for <paramref name="enabledAnchors"/> enabled anchors: MeshRate, or Rate x anchors when MeshRate is 0.</summary>
         public float MeshEmitterRate(int enabledAnchors) => MeshRate > 0f ? MeshRate : Math.Max(0f, Rate) * Math.Max(0, enabledAnchors);
 
@@ -422,7 +487,7 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("DistortionStrength", FogValueKind.Float, "Refraction strength when this tier's body mode is Distortion (shader property _RefractionIntensity)"),
                 new FogKey("DistortionColor", FogValueKind.Text, "Colour of the Distortion body mode as r,g,b,a (shader property _Color)"),
                 new FogKey("DistortionWave", FogValueKind.Float, "Ripple speed of the Distortion body mode (_WaveVel, normal map borrowed from staff_shield_shard); negative = the borrowed vanilla value"),
-                new FogKey("FogMaterial", FogValueKind.Text, "Vanilla particle material of the fog: swamp_mist, ghost_smoke, wraith_smoke or slowwispysmoke"),
+                new FogKey("FogMaterial", FogValueKind.Text, "Particle material of the fog: soft (swamp_mist with a neutral white soft sprite instead of its brownish dust texture), swamp_mist, ghost_smoke, wraith_smoke or slowwispysmoke"),
                 new FogKey("FogEmitterMode", FogValueKind.Text, "Bones = one emitter per anchor below; Mesh = one emitter on the body mesh surface with rate = Rate x enabled anchors (falls back to Bones when the mesh is not readable)"),
                 new FogKey("MeshOffset", FogValueKind.Float, "Mesh emitter: distance in metres the fog spawns off the body surface"),
             };

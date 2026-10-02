@@ -225,9 +225,13 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void LookDefaults_Revision4_ResetsTier1And2_AndTier1BodyOff()
+    public void LookDefaults_Revision5_ResetsTier1And2BelowRevision4_AndTier1BodyOff()
     {
-        Assert.Equal(4, LookDefaults.Revision);
+        Assert.Equal(5, LookDefaults.Revision);
+        Assert.Equal(4, LookDefaults.FullResetRevision);
+        Assert.True(LookDefaults.ResetsTiers(3));
+        Assert.True(LookDefaults.ResetsTiers(0));
+        Assert.False(LookDefaults.ResetsTiers(4));
         Assert.Equal(new[] { 1, 2 }, LookDefaults.ResetTiers);
         Assert.Equal("Off", LookDefaults.BodyVeilModes[1]);
         Assert.Equal("Distortion", LookDefaults.BodyVeilModes[2]);
@@ -464,7 +468,7 @@ public class FogSettingsTests
     public void NewLookKeys_DefaultsAndRoundTrip()
     {
         var s = FogSettings.Defaults(2);
-        Assert.Equal("swamp_mist", s.Get("FogMaterial"));
+        Assert.Equal("soft", s.Get("FogMaterial"));
         Assert.Equal("Bones", s.Get("FogEmitterMode"));
         Assert.Equal("-1", s.Get("DistortionWave"));
         Assert.Equal("0.03", s.Get("MeshOffset"));
@@ -532,5 +536,72 @@ public class FloatListNonFiniteTests
     {
         Assert.False(FloatList.TryParseOne(text, out _));
         Assert.False(FloatList.TryParse("1," + text, 2, out _));
+    }
+
+    [Fact]
+    public void SoftFogMaterial_IsTheDefaultOfEveryTier()
+    {
+        Assert.Equal("soft", FogSettings.DefaultFogMaterial);
+        Assert.Contains("soft", FogSettings.FogMaterialNames);
+        Assert.Equal("soft", FogSettings.NormalizeFogMaterial(" SOFT "));
+        for (var t = 1; t <= 3; t++) Assert.Equal("soft", FogSettings.Defaults(t).FogMaterial);
+        // soft is a swamp_mist copy with a generated texture: it is not borrowed from another prefab.
+        Assert.Equal("swamp_mist", FogSettings.SoftFogBase);
+    }
+
+    [Fact]
+    public void LookDefaults_Revision5_MovesSwampMistToSoftOnly()
+    {
+        Assert.Equal("soft", LookDefaults.MigrateFogMaterial("swamp_mist", 4));
+        Assert.Equal("soft", LookDefaults.MigrateFogMaterial(" Swamp_Mist ", 0));
+        Assert.Equal("ghost_smoke", LookDefaults.MigrateFogMaterial("ghost_smoke", 4));
+        Assert.Equal("swamp_mist", LookDefaults.MigrateFogMaterial("swamp_mist", 5));   // chosen after revision 5: the user's choice
+        Assert.Equal("soft", LookDefaults.MigrateFogMaterial("soft", 4));
+    }
+
+    [Fact]
+    public void GroundField_TwoHeightLayers()
+    {
+        var s = FogSettings.Defaults(1);
+        Assert.Equal(0.7f, FogSettings.GroundSizeMinFactor, 5);
+        Assert.Equal(1.3f, FogSettings.GroundSizeMaxFactor, 5);
+        Assert.Equal(0.15f, s.GroundHeight, 5);
+        Assert.Equal(0.45f, s.GroundUpperHeight, 5);   // GroundHeight + GroundUpperOffset
+        Assert.Equal(0.5f, FogSettings.GroundUpperRateFactor, 5);
+        Assert.Equal(0.7f, FogSettings.GroundUpperAlphaFactor, 5);
+        Assert.Equal(s.GroundAlpha * 0.7f, s.GroundUpperAlpha, 5);
+        Assert.Equal(s.GroundRate * 0.5f, s.GroundUpperRate, 5);
+        Assert.Equal(s.GroundRateDistance * 0.5f, s.GroundUpperRateDistance, 5);
+        s.GroundHeight = 1f;
+        Assert.Equal(1.3f, s.GroundUpperHeight, 5);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void GroundField_BothLayersStayWithinTheBudget(int tier)
+    {
+        var s = FogSettings.Defaults(tier);
+        s.GroundEnabled = true;
+        Assert.True(s.GroundLowerMaxParticles + s.GroundUpperMaxParticles <= FogSettings.GroundParticleBudget);
+        Assert.Equal(300, FogSettings.GroundParticleBudget);
+        Assert.True(s.GroundUpperMaxParticles >= 4);
+        Assert.True(s.GroundLowerMaxParticles >= s.GroundUpperMaxParticles);
+        // Expected live particles of each layer while running fit into its share (no clipping at the defaults).
+        var lowerLive = s.GroundBudgetRate * s.GroundLifetime;
+        Assert.True(lowerLive <= s.GroundLowerMaxParticles, $"T{tier}: lower live {lowerLive} > {s.GroundLowerMaxParticles}");
+        Assert.True(lowerLive * FogSettings.GroundUpperRateFactor <= s.GroundUpperMaxParticles);
+    }
+
+    [Fact]
+    public void GroundField_HugeRatesAreCappedAcrossBothLayers()
+    {
+        var s = FogSettings.Defaults(2);
+        s.GroundRate = 100f; s.GroundRateDistance = 50f; s.GroundLifetime = 20f;
+        Assert.Equal(FogSettings.GroundParticleBudget, s.GroundLowerMaxParticles + s.GroundUpperMaxParticles);
+        s.GroundRate = 0.01f; s.GroundRateDistance = 0f; s.GroundLifetime = 0.05f;
+        Assert.True(s.GroundLowerMaxParticles >= 8);
+        Assert.True(s.GroundUpperMaxParticles >= 4);
     }
 }

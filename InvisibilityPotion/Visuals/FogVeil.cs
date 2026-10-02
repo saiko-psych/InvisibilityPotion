@@ -28,6 +28,7 @@ namespace InvisibilityPotion.Visuals
         private static readonly int GlossinessId = Shader.PropertyToID("_Glossiness");
         private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
         private static readonly int NormalTexId = Shader.PropertyToID("_NormalTex");
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
         private static readonly int NormalScaleId = Shader.PropertyToID("_NormalScale");
         private static readonly int WaveVelId = Shader.PropertyToID("_WaveVel");
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
@@ -58,6 +59,7 @@ namespace InvisibilityPotion.Visuals
         private const string OuterObjectName = "ip_fog_outer";
         private const string GroundObjectName = "ip_fog_ground";
         private const string GroundAnchorName = "Ground";
+        private const string GroundUpperAnchorName = "GroundUpper";
         private const float DynamicColorBlend = 0.5f;
 
         // ---------- live look state ----------
@@ -413,6 +415,8 @@ namespace InvisibilityPotion.Visuals
             if (s.OuterActive) outer = MakeFogMaterial(source, snap, color, s.OuterAlpha, s.Emission, out outerVertexAlpha);
             var groundVertexAlpha = 0f;
             var ground = groundActive ? MakeFogMaterial(source, snap, color, s.GroundAlpha, s.Emission, out groundVertexAlpha) : null;
+            var groundUpperVertexAlpha = 0f;
+            var groundUpper = groundActive ? MakeFogMaterial(source, snap, color, s.GroundUpperAlpha, s.Emission, out groundUpperVertexAlpha) : null;
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -449,7 +453,10 @@ namespace InvisibilityPotion.Visuals
             if (ground != null)
             {
                 var hips = animator != null ? FindBone(animator, "Hips") : null;
-                snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, ground, groundVertexAlpha, snap.MaterialHasColor));
+                snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, false, ground, groundVertexAlpha, snap.MaterialHasColor));
+                // Second, fainter and sparser layer higher up: the patches overlap into a volume instead of one flat disc.
+                if (groundUpper != null)
+                    snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, true, groundUpper, groundUpperVertexAlpha, snap.MaterialHasColor));
             }
 
             // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter
@@ -598,8 +605,11 @@ namespace InvisibilityPotion.Visuals
         /// particle stays where it was emitted, almost still, and grows from GroundSize to GroundSize x GroundGrow; rateOverTime plus
         /// rateOverDistance (world space only) lays the field along the walked path. Alpha fades in over the first 15 % and out over
         /// the last 40 % of the lifetime.
+        /// Fix round 2 (ruling 5): start size random in [GroundSizeMinFactor, GroundSizeMaxFactor] x GroundSize, and two height
+        /// layers: the lower one at GroundHeight, the upper one (<paramref name="upper"/>) at GroundUpperHeight with
+        /// GroundUpperRateFactor of the rates and GroundUpperAlpha (its material). Both share GroundParticleBudget.
         /// </summary>
-        private static FogEmitter SpawnGroundEmitter(Transform root, Transform hips, Color color, FogSettings s, Material material, float vertexAlpha, bool materialHasColor)
+        private static FogEmitter SpawnGroundEmitter(Transform root, Transform hips, Color color, FogSettings s, bool upper, Material material, float vertexAlpha, bool materialHasColor)
         {
             var go = new GameObject(GroundObjectName);
             go.SetActive(false);
@@ -608,7 +618,7 @@ namespace InvisibilityPotion.Visuals
             follower.Bone = hips != null ? hips : root;
             follower.Root = root;
             follower.Ground = true;
-            follower.GroundHeight = s.GroundHeight;
+            follower.GroundHeight = upper ? s.GroundUpperHeight : s.GroundHeight;
             follower.SpawnedAt = Time.time;
             follower.Snap();
 
@@ -620,16 +630,16 @@ namespace InvisibilityPotion.Visuals
             main.scalingMode = ParticleSystemScalingMode.Local;
             main.startLifetime = Mathf.Max(0.05f, s.GroundLifetime);
             main.startSpeed = GroundStartSpeed;
-            main.startSize = new ParticleSystem.MinMaxCurve(s.GroundSize * 0.8f, s.GroundSize * 1.2f);
+            main.startSize = new ParticleSystem.MinMaxCurve(s.GroundSize * FogSettings.GroundSizeMinFactor, s.GroundSize * FogSettings.GroundSizeMaxFactor);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
             main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
             main.gravityModifier = 0f;
-            main.maxParticles = s.GroundMaxParticles;
+            main.maxParticles = upper ? s.GroundUpperMaxParticles : s.GroundLowerMaxParticles;
 
             var emission = ps.emission;
             emission.enabled = true;
-            emission.rateOverTime = Mathf.Max(0f, s.GroundRate);
-            emission.rateOverDistance = Mathf.Max(0f, s.GroundRateDistance);
+            emission.rateOverTime = upper ? s.GroundUpperRate : Mathf.Max(0f, s.GroundRate);
+            emission.rateOverDistance = upper ? s.GroundUpperRateDistance : Mathf.Max(0f, s.GroundRateDistance);
 
             var shape = ps.shape;
             shape.enabled = true;
@@ -671,7 +681,7 @@ namespace InvisibilityPotion.Visuals
 
             go.SetActive(true);
             ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = GroundAnchorName, Layer = FogLayerKind.Ground, VertexAlpha = vertexAlpha };
+            return new FogEmitter { Go = go, Ps = ps, Anchor = upper ? GroundUpperAnchorName : GroundAnchorName, Layer = FogLayerKind.Ground, VertexAlpha = vertexAlpha };
         }
 
         /// <summary>Ground particles are almost still (start speed in m/s, outward from the spawn disc).</summary>
@@ -835,10 +845,13 @@ namespace InvisibilityPotion.Visuals
                 switch (e.Layer)
                 {
                     case FogLayerKind.Outer: rate = s.OuterRate; size = s.OuterSize; alpha = s.OuterAlpha; break;
+                    case FogLayerKind.Ground when e.Anchor == GroundUpperAnchorName: rate = s.GroundUpperRate; size = s.GroundSize; alpha = s.GroundUpperAlpha; break;
                     case FogLayerKind.Ground: rate = s.GroundRate; size = s.GroundSize; alpha = s.GroundAlpha; break;
                     default: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.Rate; size = s.Size; alpha = s.Alpha; break;
                 }
-                var extra = e.Layer == FogLayerKind.Ground ? $" + {F(s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, height {F(s.GroundHeight)} m"
+                var upperGround = e.Anchor == GroundUpperAnchorName;
+                var extra = e.Layer == FogLayerKind.Ground ? $" + {F(upperGround ? s.GroundUpperRateDistance : s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, " +
+                                                             $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
                           : e.Layer == FogLayerKind.Outer ? $", radius {F(s.OuterRadius)} m, spread y {F(s.OuterSpreadY)}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)})");
             }
@@ -1002,6 +1015,7 @@ namespace InvisibilityPotion.Visuals
         private static Material FogSourceMaterial(string name)
         {
             name = FogSettings.NormalizeFogMaterial(name) ?? FogSettings.DefaultFogMaterial;
+            if (name == "soft") return SoftFogMaterial();
             if (!FogMaterialSources.TryGetValue(name, out var source)) return SwampMistMaterial();
             if (_fogMaterials.TryGetValue(name, out var cached) && cached != null) return cached;
             if (ZNetScene.instance == null || _fogMaterialMissing.Contains(name)) return SwampMistMaterial();
@@ -1091,6 +1105,45 @@ namespace InvisibilityPotion.Visuals
             _fogMaterial = m;
             Plugin.Log.LogWarning($"veil fog: no material on {FogMaterialSource}; using fallback shader 'Particles/Standard Unlit'");
             return _fogMaterial;
+        }
+
+        private static Material _softFogMaterial;
+
+        /// <summary>
+        /// FogMaterial "soft" (plan 4 fix round 2, ruling 4): a copy of the borrowed swamp_mist material (same Custom/LitParticles
+        /// shader, same lighting properties) whose _MainTex, the brownish dust02, is replaced by a generated 64x64 white radial
+        /// soft-falloff sprite, and whose _NormalTex (wave-normal) is replaced by a flat normal texture. _Color stays the configured
+        /// colour (MakeFogMaterial), so only the dust tint goes. Shared and never mutated; every veil makes its own copy. With the
+        /// Particles/Standard Unlit fallback (no swamp_mist) the fallback is returned: it already uses the soft sprite.
+        /// </summary>
+        private static Material SoftFogMaterial()
+        {
+            if (_softFogMaterial != null) return _softFogMaterial;
+            var swamp = SwampMistMaterial();
+            if (swamp == null) return null;   // too early; retried on the next build
+            if (swamp.name == "ip_fog_fallback") return swamp;
+            var m = new Material(swamp) { name = "ip_fog_soft" };
+            var oldMain = m.HasProperty(MainTexId) ? m.GetTexture(MainTexId) : null;
+            var oldNormal = m.HasProperty(NormalTexId) ? m.GetTexture(NormalTexId) : null;
+            if (m.HasProperty(MainTexId)) m.SetTexture(MainTexId, SoftSprite());
+            if (m.HasProperty(NormalTexId)) m.SetTexture(NormalTexId, FlatNormal());
+            _softFogMaterial = m;
+            Plugin.Log.LogInfo($"veil fog: soft material from '{swamp.name}' (shader '{m.shader?.name}'): _MainTex {(oldMain != null ? oldMain.name : "-")} -> " +
+                               $"{(m.HasProperty(MainTexId) ? "ip_fog_sprite (64x64 white, radial smoothstep alpha)" : "not declared, unchanged")}, _NormalTex {(oldNormal != null ? oldNormal.name : "-")} -> " +
+                               $"{(m.HasProperty(NormalTexId) ? "ip_fog_flat_normal" : "not declared, unchanged")}");
+            LogProperties("fog soft", m);
+            return m;
+        }
+
+        /// <summary>4x4 flat tangent-space normal (0.5, 0.5, 1, 1): decodes to (0, 0, 1) as RGB and as AG (DXT5nm) normal map.</summary>
+        private static Texture2D FlatNormal()
+        {
+            var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false, true) { name = "ip_fog_flat_normal", wrapMode = TextureWrapMode.Repeat };
+            var px = new Color32[16];
+            for (var i = 0; i < px.Length; i++) px[i] = new Color32(128, 128, 255, 255);
+            tex.SetPixels32(px);
+            tex.Apply(false, false);
+            return tex;
         }
 
         private static Texture2D SoftSprite()
