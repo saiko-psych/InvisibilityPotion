@@ -250,7 +250,7 @@ Items (meads and bases):
 - [ ] Mist inside the finished bottles: visible, stays inside the glass, tier colour, not flickering against the glass (sorting)
 - [ ] Item stand: hang a mead and a base; the model shows (needs the `attach` child) and sits sensibly (grip at the neck / rim). Note the orientation
 - [ ] Hand-held: consumables are not equipped in vanilla, so no held bottle is expected; drinking still plays the burst
-- [ ] Colours: compare with `tools/blender/preview-*.png` (the material colours are Blender's linear values; if everything looks washed out, the colour space needs a conversion)
+- [ ] Colours: compare with `tools/blender/preview-*.png` (the materials carry Blender's linear values, which Unity treats as sRGB: if the game renders in linear space everything looks darker and more saturated than the preview, and the setup needs a linear-to-sRGB conversion)
 - [ ] Existing meads from earlier rounds in the inventory still exist (same prefab names) and now show the bottle
 
 Plants and goggles (look checks):
