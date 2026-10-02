@@ -54,14 +54,27 @@ public class FogSettingsTests
     {
         var t1 = FogSettings.Defaults(1);
         Assert.True(t1.Enabled);
-        Assert.False(t1.OuterEnabled);
+        // Round L: tier I = the whole body in a light enveloping cloud, the fog volume layer and the ground field.
+        Assert.True(t1.OuterEnabled);
+        Assert.Equal(FogOuterShape.Volume, t1.OuterShape);
+        Assert.Equal(new[] { "Hips" }, t1.OuterAnchors);
+        Assert.Equal(0.07f, t1.OuterAlpha, 5);
+        Assert.Equal(2.4f, t1.OuterRadius, 5);
+        Assert.Equal(3.2f, t1.OuterSize, 5);
+        Assert.Equal(0.35f, t1.OuterSpreadY, 5);
+        Assert.Equal(10f, t1.OuterRate, 5);
+        Assert.Equal(6f, t1.OuterLifetime, 5);
+        Assert.Equal(3f, t1.OuterRotation, 5);
+        Assert.Equal(0f, t1.OuterOffsetY, 5);
+        Assert.False(t1.OuterHorizontal);
+        Assert.False(t1.OuterTrail);
         Assert.Equal(FogEmitterMode.Bones, t1.EmitterMode);
         Assert.Equal(0f, t1.MeshRate);
-        Assert.Equal(5f, t1.Rate, 5);
-        Assert.Equal(0.45f, t1.Size, 5);
-        Assert.Equal(2f, t1.Lifetime, 5);
-        Assert.Equal(0.18f, t1.Alpha, 5);
-        Assert.Equal(0.5f, t1.SpreadY, 5);
+        Assert.Equal(10f, t1.Rate, 5);
+        Assert.Equal(0.75f, t1.Size, 5);
+        Assert.Equal(2.2f, t1.Lifetime, 5);
+        Assert.Equal(0.25f, t1.Alpha, 5);
+        Assert.Equal(0.6f, t1.SpreadY, 5);
         Assert.Equal(0.03f, t1.Speed, 5);
         Assert.Equal(0.03f, t1.Drift, 5);
         Assert.False(t1.Trail);
@@ -73,7 +86,7 @@ public class FogSettingsTests
         Assert.Equal(0.8f, t1.GroundSize, 5);
         Assert.Equal(3f, t1.GroundGrow, 5);
         Assert.Equal(7f, t1.GroundLifetime, 5);
-        Assert.Equal(0.22f, t1.GroundAlpha, 5);
+        Assert.Equal(0.15f, t1.GroundAlpha, 5);
         Assert.Equal(0.6f, t1.GroundRadius, 5);
         Assert.Equal(0.15f, t1.GroundHeight, 5);
         Assert.Equal(0.05f, t1.GroundDrift, 5);
@@ -89,40 +102,41 @@ public class FogSettingsTests
         Assert.False(t2.Trail);
         Assert.Equal(FogEmitterMode.Bones, t2.EmitterMode);
         Assert.All(t2.Anchors, a => Assert.True(a.Enabled));
-        // Round I: the user's values saved from ip_fogui (2026-10-02), Emission 0 (matte).
-        Assert.Equal(12f, t2.Rate, 5);
-        Assert.Equal(0.685f, t2.Size, 5);
+        // Round L: a denser enveloping inner cloud, Emission 0 (matte).
+        Assert.Equal(14f, t2.Rate, 5);
+        Assert.Equal(0.8f, t2.Size, 5);
         Assert.Equal(2.5f, t2.Lifetime, 5);
         Assert.Equal(0.05f, t2.Speed, 5);
-        Assert.Equal(0.035f, t2.Alpha, 5);
+        Assert.Equal(0.35f, t2.Alpha, 5);
         Assert.Equal(1.125f, t2.SpreadX, 5);
-        Assert.Equal(1f, t2.SpreadY, 5);
+        Assert.Equal(0.6f, t2.SpreadY, 5);
         Assert.Equal(1.025f, t2.SpreadZ, 5);
         Assert.Equal(-0.066f, t2.Drift, 5);
-        Assert.Equal("0.775,0.775,0.775", t2.Get("Color"));
+        Assert.Equal("0.8,0.8,0.8", t2.Get("Color"));
         Assert.False(t2.DynamicColor);
         Assert.Equal(0f, t2.Emission);
         Assert.True(t2.OuterEnabled);
-        // Round J ruling: the outer layer is a distinct ring that stays around the player (local space), thin, turning slowly.
+        // Round L ruling: the outer layer is a fog volume of large soft camera-facing sprites around the player (local space).
         Assert.False(t2.OuterTrail);
         Assert.Equal(FogTrailMode.Follow, t2.OuterTrailMode);
+        Assert.Equal(FogOuterShape.Volume, t2.OuterShape);
         Assert.Equal(new[] { "Hips" }, t2.OuterAnchors);
-        Assert.Equal(2.5f, t2.OuterRadius, 5);
-        Assert.Equal(0.55f, t2.OuterAlpha, 5);
-        Assert.Equal(18f, t2.OuterRate, 5);
-        Assert.Equal(1.6f, t2.OuterSize, 5);
-        Assert.Equal(4f, t2.OuterLifetime, 5);
-        Assert.Equal(0.1f, t2.OuterSpreadY, 5);
-        Assert.Equal(-0.2f, t2.OuterOffsetY, 5);
-        Assert.Equal(8f, t2.OuterRotation, 5);
-        Assert.True(t2.OuterHorizontal);
+        Assert.Equal(3f, t2.OuterRadius, 5);
+        Assert.Equal(0.1f, t2.OuterAlpha, 5);
+        Assert.Equal(10f, t2.OuterRate, 5);
+        Assert.Equal(3.2f, t2.OuterSize, 5);
+        Assert.Equal(6f, t2.OuterLifetime, 5);
+        Assert.Equal(0.35f, t2.OuterSpreadY, 5);
+        Assert.Equal(0f, t2.OuterOffsetY, 5);
+        Assert.Equal(3f, t2.OuterRotation, 5);
+        Assert.False(t2.OuterHorizontal);
         Assert.True(t2.GroundEnabled);
         Assert.Equal(6f, t2.GroundRate, 5);
         Assert.Equal(3f, t2.GroundRateDistance, 5);
-        Assert.Equal(1f, t2.GroundSize, 5);
-        Assert.Equal(3.5f, t2.GroundGrow, 5);
+        Assert.Equal(1.2f, t2.GroundSize, 5);
+        Assert.Equal(2.5f, t2.GroundGrow, 5);
         Assert.Equal(7f, t2.GroundLifetime, 5);
-        Assert.Equal(0.3f, t2.GroundAlpha, 5);
+        Assert.Equal(0.18f, t2.GroundAlpha, 5);
         Assert.Equal(0.9f, t2.GroundRadius, 5);
         Assert.Equal(0.15f, t2.GroundHeight, 5);
         Assert.Equal(0.05f, t2.GroundDrift, 5);
@@ -229,12 +243,14 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void LookDefaults_Revision5_ResetsTier1And2BelowRevision4_AndTier1BodyOff()
+    public void LookDefaults_Revision7_ResetsTier1And2Fully_AndTier1BodyOff()
     {
-        Assert.Equal(4, LookDefaults.FullResetRevision);
+        Assert.Equal(7, LookDefaults.FullResetRevision);
         Assert.True(LookDefaults.ResetsTiers(3));
         Assert.True(LookDefaults.ResetsTiers(0));
-        Assert.False(LookDefaults.ResetsTiers(4));
+        Assert.True(LookDefaults.ResetsTiers(4));
+        Assert.True(LookDefaults.ResetsTiers(6));
+        Assert.False(LookDefaults.ResetsTiers(7));
         Assert.Equal(new[] { 1, 2 }, LookDefaults.ResetTiers);
         Assert.Equal("Off", LookDefaults.BodyVeilModes[1]);
         Assert.Equal("Distortion", LookDefaults.BodyVeilModes[2]);
@@ -253,7 +269,7 @@ public class FogSettingsTests
     [Fact]
     public void LookDefaults_Revision6_ResetsOnlyTier2OuterKeys()
     {
-        Assert.Equal(6, LookDefaults.Revision);
+        Assert.Equal(7, LookDefaults.Revision);
         Assert.Equal(6, LookDefaults.OuterRingRevision);
         // Revision 4 and 5 files keep their tuning except the [Fog.Tier2] Outer* keys.
         Assert.True(LookDefaults.ResetsOuterKey(2, "OuterRadius", 5));
@@ -269,16 +285,16 @@ public class FogSettingsTests
         // Every Outer* key the reset covers is a real key of the section.
         var outerKeys = 0;
         foreach (var k in FogSettings.Keys) if (LookDefaults.ResetsOuterKey(2, k.Name, 5)) outerKeys++;
-        Assert.Equal(12, outerKeys);
-        // Below revision 4 the full reset already covers tier II.
+        Assert.Equal(13, outerKeys);
+        // Since revision 7 the full reset covers every older file, so the outer-only reset no longer runs on its own.
         Assert.True(LookDefaults.ResetsTiers(3));
-        Assert.False(LookDefaults.ResetsTiers(5));
+        Assert.True(LookDefaults.ResetsTiers(5));
     }
 
     [Fact]
     public void OuterRing_DefaultsPerTier_AndRotationKey()
     {
-        Assert.False(FogSettings.Defaults(1).OuterEnabled);
+        Assert.True(FogSettings.Defaults(1).OuterEnabled);
         var t3 = FogSettings.Defaults(3);
         Assert.False(t3.OuterEnabled);
         Assert.Equal(0f, t3.OuterOffsetY, 5);
@@ -287,7 +303,7 @@ public class FogSettingsTests
         Assert.Contains(FogSettings.Keys, k => k.Name == "OuterOffsetY" && k.Kind == FogValueKind.Float);
 
         var s = FogSettings.Defaults(2);
-        Assert.Equal(8f * (float)Math.PI / 180f, s.OuterOrbitalRadPerSecond, 5);
+        Assert.Equal(3f * (float)Math.PI / 180f, s.OuterOrbitalRadPerSecond, 5);
         Assert.True(s.TrySet("OuterRotation", "-12"));
         Assert.Equal(-12f, s.OuterRotation, 5);
         Assert.Equal("-12", s.Get("OuterRotation"));
@@ -438,10 +454,10 @@ public class FogSettingsTests
     [Fact]
     public void OuterParticleBudget_UsesOuterRateAndLifetime()
     {
-        var s = FogSettings.Defaults(2);   // outer rate 18, outer life 4
-        Assert.Equal(72f, s.LiveParticlesOuter, 3);
+        var s = FogSettings.Defaults(2);   // outer rate 10, outer life 6
+        Assert.Equal(60f, s.LiveParticlesOuter, 3);
         s.Rate = 0f;   // independent of the inner rate
-        Assert.Equal(72f, s.LiveParticlesOuter, 3);
+        Assert.Equal(60f, s.LiveParticlesOuter, 3);
         Assert.Equal(FogSettings.MaxParticles(14f, 3f), (int)System.Math.Ceiling(14f * 3f * 1.3f + 4f));
         s.OuterEnabled = false;
         Assert.Equal(0f, s.LiveParticlesOuter);
@@ -657,5 +673,115 @@ public class FloatListNonFiniteTests
         s.GroundRate = 0.01f; s.GroundRateDistance = 0f; s.GroundLifetime = 0.05f;
         Assert.True(s.GroundLowerMaxParticles >= 8);
         Assert.True(s.GroundUpperMaxParticles >= 4);
+    }
+
+    [Fact]
+    public void OuterShape_KeyParsesAndRoundTrips()
+    {
+        Assert.Contains(FogSettings.Keys, k => k.Name == "OuterShape" && k.Kind == FogValueKind.Text);
+        var s = FogSettings.Defaults(2);
+        Assert.Equal("Volume", s.Get("OuterShape"));
+        Assert.True(s.TrySet("OuterShape", " ring "));
+        Assert.Equal(FogOuterShape.Ring, s.OuterShape);
+        Assert.Equal("Ring", s.Get("OuterShape"));
+        Assert.False(s.TrySet("OuterShape", "Cube"));
+        Assert.False(s.TrySet("OuterShape", "5"));
+        Assert.Equal(FogOuterShape.Ring, s.OuterShape);
+        Assert.Equal(FogOuterShape.Volume, FogSettings.Defaults(3).OuterShape);
+        var parsed = FogSettings.Parse(1, k => k == "OuterShape" ? "Ring" : null, new List<string>());
+        Assert.Equal(FogOuterShape.Ring, parsed.OuterShape);
+        Assert.Equal(FogOuterShape.Ring, parsed.Clone().OuterShape);
+    }
+
+    [Fact]
+    public void OuterVolume_LookConstants()
+    {
+        Assert.Equal(0.8f, FogSettings.OuterVolumeSizeMinFactor, 5);
+        Assert.Equal(1.2f, FogSettings.OuterVolumeSizeMaxFactor, 5);
+        Assert.Equal(0.03f, FogSettings.OuterVolumeSpeed, 5);
+        Assert.Equal(0.2f, FogSettings.OuterVolumeFadeIn, 5);
+        // Height of the flattened volume: about +-1 m around the anchor at the tier II defaults.
+        var t2 = FogSettings.Defaults(2);
+        Assert.InRange(t2.OuterRadius * t2.OuterSpreadY, 0.9f, 1.1f);
+        Assert.False(t2.ExceedsParticleBudget);
+        Assert.False(FogSettings.Defaults(1).ExceedsParticleBudget);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Tier1And2_WholeBodyCloud_AllAnchorsOn_LimbRadiusAtLeast012(int tier)
+    {
+        var s = FogSettings.Defaults(tier);
+        Assert.Equal(FogSettings.AnchorNames.Length, s.Anchors.Count);
+        Assert.All(s.Anchors, a => Assert.True(a.Enabled, a.Name));
+        Assert.All(s.Anchors, a => Assert.True(a.Radius >= 0.12f - 1e-5f, $"{a.Name} radius {a.Radius}"));
+        Assert.Equal(0.6f, s.SpreadY, 5);
+        Assert.Equal(0f, s.Emission);
+        Assert.True(s.GroundEnabled);
+    }
+
+    [Fact]
+    public void Tier3_Untouched()
+    {
+        var t3 = FogSettings.Defaults(3);
+        Assert.False(t3.Enabled);
+        Assert.False(t3.OuterEnabled);
+        Assert.False(t3.GroundEnabled);
+        Assert.Equal(4f, t3.Rate, 5);
+        Assert.Equal(1.5f, t3.Size, 5);
+        Assert.Equal(1.4f, t3.OuterRadius, 5);
+        Assert.True(t3.OuterHorizontal);
+    }
+
+    [Fact]
+    public void FogSprite_FalloffIsSoftAndReachesZeroAtTheEdge()
+    {
+        Assert.Equal(FogSprite.CentreAlpha, FogSprite.Falloff(0f), 5);
+        Assert.True(FogSprite.CentreAlpha <= 0.8f);
+        Assert.Equal(0f, FogSprite.Falloff(1f), 5);
+        Assert.Equal(0f, FogSprite.Falloff(1.4f), 5);
+        // Monotonic and gaussian-like: well below linear at half radius.
+        var prev = float.MaxValue;
+        for (var i = 0; i <= 100; i++)
+        {
+            var a = FogSprite.Falloff(i / 100f);
+            Assert.True(a <= prev + 1e-6f);
+            Assert.InRange(a, 0f, FogSprite.CentreAlpha);
+            prev = a;
+        }
+        Assert.True(FogSprite.Falloff(0.5f) < 0.5f * FogSprite.CentreAlpha);
+        Assert.True(FogSprite.Falloff(0.9f) < 0.05f);
+    }
+
+    [Fact]
+    public void FogSprite_PixelsAreBoundedNoisyAndDeterministic()
+    {
+        const int n = FogSprite.Size;
+        float min = float.MaxValue, max = float.MinValue;
+        for (var y = 0; y < n; y++)
+        for (var x = 0; x < n; x++)
+        {
+            var a = FogSprite.Alpha(x, y, n);
+            Assert.InRange(a, 0f, FogSprite.CentreAlpha);
+            Assert.Equal(a, FogSprite.Alpha(x, y, n));
+            var noise = FogSprite.Noise(x, y, n);
+            Assert.InRange(noise, -1f, 1f);
+            if (noise < min) min = noise;
+            if (noise > max) max = noise;
+            var r = FogSprite.Radius(x, y, n);
+            var f = FogSprite.Falloff(r);
+            // Noise is at most +-NoiseAmount of the falloff (the centre is clamped to CentreAlpha).
+            Assert.True(a >= f * (1f - FogSprite.NoiseAmount) - 1e-5f);
+            Assert.True(a <= f * (1f + FogSprite.NoiseAmount) + 1e-5f);
+        }
+        Assert.True(max - min > 0.5f, "noise should vary across the sprite");
+        // Border pixels (row 0, column 0) and corners are fully transparent.
+        for (var i = 0; i < n; i++)
+        {
+            Assert.Equal(0f, FogSprite.Alpha(i, 0, n), 3);
+            Assert.Equal(0f, FogSprite.Alpha(0, i, n), 3);
+        }
+        Assert.Equal(0f, FogSprite.Alpha(n - 1, n - 1, n));
     }
 }

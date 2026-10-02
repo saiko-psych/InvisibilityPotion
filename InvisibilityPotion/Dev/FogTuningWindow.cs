@@ -352,10 +352,11 @@ namespace InvisibilityPotion.Dev
             ToggleRow("Outer layer", ref s.OuterEnabled, def.OuterEnabled, saved.OuterEnabled);
             ToggleRow("Outer trail (world space)", ref s.OuterTrail, def.OuterTrail, saved.OuterTrail);
             ToggleRow("Outer flat (quads parallel to the ground)", ref s.OuterHorizontal, def.OuterHorizontal, saved.OuterHorizontal);
+            DrawOuterShape(s, saved);
             var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner and ground off; not saved, all tiers)", GUILayout.Height(22f));
             if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
             Row("Radius m", ref s.OuterRadius, 0.1f, 4f, 0.1f, def.OuterRadius, saved.OuterRadius);
-            Row("Band height (x radius)", ref s.OuterSpreadY, 0.01f, 1f, 0.01f, def.OuterSpreadY, saved.OuterSpreadY);
+            Row(s.OuterShape == FogOuterShape.Volume ? "Height (x radius)" : "Band height (x radius)", ref s.OuterSpreadY, 0.01f, 1f, 0.01f, def.OuterSpreadY, saved.OuterSpreadY);
             Row("Rotation deg/s", ref s.OuterRotation, -60f, 60f, 1f, def.OuterRotation, saved.OuterRotation);
             Row("Offset Y m", ref s.OuterOffsetY, -1f, 1f, 0.05f, def.OuterOffsetY, saved.OuterOffsetY);
             Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.05f, def.OuterAlpha, saved.OuterAlpha);
@@ -461,6 +462,22 @@ namespace InvisibilityPotion.Dev
                 }
                 GUILayout.EndHorizontal();
             }
+        }
+
+        /// <summary>OuterShape buttons (round L): Volume = fog around the player, Ring = the round J band near the rim.</summary>
+        private void DrawOuterShape(FogSettings s, FogSettings saved)
+        {
+            GUILayout.BeginHorizontal();
+            var c = GUI.color;
+            if (s.OuterShape != saved.OuterShape) GUI.color = ChangedColor;
+            GUILayout.Label((s.OuterShape != saved.OuterShape ? "* " : "") + "Outer shape", GUILayout.Width(LabelWidth));
+            GUI.color = c;
+            foreach (FogOuterShape m in Enum.GetValues(typeof(FogOuterShape)))
+            {
+                var label = m == s.OuterShape ? $"[{m}]" : m.ToString();
+                if (GUILayout.Button(label, GUILayout.Height(RowHeight)) && m != s.OuterShape) { s.OuterShape = m; MarkDirty(); }
+            }
+            GUILayout.EndHorizontal();
         }
 
         private void DrawEmitterMode(FogSettings s, bool live)

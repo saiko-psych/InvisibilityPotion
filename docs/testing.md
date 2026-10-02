@@ -308,3 +308,19 @@ Setup: `make build` (Debug, game closed), `make run`, drink a tier II mead or `i
 - [ ] Standing still: the ring turns slowly (about one turn in 45 s)
 - [ ] Ground field unchanged (patches stay along the path as in round J); tier I has no outer ring; tier III unchanged
 - [ ] Tuning window (`ip_fogui`, outer section): `Rotation deg/s`, `Offset Y m` and `Band height (x radius)` rows change the ring live; `ip_fog outerrotation 20` and `ip_fog outeroffsety 0` work too
+
+## Plan 4 – round L (tier I and II as real fog)
+
+Setup: `make build` (Debug, game closed), `make run`, `ip_give 2`, later `ip_end` and `ip_give 1`. Paste the `Config migration`, `veil fog soft material`, `veil fog spawned` and `auto fog dump` lines.
+
+- [ ] `Config migration: [Fog.Tier1] ... is reset` / `[Fog.Tier2] ... is reset` for each changed key, then `Config migration (look defaults revision 7): N [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults` once; tier III keeps its values
+- [ ] `veil fog: soft material ... _MainTex ... -> ip_fog_sprite (128x128 white, gaussian alpha, centre 0.8, noise +-10 %)`
+- [ ] `ip_give 2` prints `applied T2; end with: ip_end`; `ip_end` prints `veil ended (1 effect(s) removed)`, the fog and the body veil go away; a second `ip_end` prints `veil ended (no InvisibilityPotion effect was active)`
+- [ ] Tier II `veil fog spawned T2`: 13 inner emitters (`rate 14/s, size 0.8 m, alpha 0.35`), two ground emitters (`alpha 0.18`), and `ip_fog_outer [Outer] Hips: rate 10/s, Volume radius 3 m, height 0.35 x r, offset y 0 m, rotation 3 deg/s, Follow, camera-facing, size 3.2 m, alpha 0.1`
+- [ ] Auto fog dump, `ip_fog_outer` line: `shape Sphere r 3 scale (1, 0.35, 1)`, `startSize 2.56..3.84`, `lifetime 4.8..7.2`, `speed 0.03`, `space Local`, `; outer shape Volume: Sphere ... random direction 1`, renderer `mode Billboard`, `maxParticleSize 10`
+- [ ] Tier II look: a light fog in a wide area (about 3 m) around the player, a soft volume about hip height (+-1 m), not a ring of discs; denser fog close to the body that wraps the whole body head to feet
+- [ ] No hard disc edges: single sprites fade out softly, overlapping sprites do not show stacked circles
+- [ ] Walking and running: the volume and the body cloud stay with the player; the ground field still lays patches along the path, lighter than before
+- [ ] Tier I (`ip_end`, `ip_give 1`): the normal body is wrapped as a whole in a light fog (not only hands and feet), plus a fainter fog volume (radius 2.4 m) and a light ground field; `veil fog spawned T1` lists 13 inner emitters `rate 10/s, size 0.75 m, alpha 0.25` and `ip_fog_outer ... Volume radius 2.4 m`, alpha 0.07
+- [ ] Tier III unchanged
+- [ ] Tuning window (`ip_fogui`, outer section): `Outer shape [Volume] Ring` switches live between the volume and the round J ring; `Height (x radius)` flattens the volume; `ip_fog outershape ring` works too

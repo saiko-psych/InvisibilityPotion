@@ -24,6 +24,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new FogUiCommand());
             AssetCommands.Register();
             MeshExport.Register();
+            EffectCommands.Register();
         }
 
         internal static void Say(string line)
@@ -406,7 +407,7 @@ namespace InvisibilityPotion.Dev
                 }
                 if (args.Length < 1 || !int.TryParse(args[0], out var tier) || tier < 1 || tier > 3) { Say(Help); return; }
                 var se = p.GetSEMan().AddStatusEffect(Effects.StatusEffects.NameHash(tier), resetTime: true);
-                Say(se != null ? $"applied T{tier}" : $"T{tier} not applied (already active or not registered)");
+                Say(se != null ? $"applied T{tier}; end with: ip_end" : $"T{tier} not applied (already active or not registered); end with: ip_end");
             }
         }
 

@@ -465,16 +465,25 @@ namespace InvisibilityPotion.Visuals
                     snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, true, groundUpper, groundUpperVertexAlpha, snap.MaterialHasColor));
             }
 
-            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), in both emitter modes. A ring
-            // (round J ruling): Circle shape near the rim of OuterRadius, band height OuterSpreadY x radius, OuterOffsetY below the
-            // anchor offset, turning at OuterRotation (orbital velocity). Absolute values: its own rate, size, alpha and lifetime.
+            // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), in both emitter modes, offset
+            // OuterOffsetY from the anchor offset, turning at OuterRotation (orbital velocity); its own rate, size, alpha, lifetime.
+            // OuterShape Volume (round L ruling 1): large soft sprites inside a flattened sphere of OuterRadius (height OuterSpreadY x
+            // radius), size 0.8..1.2 x OuterSize, slow drift in a random direction, alpha fading in over 20 % and out to the end.
+            // OuterShape Ring (round J ruling): Circle shape near the rim of OuterRadius, band height OuterSpreadY x radius.
             if (outer == null || animator == null) return;
+            var volume = s.OuterShape == FogOuterShape.Volume;
             var outerLayer = new FogLayer
             {
                 Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
                 Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
-                Ring = true, Orbital = s.OuterOrbitalRadPerSecond,
+                Ring = !volume, Volume = volume, Orbital = s.OuterOrbitalRadPerSecond,
             };
+            if (volume)
+            {
+                outerLayer.SizeMinFactor = FogSettings.OuterVolumeSizeMinFactor;
+                outerLayer.SizeMaxFactor = FogSettings.OuterVolumeSizeMaxFactor;
+                outerLayer.Speed = FogSettings.OuterVolumeSpeed;
+            }
             foreach (var name in s.OuterAnchors)
             {
                 var a = s.Anchor(name);
@@ -499,6 +508,11 @@ namespace InvisibilityPotion.Visuals
             public FogTrailMode Trail;
             public bool Horizontal;   // HorizontalBillboard (quads parallel to the ground) instead of camera-facing billboards
             public bool Ring;         // Circle shape near the rim (outer ring) instead of a scaled sphere; SpreadY = band height x radius
+            // Outer fog volume (round L): flattened sphere of radius x (1, SpreadY, 1), random start direction, no inner Drift, alpha
+            // 0 -> 1 at OuterVolumeFadeIn -> 0 at the end, and no renderer size clamp (3 m sprites near the camera stay full size).
+            public bool Volume;
+            public float SizeMinFactor = 0.6f, SizeMaxFactor = 1.25f;   // start size = random [min, max] x Size
+            public float Speed = float.NaN;                              // start speed m/s; NaN = the tier's Speed
             public float Orbital;     // rad/s around the emitter's up axis (velocityOverLifetime.orbitalY); 0 = none
             public Material Material;
         }
@@ -611,6 +625,15 @@ namespace InvisibilityPotion.Visuals
                 shape.rotation = new Vector3(90f, 0f, 0f);
                 shape.scale = Vector3.one;
                 shape.randomPositionAmount = Mathf.Max(0f, layer.SpreadY * radius);
+            }
+            else if (layer.Volume)
+            {
+                // Fog volume: the whole flattened sphere (radiusThickness 1), random start directions for the slow drift.
+                shape.shapeType = ParticleSystemShapeType.Sphere;
+                shape.radius = Mathf.Max(0.001f, radius);
+                shape.radiusThickness = 1f;
+                shape.scale = new Vector3(1f, layer.SpreadY, 1f);   // follower rotation = player rotation, so y is up
+                shape.randomDirectionAmount = 1f;
             }
             else
             {
@@ -804,8 +827,8 @@ namespace InvisibilityPotion.Visuals
             main.simulationSpace = layer.Trail == FogTrailMode.Trail ? ParticleSystemSimulationSpace.World : ParticleSystemSimulationSpace.Local;
             main.scalingMode = ParticleSystemScalingMode.Local;
             main.startLifetime = new ParticleSystem.MinMaxCurve(layer.Lifetime * 0.8f, layer.Lifetime * 1.2f);
-            main.startSpeed = s.Speed;
-            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.6f, size * 1.25f);
+            main.startSpeed = float.IsNaN(layer.Speed) ? s.Speed : layer.Speed;
+            main.startSize = new ParticleSystem.MinMaxCurve(size * layer.SizeMinFactor, size * layer.SizeMaxFactor);
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
             // With a material colour the tint lives there (it can follow the environment); else in the particle colour.
             main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
@@ -817,10 +840,11 @@ namespace InvisibilityPotion.Visuals
             emission.rateOverTime = Mathf.Max(0f, rate);
 
             var vel = ps.velocityOverLifetime;
-            vel.enabled = Mathf.Abs(s.Drift) > 0.0001f || Mathf.Abs(layer.Orbital) > 0.0001f;
+            var drift = layer.Volume ? 0f : s.Drift;   // the inner Drift is not the volume's (it drifts by its start speed)
+            vel.enabled = Mathf.Abs(drift) > 0.0001f || Mathf.Abs(layer.Orbital) > 0.0001f;
             vel.space = ParticleSystemSimulationSpace.World;   // drift is vertical regardless of bone rotation
             vel.x = new ParticleSystem.MinMaxCurve(0f);
-            vel.y = new ParticleSystem.MinMaxCurve(s.Drift);
+            vel.y = new ParticleSystem.MinMaxCurve(drift);
             vel.z = new ParticleSystem.MinMaxCurve(0f);
             // Outer ring turn (round J ruling): orbital velocity around the system's centre (the follower, y = player up), all three
             // orbital curves in Constant mode like the linear ones.
@@ -833,12 +857,16 @@ namespace InvisibilityPotion.Visuals
             var gradient = new Gradient();
             gradient.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.3f), new GradientAlphaKey(1f, 0.6f), new GradientAlphaKey(0f, 1f) });
+                layer.Volume
+                    ? new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, FogSettings.OuterVolumeFadeIn), new GradientAlphaKey(0f, 1f) }
+                    : new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.3f), new GradientAlphaKey(1f, 0.6f), new GradientAlphaKey(0f, 1f) });
             col.color = new ParticleSystem.MinMaxGradient(gradient);
 
             var psr = go.GetComponent<ParticleSystemRenderer>();
             psr.sharedMaterial = layer.Material;
             psr.renderMode = layer.Horizontal ? ParticleSystemRenderMode.HorizontalBillboard : ParticleSystemRenderMode.Billboard;
+            // Viewport fraction; the default 0.5 shrinks a 3 m volume sprite when the camera is inside or close to the fog.
+            if (layer.Volume) psr.maxParticleSize = 10f;
             psr.shadowCastingMode = ShadowCastingMode.Off;
             psr.receiveShadows = false;
             psr.lightProbeUsage = LightProbeUsage.Off;
@@ -893,7 +921,7 @@ namespace InvisibilityPotion.Visuals
                 var upperGround = e.Anchor == GroundUpperAnchorName;
                 var extra = e.Layer == FogLayerKind.Ground ? $" + {F(upperGround ? s.GroundUpperRateDistance : s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, " +
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
-                          : e.Layer == FogLayerKind.Outer ? $", ring radius {F(s.OuterRadius)} m, band {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
+                          : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {F(s.OuterRadius)} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
                                                             $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)})");
             }
@@ -956,7 +984,8 @@ namespace InvisibilityPotion.Visuals
                              $"speed {Curve(main.startSpeed)}, space {main.simulationSpace}, scaling {main.scalingMode}, shape {shape.shapeType} r {F(shape.radius)} scale {V(shape.scale)}, " +
                              $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}" +
                              (e.Layer == FogLayerKind.Outer
-                                 ? $"; shape {shape.shapeType} r {F(shape.radius)} thickness {F(shape.radiusThickness)} rotation {V(shape.rotation)} jitter {F(shape.randomPositionAmount)}, " +
+                                 ? $"; outer shape {Fog[snap.Tier].OuterShape}: {shape.shapeType} r {F(shape.radius)} thickness {F(shape.radiusThickness)} rotation {V(shape.rotation)} jitter {F(shape.randomPositionAmount)} " +
+                                   $"random direction {F(shape.randomDirectionAmount)}, " +
                                    $"orbital {Curve(ps.velocityOverLifetime.orbitalY)} rad/s ({F(Curve0(ps.velocityOverLifetime.orbitalY) * Mathf.Rad2Deg)} deg/s)"
                                  : ""));
                     into.Add(psr == null ? "    renderer: none" :
@@ -1177,7 +1206,7 @@ namespace InvisibilityPotion.Visuals
             if (m.HasProperty(NormalTexId)) m.SetTexture(NormalTexId, FlatNormal());
             _softFogMaterial = m;
             Plugin.Log.LogInfo($"veil fog: soft material from '{swamp.name}' (shader '{m.shader?.name}'): _MainTex {(oldMain != null ? oldMain.name : "-")} -> " +
-                               $"{(m.HasProperty(MainTexId) ? "ip_fog_sprite (64x64 white, radial smoothstep alpha)" : "not declared, unchanged")}, _NormalTex {(oldNormal != null ? oldNormal.name : "-")} -> " +
+                               $"{(m.HasProperty(MainTexId) ? $"ip_fog_sprite ({FogSprite.Size}x{FogSprite.Size} white, gaussian alpha, centre {FloatList.Format(FogSprite.CentreAlpha)}, noise +-{FloatList.Format(FogSprite.NoiseAmount * 100f)} %)" : "not declared, unchanged")}, _NormalTex {(oldNormal != null ? oldNormal.name : "-")} -> " +
                                $"{(m.HasProperty(NormalTexId) ? "ip_fog_flat_normal" : "not declared, unchanged")}");
             LogProperties("fog soft", m);
             return m;
@@ -1194,19 +1223,19 @@ namespace InvisibilityPotion.Visuals
             return tex;
         }
 
+        /// <summary>
+        /// The soft fog sprite (round L ruling 5): white, alpha from <see cref="FogSprite.Alpha"/> = a gaussian falloff
+        /// (centre <see cref="FogSprite.CentreAlpha"/>, exactly 0 at the edge) times 1 +- 10 % smooth value noise, so overlapping
+        /// particles blend into fog instead of showing stacked disc edges. Replaces the round 2 smoothstep cone (hard-ish rim).
+        /// </summary>
         private static Texture2D SoftSprite()
         {
-            const int size = 64;
+            const int size = FogSprite.Size;
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "ip_fog_sprite" };
             var px = new Color[size * size];
             for (var y = 0; y < size; y++)
             for (var x = 0; x < size; x++)
-            {
-                var dx = (x + 0.5f) / size * 2f - 1f;
-                var dy = (y + 0.5f) / size * 2f - 1f;
-                var a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
-                px[y * size + x] = new Color(1f, 1f, 1f, a * a * (3f - 2f * a));
-            }
+                px[y * size + x] = new Color(1f, 1f, 1f, FogSprite.Alpha(x, y, size));
             tex.SetPixels(px);
             tex.Apply();
             return tex;

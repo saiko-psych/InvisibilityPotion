@@ -73,6 +73,13 @@ namespace InvisibilityPotion.Visuals
 
     public enum FogValueKind { Float, Bool, Text }
 
+    /// <summary>
+    /// Shape of the outer layer (OuterShape): Volume (round L) = large soft camera-facing sprites inside a flattened sphere of
+    /// OuterRadius (height OuterSpreadY x radius), overlapping into fog; Ring (round J) = the Circle shape near the rim of
+    /// OuterRadius (band height OuterSpreadY x radius).
+    /// </summary>
+    public enum FogOuterShape { Volume, Ring }
+
     /// <summary>The three kinds of fog emitter: inner (on the body), outer (wide ring on bones), ground (fog field at the feet).</summary>
     public enum FogLayerKind { Inner, Outer, Ground }
 
@@ -83,13 +90,15 @@ namespace InvisibilityPotion.Visuals
     /// the user saved from the tuning window. Revision 5 (plan 4 fix round 2): FogMaterial soft is the default of every tier;
     /// files at revision 4 keep their tuning and only move FogMaterial swamp_mist to soft (all three tiers). Revision 6 (plan 4,
     /// round J ruling): the tier II outer layer is a distinct ring that stays around the player; files at revision 4 or 5 get only
-    /// their [Fog.Tier2] Outer* keys reset (see <see cref="ResetsOuterKey"/>).
+    /// their [Fog.Tier2] Outer* keys reset (see <see cref="ResetsOuterKey"/>). Revision 7 (plan 4, round L ruling): the outer
+    /// layer is a fog volume (OuterShape Volume), tier I and II get an enveloping body cloud; every older file gets [Fog.Tier1] and
+    /// [Fog.Tier2] fully reset (<see cref="FullResetRevision"/> = 7), so the outer-only reset of revision 6 no longer runs alone.
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 6;
-        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults.</summary>
-        public const int FullResetRevision = 4;
+        public const int Revision = 7;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round L: 7).</summary>
+        public const int FullResetRevision = 7;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -155,6 +164,13 @@ namespace InvisibilityPotion.Visuals
         /// outer quarter of OuterRadius, so the layer reads as a ring, not a filled disc (round J ruling).
         /// </summary>
         public const float OuterRingThickness = 0.25f;
+        /// <summary>Outer volume (round L): start size random in [min, max] x OuterSize.</summary>
+        public const float OuterVolumeSizeMinFactor = 0.8f;
+        public const float OuterVolumeSizeMaxFactor = 1.2f;
+        /// <summary>Outer volume: start speed in m/s, random direction (slow drift of the fog).</summary>
+        public const float OuterVolumeSpeed = 0.03f;
+        /// <summary>Outer volume: alpha over the lifetime rises 0 to 1 until this fraction, then falls to 0 at the end.</summary>
+        public const float OuterVolumeFadeIn = 0.2f;
         /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
         public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
@@ -202,6 +218,8 @@ namespace InvisibilityPotion.Visuals
         /// billboards cannot form a flat ring (each quad is ~4x taller than the 0.42 m disc), so the ring read as part of the body cloud.
         /// </summary>
         public bool OuterHorizontal = true;
+        /// <summary>Outer layer shape: Volume (fog around the player, round L) or Ring (round J).</summary>
+        public FogOuterShape OuterShape = FogOuterShape.Volume;
         /// <summary>Bones the outer layer spawns on (one emitter each, radius OuterRadius, offset from the Anchor.* key), whatever the emitter mode.</summary>
         public List<string> OuterAnchors = new List<string>(DefaultOuterAnchors);
         /// <summary>Ground fog field: world-space, ground-parallel particles at the feet that stay where they were emitted and grow.</summary>
@@ -268,6 +286,30 @@ namespace InvisibilityPotion.Visuals
         public static bool TryParseEmitterMode(string text, out FogEmitterMode mode) =>
             Enum.TryParse((text ?? "").Trim(), true, out mode) && Enum.IsDefined(typeof(FogEmitterMode), mode);
 
+        public static bool TryParseOuterShape(string text, out FogOuterShape shape)
+        {
+            shape = FogOuterShape.Volume;
+            var t = (text ?? "").Trim();
+            foreach (FogOuterShape v in Enum.GetValues(typeof(FogOuterShape)))
+                if (string.Equals(v.ToString(), t, StringComparison.OrdinalIgnoreCase)) { shape = v; return true; }
+            return false;
+        }
+
+        /// <summary>
+        /// Round L ruling 1: the outer layer as a fog volume. Large soft camera-facing sprites (OuterSize 3.2, random 0.8..1.2x) at
+        /// low alpha in a flattened sphere (OuterRadius x OuterSpreadY high, about +-1 m around hip height at 3 m), slow drift,
+        /// slow turn, local space (follows the player). Overlapping big soft sprites at low alpha read as fog, not as discs.
+        /// </summary>
+        private static void ApplyFogVolume(FogSettings s, float alpha, float radius)
+        {
+            s.OuterEnabled = true;
+            s.OuterShape = FogOuterShape.Volume;
+            s.OuterAnchors = new List<string> { "Hips" };
+            s.OuterHorizontal = false;
+            s.OuterSize = 3.2f; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f;
+            s.OuterRate = 10f; s.OuterLifetime = 6f; s.OuterRotation = 3f; s.OuterOffsetY = 0f; s.OuterTrail = false;
+        }
+
         public static FogSettings Defaults(int tier)
         {
             var s = new FogSettings();
@@ -278,11 +320,15 @@ namespace InvisibilityPotion.Visuals
                     // Light tier (round H): the normal body ([Tier1] BodyVeilMode Off) in a thin, close fog layer that follows the
                     // body (no trail plume), plus a ground fog field along the walked path. Distortion values stay for the mode switch.
                     // Round I: matte (Emission 0), fainter and greyer so it reads as mist, not as a glow.
-                    s.Rate = 5f; s.Size = 0.45f; s.Lifetime = 2f; s.Speed = 0.03f; s.Alpha = 0.18f;
+                    // Round L: Rate 5 x Size 0.45 left gaps between the 13 bone emitters (fog on hands and feet only); the cloud
+                    // now envelops the whole body like tier II's, only lighter, plus the fog volume and the ground field.
+                    s.Rate = 10f; s.Size = 0.75f; s.Lifetime = 2.2f; s.Speed = 0.03f; s.Alpha = 0.25f;
                     s.R = 0.8f; s.G = 0.82f; s.B = 0.85f; s.Emission = 0f;
-                    s.SpreadX = 1f; s.SpreadY = 0.5f; s.SpreadZ = 1f; s.Drift = 0.03f;
+                    s.SpreadX = 1f; s.SpreadY = 0.6f; s.SpreadZ = 1f; s.Drift = 0.03f;
                     s.Trail = false;
+                    ApplyFogVolume(s, 0.07f, 2.4f);
                     s.GroundEnabled = true;
+                    s.GroundAlpha = 0.15f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
                     break;
                 case 2:
@@ -290,20 +336,15 @@ namespace InvisibilityPotion.Visuals
                     // large slow particles at hip height that trails.
                     // Round I: the inner cloud is the user's tuning saved from ip_fogui (2026-10-02), matte (Emission 0). The faint
                     // alpha with the full SpreadY reads as a thin haze; the slight downward drift keeps it from rising into a plume.
-                    s.Rate = 12f; s.Size = 0.685f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.035f;
-                    s.R = 0.775f; s.G = 0.775f; s.B = 0.775f; s.Emission = 0f;
-                    s.SpreadX = 1.125f; s.SpreadY = 1f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
-                    s.OuterEnabled = true;
-                    s.OuterAnchors = new List<string> { "Hips" };
-                    // Round J ruling (revision 6): a distinct ring 2.5 m around the player at hip height (Hips - 0.2 m) that stays
-                    // with the player (local space, no trail: in world space its patches looked exactly like the ground field),
-                    // thin and turning slowly.
-                    s.OuterRadius = 2.5f; s.OuterAlpha = 0.55f; s.OuterRate = 18f; s.OuterSize = 1.6f; s.OuterLifetime = 4f;
-                    s.OuterSpreadY = 0.1f; s.OuterTrail = false; s.OuterHorizontal = true;
-                    s.OuterOffsetY = -0.2f; s.OuterRotation = 8f;
-                    // Round H: a denser, wider ground fog field than tier I.
+                    // Round L ruling 2 (revision 7): a denser cloud enveloping the whole body (all anchors), 0.8 grey, matte.
+                    s.Rate = 14f; s.Size = 0.8f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.35f;
+                    s.R = 0.8f; s.G = 0.8f; s.B = 0.8f; s.Emission = 0f;
+                    s.SpreadX = 1.125f; s.SpreadY = 0.6f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
+                    // Round L ruling 1: light fog in a wide area around the player (replaces the round J ring of flat discs).
+                    ApplyFogVolume(s, 0.1f, 3f);
+                    // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth).
                     s.GroundEnabled = true;
-                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1f; s.GroundGrow = 3.5f; s.GroundAlpha = 0.3f; s.GroundRadius = 0.9f;
+                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.18f; s.GroundRadius = 0.9f;
                     s.DistortionStrength = 0.1f; s.DA = 0.08f;
                     break;
                 case 3:
@@ -322,11 +363,12 @@ namespace InvisibilityPotion.Visuals
                 case "Chest": return new FogAnchor { Name = name, Radius = 0.25f };
                 case "Hips": return new FogAnchor { Name = name, Radius = 0.22f };
                 case "LeftShoulder": case "RightShoulder": return new FogAnchor { Name = name, Radius = 0.12f };
-                case "LeftHand": case "RightHand": return new FogAnchor { Name = name, Radius = 0.1f };
+                // Round L: limb radius at least 0.12 m so neighbouring emitters overlap into one cloud.
+                case "LeftHand": case "RightHand": return new FogAnchor { Name = name, Radius = 0.12f };
                 // Upper/lower leg bones sit at the hip joint and the knee; the offset moves the emitter to mid-thigh / mid-shin.
                 case "LeftUpperLeg": case "RightUpperLeg": return new FogAnchor { Name = name, Radius = 0.12f, Y = -0.22f };
-                case "LeftLowerLeg": case "RightLowerLeg": return new FogAnchor { Name = name, Radius = 0.1f, Y = -0.2f };
-                case "LeftFoot": case "RightFoot": return new FogAnchor { Name = name, Radius = 0.1f, Y = 0.05f };
+                case "LeftLowerLeg": case "RightLowerLeg": return new FogAnchor { Name = name, Radius = 0.12f, Y = -0.2f };
+                case "LeftFoot": case "RightFoot": return new FogAnchor { Name = name, Radius = 0.12f, Y = 0.05f };
                 default: return new FogAnchor { Name = name };
             }
         }
@@ -502,11 +544,12 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterAlpha", FogValueKind.Float, "Outer layer alpha 0..1 (independent of Alpha)"),
                 new FogKey("OuterRate", FogValueKind.Float, "Outer layer particles per second per outer anchor (independent of Rate; 0 = no outer layer)"),
                 new FogKey("OuterSize", FogValueKind.Float, "Outer layer particle size in metres (randomised 0.6x..1.25x)"),
-                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer ring band height as a fraction of OuterRadius (random vertical jitter of the spawn point); small = a thin band"),
+                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer height as a fraction of OuterRadius: Volume = vertical scale of the spawn sphere, Ring = band height (random vertical jitter); small = flat"),
                 new FogKey("OuterLifetime", FogValueKind.Float, "Outer layer particle lifetime in seconds (randomised 0.8x..1.2x)"),
                 new FogKey("OuterTrail", FogValueKind.Bool, "Outer layer in world space (leaves a trail), like Trail for the inner layer"),
-                new FogKey("OuterRotation", FogValueKind.Float, "Outer ring turn speed around the player in deg/s (negative = the other way, 0 = still)"),
+                new FogKey("OuterRotation", FogValueKind.Float, "Outer layer turn speed around the player in deg/s (negative = the other way, 0 = still)"),
                 new FogKey("OuterOffsetY", FogValueKind.Float, "Outer ring vertical offset in metres, added to the outer anchor's Anchor.* offset (negative = lower)"),
+                new FogKey("OuterShape", FogValueKind.Text, "Outer layer shape: Volume = large soft fog sprites inside a flattened sphere of OuterRadius (height OuterSpreadY x radius) around the player; Ring = a band near the rim of OuterRadius"),
                 new FogKey("OuterHorizontal", FogValueKind.Bool, "Outer layer particles lie flat, parallel to the ground (a visible flat ring from above); false = they face the camera like the inner fog"),
                 new FogKey("GroundEnabled", FogValueKind.Bool, "Ground fog field: flat fog patches at the feet that stay where they were emitted and spread, so walking leaves a field of fog"),
                 new FogKey("GroundRate", FogValueKind.Float, "Ground field particles per second (also while standing still)"),
@@ -558,6 +601,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterLifetime": return FloatList.Format(OuterLifetime);
                 case "OuterTrail": return Bool(OuterTrail);
                 case "OuterHorizontal": return Bool(OuterHorizontal);
+                case "OuterShape": return OuterShape.ToString();
                 case "OuterRadius": return FloatList.Format(OuterRadius);
                 case "OuterAlpha": return FloatList.Format(OuterAlpha);
                 case "OuterRate": return FloatList.Format(OuterRate);
@@ -623,6 +667,10 @@ namespace InvisibilityPotion.Visuals
                     var name = NormalizeFogMaterial(text);
                     if (name == null) return false;
                     FogMaterial = name;
+                    return true;
+                case "OuterShape":
+                    if (!TryParseOuterShape(text, out var shape)) return false;
+                    OuterShape = shape;
                     return true;
                 case "FogEmitterMode":
                     if (!TryParseEmitterMode(text, out var em)) return false;
@@ -690,6 +738,77 @@ namespace InvisibilityPotion.Visuals
                 if (!s.TrySet(key.Name, text)) warnings?.Add($"{key.Name} '{text}' is malformed; using default {s.Get(key.Name)}");
             }
             return s;
+        }
+    }
+
+    /// <summary>
+    /// Alpha of the generated "soft" fog sprite (round L ruling 5), white rgb. Falloff: a gaussian exp(-k r^2) shifted and scaled
+    /// so it is <see cref="CentreAlpha"/> at the centre (r = 0) and exactly 0 at the edge (r = 1) and beyond:
+    /// alpha(r) = CentreAlpha x (exp(-k r^2) - exp(-k)) / (1 - exp(-k)), k = <see cref="Sharpness"/>. Noise: smooth value noise
+    /// (random values on a <see cref="NoiseCells"/> lattice, bilinear with smoothstep) multiplies the falloff by 1 +- NoiseAmount, so
+    /// overlapping particles (each with its own random rotation) do not stack into visible circles. Result clamped to CentreAlpha.
+    /// Pixel (x, y) of a size x size sprite maps to -1..1 corner to corner, so the border pixels have r &gt;= 1 and alpha 0.
+    /// </summary>
+    public static class FogSprite
+    {
+        public const int Size = 128;
+        public const float CentreAlpha = 0.8f;
+        public const float Sharpness = 4f;
+        public const float NoiseAmount = 0.1f;
+        public const int NoiseCells = 6;
+        private const int Seed = 7919;
+
+        public static float Falloff(float r)
+        {
+            if (r >= 1f) return 0f;
+            if (r < 0f) r = 0f;
+            var edge = Math.Exp(-Sharpness);
+            return CentreAlpha * (float)((Math.Exp(-Sharpness * r * r) - edge) / (1.0 - edge));
+        }
+
+        /// <summary>Distance of pixel (x, y) from the sprite centre, 1 at the middle of each border.</summary>
+        public static float Radius(int x, int y, int size)
+        {
+            var half = (size - 1) * 0.5f;
+            var dx = (x - half) / half;
+            var dy = (y - half) / half;
+            return (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        /// <summary>Smooth value noise in -1..1 at pixel (x, y), deterministic.</summary>
+        public static float Noise(int x, int y, int size)
+        {
+            var fx = (float)x / Math.Max(1, size - 1) * NoiseCells;
+            var fy = (float)y / Math.Max(1, size - 1) * NoiseCells;
+            var ix = (int)Math.Floor(fx);
+            var iy = (int)Math.Floor(fy);
+            var tx = Smooth(fx - ix);
+            var ty = Smooth(fy - iy);
+            var a = Lattice(ix, iy) + (Lattice(ix + 1, iy) - Lattice(ix, iy)) * tx;
+            var b = Lattice(ix, iy + 1) + (Lattice(ix + 1, iy + 1) - Lattice(ix, iy + 1)) * tx;
+            return a + (b - a) * ty;
+        }
+
+        /// <summary>Final alpha of pixel (x, y): Falloff x (1 + NoiseAmount x Noise), clamped to 0..CentreAlpha.</summary>
+        public static float Alpha(int x, int y, int size)
+        {
+            var f = Falloff(Radius(x, y, size));
+            if (f <= 0f) return 0f;
+            var a = f * (1f + NoiseAmount * Noise(x, y, size));
+            return a < 0f ? 0f : a > CentreAlpha ? CentreAlpha : a;
+        }
+
+        private static float Smooth(float t) => t * t * (3f - 2f * t);
+
+        /// <summary>Hash of a lattice point to -1..1.</summary>
+        private static float Lattice(int x, int y)
+        {
+            unchecked
+            {
+                var h = (uint)(x * 73856093) ^ (uint)(y * 19349663) ^ (uint)Seed;
+                h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
+                return (h & 0xFFFF) / 32767.5f - 1f;
+            }
         }
     }
 

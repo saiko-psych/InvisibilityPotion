@@ -171,7 +171,9 @@ namespace InvisibilityPotion.Config
         /// fog layer that follows the body, ground fog field for tiers I and II), revision 4 (round I, task 10i: matte fog, tier II
         /// = the user's saved tuning, so a revision 3 file of that user loses nothing), revision 5 (plan 4 fix round 2: FogMaterial soft;
         /// only files below revision 4 get the full reset, a revision 4 file keeps its tuning), revision 6 (plan 4, round J ruling: the
-        /// tier II outer layer is a ring around the player; a revision 4/5 file gets only its [Fog.Tier2] Outer* keys reset). Existing files keep their old values, so once per
+        /// tier II outer layer is a ring around the player; a revision 4/5 file gets only its [Fog.Tier2] Outer* keys reset), revision 7
+        /// (plan 4, round L ruling: tier I/II = enveloping body cloud plus a fog volume (OuterShape Volume) and a lighter ground field;
+        /// every file below revision 7 gets [Fog.Tier1] and [Fog.Tier2] fully reset, old values logged). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -197,7 +199,8 @@ namespace InvisibilityPotion.Config
                         Plugin.Log?.LogInfo($"Config migration: [Fog.Tier{t}] {kv.Key} = {kv.Value.BoxedValue} (default {kv.Value.DefaultValue}) is reset");
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
-                // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below revision 4 were reset above).
+                // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below FullResetRevision were reset above;
+                // since revision 7 that is every older file, so this branch only runs if FullResetRevision is lowered again).
                 var outerReset = 0;
                 if (!LookDefaults.ResetsTiers(rev.Value))
                     foreach (var kv in _fogEntries[2])
