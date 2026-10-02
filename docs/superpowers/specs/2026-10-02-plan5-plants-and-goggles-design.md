@@ -58,16 +58,18 @@ New files: `Plants/VeilSight.cs`, `Plants/VeilHarvest.cs`, `Plants/HarvestStage.
 - Stage tick: every 5 s (staggered) read the two keys, compute the stage with `HarvestStage.At`, set `VeilSight.ActiveStage`. Timestamp-based, so regrowth also advances while the zone was unloaded.
 - `GetHoverText`: ripe → `"<name>\n[<color=yellow><b>$KEY_Use</b></color>] $inventory_pickup"` (same string as `Pickable.GetHoverText`, Pickable.cs:114-120, localized with `Localization.instance.Localize`); growing → `"<name> ($ip_plant_growing)"`. `Interact` refuses below `RequiredLevel` (client-side; colliders are off anyway) and sends `InvokeRPC("IP_Harvest")`.
 - `RPC_Harvest` (runs on the ZDO owner, like `Pickable.RPC_Pick`, Pickable.cs:235): if the current stage is not ripe, ignore (serialises double picks); else write `stage = 1`, `time = now`, drop `Yield` items like `Pickable.Drop` (Pickable.cs:331), play `PickEffects` via a broadcast `IP_HarvestFx` RPC.
-- **Ground plant prefabs** `IP_BaldrsTear_a/b/c`, `IP_HelsEmberFern_a/b/c` built by `PlantPrefabs` from the bundle: root with persistent `ZNetView`, `VeilHarvest`, `VeilSight(2|3)`, children `ripe` (`Plant_T2_x` model + collider) and `picked` (`Plant_T2_picked`, no collider). T3 keeps its `EmberAnchor` light/particles under `ripe` so they are gated too.
-- **Spawning**: `ZoneManager.Instance.AddCustomVegetation(new CustomVegetation(prefab, true, VegetationConfig { … }))` per variant (R §4.2). Rarity: `PlaceVegetation` treats `m_max < 1` as a per-zone probability with one placement batch (ZoneSystem.cs:1399-1405), and `GroupSizeMin/Max` make the 1–2 plant cluster (ZoneSystem.cs:1425-1429). Three variants share the zone chance: each gets `Max = ZoneChance / 3`. Defaults:
+- **Ground plant prefabs** `IP_BaldrsTear_a/b/c`, `IP_HelsEmberFern_a/b/c` (fixed variant, for `ip_spawn`) and the mixed `IP_BaldrsTear`, `IP_HelsEmberFern` (all three variants under `ripe`, each instance keeps one chosen from a position hash; used for wild spawning) built by `PlantPrefabs` from the bundle: root with persistent `ZNetView`, `VeilHarvest`, `VeilSight(2|3)`, children `ripe` (`Plant_T2_x` model + collider) and `picked` (`Plant_T2_picked`, no collider). T3 keeps its `EmberAnchor` light/particles under `ripe` so they are gated too.
+- **Spawning**: `ZoneManager.Instance.AddCustomVegetation(new CustomVegetation(prefab, true, VegetationConfig { … }))` for the mixed prefab of each plant (R §4.2). Rarity: `PlaceVegetation` treats `m_max < 1` as a per-zone probability with one placement batch (ZoneSystem.cs:1399-1405), and `GroupSizeMin/Max` make the cluster (ZoneSystem.cs:1425-1429). One entry per plant, so `Max` is the zone chance itself (ruling 2026-10-02). Size: `ScaleMin/Max` for wild plants, rolled for `ip_spawn`; stored once as `IP_PlantScale` (plus the vanilla scale key through `m_syncInitialScale`). Defaults:
 
 | Field | Baldr's Tear | Hel's Ember Fern |
 |---|---|---|
 | `Biome` | `Mountain` | `AshLands` |
-| `Max` (per variant) | 0.167 / 3 = 0.056 | 0.056 |
-| `GroupSizeMin/Max`, `GroupRadius` | 1 / 2, 4 m | 1 / 2, 4 m |
+| `Max` (zone chance) | 0.167 (1 in 6) | 0.0667 (1 in 15) |
+| `GroupSizeMin/Max`, `GroupRadius` | 1 / 2, 4 m | 3 / 6, 6 m |
+| `ScaleMin/ScaleMax` | 0.8 / 1.3 | 0.7 / 1.6 |
+| vegetation mask (`m_minVegetation/m_maxVegetation`, set on the `ZoneVegetation`) | – | 0 / 0.5 (off lava) |
 | `MinTilt/MaxTilt` | 0 / 25 | 0 / 30 |
-| `MinAltitude` | above the snow line (?) S6 | – |
+| `MinAltitude` | not set (S6 decides whether a snow-line limit is needed) | – |
 | `BlockCheck`, `BiomeArea` | true, 3 | true, 3 |
 
   Placement checks can fail after the roll, so the real rate is below 1 in 6 (?): S6 samples zones in a new world (`ip_plants` counts) and tunes `ZoneChance`.
@@ -99,12 +101,12 @@ New files: `Plants/VeilSight.cs`, `Plants/VeilHarvest.cs`, `Plants/HarvestStage.
 | Section / key | Default | Note |
 |---|---|---|
 | `[Plants] LichenTreeChance` | 0.025 | per eligible tree |
-| `[Plants] LichenStageMinutes` | 120 | two transitions after a pick = 240 min |
+| `[Plants] LichenStageMinutes` | 120 | minutes of world time (vanilla thistle: 240); two transitions after a pick = 240 min |
 | `[Plants] LichenRevealDistance` | 40 | m, see §3.1 |
 | `[Plants] HuldraCultivable` | true | hides the Cultivator piece when false |
-| `[Plants] BaldrZoneChance`, `HelFernZoneChance` | 0.167 | split over three variants; read at registration (needs restart) |
-| `[Plants] GroundRegrowMinutes` | 240 | T2/T3 picked → ripe |
-| `[Plants] YieldT1..T3` | 2 / 2 / 2 | items per pick (?) balancing |
+| `[Plants] BaldrZoneChance`, `HelFernZoneChance` | 0.167, 0.0667 | chance per new zone of the mixed prefab; read at registration (needs restart) |
+| `[Plants] GroundRegrowMinutes` | 240 | minutes of world time; T2/T3 picked → ripe |
+| `[Plants] YieldT1..T3` | `1-2` / `1-1` / `2-4` | min-max rolled per pick on the owner; ground plants: `round(roll × (0.75 + 0.5 × size position))`, ≥ 1 |
 | `[Goggles] RecipeT1..T3` | as §2 | `Item:Amount` strings |
 | `[Goggles] RevealHiddenPlayers` | true | level III cancels tier III for the wearer |
 | `[TierN] Recipe` | old default + `,VeilIngredient_TN:2` | migration below |

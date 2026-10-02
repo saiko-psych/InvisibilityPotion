@@ -386,6 +386,7 @@ Huldra's Hair (lichen on trees):
 - [ ] `ip_lichen roll` / `force` / `off` / `clear` on a looked-at fir: patch appears/disappears at once; the `decision:` text matches
 - [ ] Beyond 40 m the patch is not drawn; distant billboard trees show no floating lichen (S5)
 - [ ] Restart the world: the same trees carry lichen (compare `ip_plants` positions)
+- [ ] Log out to the menu, log back in: `ip_plants` still lists lichen trees; the log has `lichen (OnPrefabsRegistered): TreeLichen on N tree prefabs (...); ZNetScene FirTree has TreeLichen: True`
 - [ ] Fell a lichen tree: the lichen goes with it, nothing extra drops
 
 Ground plants:
@@ -393,11 +394,13 @@ Ground plants:
 - [ ] Pick: 1 Baldr's Tear (bigger plants may give 1 too), picked model stays, hover gone; `ip_grow` or `GroundRegrowMinutes` later ripe again
 - [ ] `ip_spawn IP_HelsEmberFern 5`: hidden below goggles III including the ember light; with III visible and pickable, yield 2–4 (scaled by size, up to 5)
 - [ ] `ip_spawn Plant_T2` (look-check prop): hidden below goggles II too
+- [ ] `plants: vegetation IP_HelsEmberFern: vegetation mask 0-0.5 (keeps ferns off lava)`; no fern stands in lava
 - [ ] New world (or unexplored zones): `ip_veg` prints both entries; walk Mountains/Ashlands zones and sample with `ip_plants 200` (S6: about 1 in 6 Mountains zones with 1–2 Baldr's Tear, 1 in 15 Ashlands zones with 3–6 ferns)
 
 Cultivation:
 - [ ] With Huldra's Hair in the inventory the Cultivator lists `Huldra's Hair sprout` (Misc) costing 1 (S7: note when it became available)
 - [ ] Not placeable on raw ground, placeable on cultivated ground in any biome; the sprout is invisible without goggles; hover with goggles shows the vanilla plant status
+- [ ] Garden: hitting a grown Huldra's Hair (goggles on) with any tool removes it, nothing drops; the sapling log line says `fallback: none needed` or `BoxCollider added on the root`
 - [ ] `ip_grow` on the sprout: it grows within 10 s into `IP_HuldraGround_a/b/c` (S3 ripe); pick → 1–2, replays S1 → S2 → S3 (`ip_grow`)
 - [ ] Under forest canopy: status `no sun`? (S7 risk, note it)
 
