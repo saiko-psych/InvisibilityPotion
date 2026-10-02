@@ -326,7 +326,8 @@ namespace InvisibilityPotion.Dev
                 for (var i = 0; i < count; i++)
                 {
                     var pos = p.transform.position + p.transform.forward * 5f + p.transform.right * i;
-                    if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground)) pos.y = ground;
+                    // Terrain height only when it is near the player: in a dungeon or a building the terrain lies far below the floor.
+                    if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground) && Mathf.Abs(ground - p.transform.position.y) < 3f) pos.y = ground + 0.3f;
                     var facing = Vector3.ProjectOnPlane(-p.transform.forward, Vector3.up);
                     var go = Object.Instantiate(prefab, pos, facing.sqrMagnitude > 0.001f ? Quaternion.LookRotation(facing) : Quaternion.identity);
                     var ch = go.GetComponent<Character>();

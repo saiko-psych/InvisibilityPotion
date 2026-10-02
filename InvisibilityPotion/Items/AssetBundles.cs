@@ -35,7 +35,7 @@ namespace InvisibilityPotion.Items
 #if DEBUG
             Plugin.Log.LogInfo($"assets: manifest resources: {string.Join(", ", asm.GetManifestResourceNames())}");
 #endif
-            ResourceName = Application.platform == RuntimePlatform.WindowsPlayer ? BundleName + ".windows" : BundleName;
+            ResourceName = (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsServer) ? BundleName + ".windows" : BundleName;
             _bundle = AssetUtils.LoadAssetBundleFromResources(ResourceName, asm);
             if (_bundle == null)
             {
