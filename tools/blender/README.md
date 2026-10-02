@@ -8,7 +8,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | Script | Outputs in `out/` | Committed preview | Pivot | Anchors |
 |---|---|---|---|---|
 | `make_bottle.py` (v5) | `bottle_t1..3.fbx`, `bottles.blend`, `bottles.log` | `preview-bottles-v5.png` | base | `MistAnchor`, `attach` (neck) |
-| `make_bowl.py` (v1) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v1.png` | base | `attach` (rim, +X) |
+| `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v3) | `plant_t1..3.fbx`, `plant_t1_flat.fbx`, `plants.blend`, `plants.log` | `preview-plants-v3.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_goggles.py` (v2) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v2.png` | head centre | `attach` (head centre) |
 
@@ -32,9 +32,9 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 
 | Tier | Bottle (incl. 80-tri mist mesh) | Bowl | Plant | Goggles |
 |---|---|---|---|---|
-| 1 | 370 | 277 | 640 | 490 |
-| 2 | 448 | 451 | 484 | 1112 |
-| 3 | 560 | 447 | 1196 | 1216 |
+| 1 | 370 | 297 | 640 | 490 |
+| 2 | 448 | 488 | 484 | 1112 |
+| 3 | 560 | 488 | 1196 | 1216 |
 
 # Veil-mead flasks (v5): finished meads
 
@@ -56,22 +56,24 @@ Knobs at the top of `make_bottle.py`:
 3. Mist: `MIST_FILL`, `MIST_INSET`, `MIST_DENSITY`, `MIST_ANISOTROPY`, per-tier `mist_emit`.
 4. Colours: per-tier `glass`, the `MATS` table, `GLASS_ALPHA`, `GLASS_ROUGH`, `BASE_DARKEN`.
 
-# Mead bases (v1): unfermented
+# Mead bases (v2): unfermented
 
 A shallow turned wooden bowl in the manner of the vanilla mead bases, 0.14 m across and 0.062 m to the rim, about
-70 % full of a murky opaque brew in the tier hue (no mist, no glow), a few herb flecks floating on it and a
-stirring stick or spoon resting on the rim (back left, it reaches 0.075-0.085 m). Outer faces alternate two wood
-shades per column (grain), the inside is darker (stained). Pivot at the base centre, `attach` on the rim at +X.
+70 % full of a murky opaque brew in the tier hue (no mist, no glow). The brew surface shows 2-3 thin spiral swirl
+ribbons in a lighter tint of the brew (like stirred cream), lifted 0.8 mm, and a faint concentric ripple ring. No
+spoon, stick or floating bits. Outer faces alternate two wood shades per column (grain), the inside is darker
+(stained). Pivot at the base centre, `attach` on the rim at +X.
 
 | Tier | Look |
 |---|---|
-| 1 | rough 9-sided bowl with per-vertex unevenness, pale wood, moss-green brew, pale lichen flecks, crude stirring stick with a twig stub |
-| 2 | smoother 12-sided bowl with a carved dark bead ring under the rim, steel-blue brew, white petal flecks, wooden spoon |
-| 3 | dark wood 12-sided bowl with a silver rim band, dark violet brew, ember-ash flecks (not emissive), dark spoon |
+| 1 | rough 9-sided bowl with per-vertex unevenness, pale wood, moss-green brew, 2 swirls |
+| 2 | smoother 12-sided bowl with a carved dark bead ring under the rim, steel-blue brew, 3 swirls |
+| 3 | dark wood 12-sided bowl with a silver rim band, dark violet brew, 3 swirls |
 
-Knobs at the top of `make_bowl.py`: `FILL`, `LIQUID_SINK`, `SEED`, the `MATS` table, and per tier `segs`, `rot`,
-`vjitter` (unevenness), `grain` (share of dark columns), `profile` with `rim`/`inner` indices, `carve` (band range),
-`silver` (rim band profile), `tool` (`stick` or `spoon`), `specks`, `speck_size`, `attach_side`.
+Knobs at the top of `make_bowl.py`: `FILL`, `LIQUID_SINK`, `SWIRL_W` (start/end width), `SWIRL_H`, `SWIRL_SEGS`,
+`SWIRL_TURN`, `RIPPLE_R`, `RIPPLE_W`, `RIPPLE_SEGS`, `SEED`, the `MATS` table (`bowl_swirl_tN`, `bowl_ripple_tN` are
+the tints), and per tier `segs`, `rot`, `vjitter` (unevenness), `grain` (share of dark columns), `profile` with
+`rim`/`inner` indices, `carve` (band range), `silver` (rim band profile), `swirls`, `attach_side`.
 
 # Ingredient plants (v3)
 

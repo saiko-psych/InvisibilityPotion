@@ -1,12 +1,12 @@
-"""Procedural low-poly mead bases (unfermented veil mead), 3 tiers, v1.
+"""Procedural low-poly mead bases (unfermented veil mead), 3 tiers, v2.
 Run from the repo root: blender -b --python tools/blender/make_bowl.py
 
 A shallow turned wooden bowl in the manner of Valheim's vanilla mead bases, about 70 % full of a murky, opaque
-brew in the tier's hue (dull, no mist, no glow), a few herb specks floating on it and a stirring stick or spoon
-resting on the rim.
-Tier I   Faint Veil   rough 9-sided bowl, pale wood, moss-green brew, crude stirring stick, lichen specks
-Tier II  Deep Veil    smoother 12-sided bowl with a carved bead ring under the rim, steel-blue brew, spoon, petal specks
-Tier III Shadow Veil  dark wood 12-sided bowl with a silver rim band, dark violet brew, dark spoon, ember-ash specks
+brew in the tier's hue (dull, no mist, no glow). The surface shows 2-3 thin raised swirl ribbons in a lighter tint of the
+brew (like stirred cream) and a faint concentric ripple ring.
+Tier I   Faint Veil   rough 9-sided bowl, pale wood, moss-green brew
+Tier II  Deep Veil    smoother 12-sided bowl with a carved bead ring under the rim, steel-blue brew
+Tier III Shadow Veil  dark wood 12-sided bowl with a silver rim band, dark violet brew
 Each FBX: one mesh (pivot at the base centre) and an `attach` empty on the rim (grip point, +X side).
 """
 import math, os, random, sys
@@ -15,12 +15,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import OUT, HERE, Builder, empty, export_fbx, tri_count, write_log, reset, \
     ground, ruler, light, camera, world, render
 
-PREVIEW = os.path.join(HERE, "preview-bowls-v1.png")
+PREVIEW = os.path.join(HERE, "preview-bowls-v2.png")
 
 # ==== KNOBS (lengths in metres; FBX is Y-up, 1 unit = 1 m, pivot at the base centre) ====
 SEED = 3
 FILL = 0.70              # brew level as a fraction of the inner depth
 LIQUID_SINK = 0.0015     # brew disc reaches this far into the wall (no gap at the rim of the brew)
+SWIRL_W = (0.0045, 0.0015)   # swirl ribbon width at its start and end
+SWIRL_H = 0.0008         # swirl lift above the brew
+SWIRL_SEGS = 10
+SWIRL_TURN = (0.55, 0.85)  # how far each swirl winds (fraction of a full turn)
+RIPPLE_R = 0.62          # ripple ring radius as a fraction of the brew radius
+RIPPLE_W = 0.0025
+RIPPLE_SEGS = 16
 
 # Material table: name -> (colour RGBA, roughness, metallic, emission strength). Names = Unity .mat names.
 MATS = {
@@ -35,15 +42,15 @@ MATS = {
     "bowl_grain_t3":  ((0.12, 0.075, 0.05, 1), 0.72, 0.0, 0.0),
     "bowl_inner_t3":  ((0.10, 0.065, 0.045, 1), 0.75, 0.0, 0.0),
     "bowl_silver":    ((0.62, 0.63, 0.66, 1), 0.3, 0.9, 0.0),
-    "bowl_stick":     ((0.47, 0.36, 0.22, 1), 0.9, 0.0, 0.0),
-    "bowl_spoon":     ((0.55, 0.42, 0.27, 1), 0.8, 0.0, 0.0),
-    "bowl_spoon_t3":  ((0.24, 0.16, 0.10, 1), 0.7, 0.0, 0.0),
     "bowl_brew_t1":   ((0.15, 0.19, 0.075, 1), 0.55, 0.0, 0.0),  # murky moss green
     "bowl_brew_t2":   ((0.085, 0.125, 0.20, 1), 0.55, 0.0, 0.0),   # muddy steel blue
     "bowl_brew_t3":   ((0.10, 0.055, 0.14, 1), 0.55, 0.0, 0.0),  # dark violet
-    "bowl_speck_t1":  ((0.36, 0.40, 0.28, 1), 0.9, 0.0, 0.0),    # lichen bits
-    "bowl_speck_t2":  ((0.78, 0.82, 0.86, 1), 0.8, 0.0, 0.0),    # petal bits
-    "bowl_speck_t3":  ((0.34, 0.12, 0.05, 1), 0.9, 0.0, 0.0),    # ember-ash bits (not emissive)
+    "bowl_swirl_t1":  ((0.30, 0.36, 0.17, 1), 0.6, 0.0, 0.0),   # lighter tints of the brew (stirred cream)
+    "bowl_swirl_t2":  ((0.22, 0.30, 0.42, 1), 0.6, 0.0, 0.0),
+    "bowl_swirl_t3":  ((0.25, 0.15, 0.30, 1), 0.6, 0.0, 0.0),
+    "bowl_ripple_t1": ((0.19, 0.24, 0.10, 1), 0.5, 0.0, 0.0),   # faint ripple ring, just above the brew colour
+    "bowl_ripple_t2": ((0.13, 0.18, 0.26, 1), 0.5, 0.0, 0.0),
+    "bowl_ripple_t3": ((0.15, 0.085, 0.18, 1), 0.5, 0.0, 0.0),
 }
 
 # Profiles: (radius, height) from the bottom centre over the outside to the rim, then down the inside.
@@ -55,7 +62,7 @@ TIERS = {
              (0.071, 0.057), (0.070, 0.062), (0.060, 0.062), (0.058, 0.054), (0.049, 0.031), (0.030, 0.016),
              (0.000, 0.014)],
     rim=7, inner=8, carve=None, silver=None,
-    tool="stick", specks=6, speck_size=(0.004, 0.007)),
+    swirls=2),
  "t2": dict(
     segs=12, rot=0.0, vjitter=0.006, grain=0.5, attach_side=1,
     profile=[(0.000, 0.000), (0.034, 0.000), (0.036, 0.005), (0.041, 0.009), (0.058, 0.023), (0.066, 0.039),
@@ -63,7 +70,7 @@ TIERS = {
              (0.070, 0.058), (0.069, 0.062), (0.060, 0.062), (0.058, 0.054), (0.049, 0.031), (0.030, 0.016),
              (0.000, 0.014)],
     rim=11, inner=12, carve=(6, 9), silver=None,
-    tool="spoon", specks=6, speck_size=(0.004, 0.006)),
+    swirls=3),
  "t3": dict(
     segs=12, rot=0.0, vjitter=0.004, grain=0.5, attach_side=1,
     profile=[(0.000, 0.000), (0.034, 0.000), (0.036, 0.005), (0.041, 0.009), (0.058, 0.023), (0.067, 0.042),
@@ -71,7 +78,7 @@ TIERS = {
              (0.000, 0.014)],
     rim=7, inner=8, carve=None,
     silver=[(0.0685, 0.0525), (0.0712, 0.0535), (0.0712, 0.0625), (0.0690, 0.0640), (0.0645, 0.0640)],  # rim band
-    tool="spoon", specks=5, speck_size=(0.004, 0.006)),
+    swirls=3),
 }
 # =============================================================================
 
@@ -88,46 +95,18 @@ def brew_level(t):
     raise ValueError("fill level outside the bowl")
 
 
-def flake(B, c, size, ang, m, rng):
-    """Tiny floating herb fleck: flat three-sided pyramid (closed, so normals stay right)."""
-    pts = [c + Vector((math.cos(ang + a)*size*rng.uniform(0.6, 1.0), math.sin(ang + a)*size*rng.uniform(0.6, 1.0), 0))
-           for a in (0, 2.2, 4.2)]
-    top = c + Vector((0, 0, 0.0008))
-    for i in range(3):
-        B.face([pts[i], pts[(i+1) % 3], top], m)
-    B.face([pts[2], pts[1], pts[0]], m)
-
-
-def spoon(B, head, rim_pt, out_len, m, rng):
-    """Spoon: oval head half-sunk in the brew at `head`, handle over `rim_pt` and out by out_len."""
-    d = (rim_pt - head); d.z = 0; d.normalize()
-    side = Vector((-d.y, d.x, 0))
-    ring = []
-    for k in range(8):                                    # oval bowl of the spoon, slightly tilted up the handle
-        a = 2*math.pi*k/8
-        p = head + d*math.cos(a)*0.017 + side*math.sin(a)*0.011
-        p.z += math.cos(a)*0.003
-        ring.append(B.v(p))
-    top, bot = B.v(head + Vector((0, 0, -0.001))), B.v(head + Vector((0, 0, -0.007)))
-    for k in range(8):
-        j = (k+1) % 8
-        B.face([ring[k], ring[j], top], m); B.face([ring[j], ring[k], bot], m)
-    neck = head + d*0.016 + Vector((0, 0, 0.004))
-    over = rim_pt + Vector((0, 0, 0.004))
-    end = over + d*out_len + Vector((0, 0, out_len*0.25))
-    B.tube([neck, over, end], [0.0028, 0.0034, 0.0], 5, m)
-
-
-def stick(B, a, rim_pt, out_len, m):
-    """Crude stirring stick from inside the brew over the rim, with a short twig stub."""
-    over = rim_pt + Vector((0, 0, 0.005))
-    d = over - a; d.z = 0; d.normalize()
-    end = over + d*out_len + Vector((0, 0, out_len*0.3))       # flatter outside the bowl
-    mid = a.lerp(over, 0.5) + Vector((0.0, 0.0, 0.002))
-    B.tube([a, mid, over, end], [0.0042, 0.0045, 0.0042, 0.0], 5, m)
-    stub = end.lerp(over, 0.35)
-    B.tube([stub, stub + Vector((0.0, 0.010, 0.010))], [0.0022, 0.0], 3, m)
-
+def swirl(B, c, z, r0, r1, a0, turn, m):
+    """Thin spiral ribbon lifted just above the brew surface from radius r0 to r1, winding `turn` of a full circle."""
+    rows = []
+    for i in range(SWIRL_SEGS + 1):
+        f = i/SWIRL_SEGS; a = a0 + turn*2*math.pi*f; r = r0 + (r1 - r0)*f
+        p = c + Vector((math.cos(a)*r, math.sin(a)*r, z))
+        rad = Vector((math.cos(a), math.sin(a), 0))
+        w = (SWIRL_W[0] + (SWIRL_W[1] - SWIRL_W[0])*f)/2*math.sin(math.pi*min(1.0, 0.15 + f))   # soft start, thin tail
+        lift = Vector((0, 0, SWIRL_H*(1 - 0.6*f)))
+        rows.append((B.v(p - rad*w + lift), B.v(p + rad*w + lift)))
+    for (a_l, a_r), (b_l, b_r) in zip(rows, rows[1:]):
+        B.face([a_l, b_l, b_r, a_r], m)
 
 def make(tier, idx, t):
     rng = random.Random(SEED + idx)
@@ -152,21 +131,19 @@ def make(tier, idx, t):
     z, r = brew_level(t)
     r += LIQUID_SINK
     B.lathe([(0, z - 0.0012), (r*0.55, z - 0.0004), (r, z)], f"bowl_brew_{tier}", segs, 0.0, None, t["rot"])
-    # floating specks
-    for i in range(t["specks"]):
-        a = rng.uniform(0, 2*math.pi); rr = (r - LIQUID_SINK)*math.sqrt(rng.uniform(0.04, 0.55))
-        c = Vector((math.cos(a)*rr, math.sin(a)*rr, z + 0.0001))
-        flake(B, c, rng.uniform(*t["speck_size"]), rng.uniform(0, 6.3), f"bowl_speck_{tier}", rng)
-    # tool resting on the rim, back-left so it does not hide the brew from the front
-    rim_r = prof[t["rim"]][0] - 0.004; rim_z = prof[t["rim"]][1]
-    ang = math.radians(128)
-    rim_pt = Vector((math.cos(ang)*rim_r, math.sin(ang)*rim_r, rim_z))
-    if t["tool"] == "stick":
-        stick(B, Vector((math.cos(ang + 2.8)*0.030, math.sin(ang + 2.8)*0.030, z - 0.010)), rim_pt, 0.040, "bowl_stick")
-    else:
-        m = "bowl_spoon_t3" if tier == "t3" else "bowl_spoon"
-        head = Vector((math.cos(ang + 3.0)*0.018, math.sin(ang + 3.0)*0.018, z + 0.001))
-        spoon(B, head, rim_pt, 0.035, m, rng)
+    # stirred swirls: spirals winding outwards from near the centre, in a lighter tint of the brew
+    rb = r - LIQUID_SINK
+    a0 = rng.uniform(0, 2*math.pi)
+    for k in range(t["swirls"]):
+        start = a0 + 2*math.pi*k/t["swirls"] + rng.uniform(-0.3, 0.3)
+        swirl(B, Vector((rng.uniform(-0.004, 0.004), rng.uniform(-0.004, 0.004), 0)), z + 0.0002,
+              rb*rng.uniform(0.08, 0.18), rb*rng.uniform(0.70, 0.85), start, rng.uniform(*SWIRL_TURN), f"bowl_swirl_{tier}")
+    # faint concentric ripple ring
+    n = RIPPLE_SEGS; rr = rb*RIPPLE_R
+    inner = [B.v((math.cos(2*math.pi*i/n)*(rr - RIPPLE_W/2), math.sin(2*math.pi*i/n)*(rr - RIPPLE_W/2), z + 0.0001)) for i in range(n)]
+    outer = [B.v((math.cos(2*math.pi*i/n)*(rr + RIPPLE_W/2), math.sin(2*math.pi*i/n)*(rr + RIPPLE_W/2), z + 0.0001)) for i in range(n)]
+    B.bridge(inner, outer, f"bowl_ripple_{tier}")
+    rim_z = prof[t["rim"]][1]
     ob = B.finish("bowl_" + tier)
     side = t["attach_side"]
     empty("attach", (side*prof[t["rim"]][0], 0, rim_z), ob, 0.01)
