@@ -32,6 +32,7 @@
     <Compile Include="../InvisibilityPotion/Plants/PlantYield.Core.cs" Link="PlantYield.Core.cs" />
     <Compile Include="../InvisibilityPotion/Plants/PlantDefaults.Core.cs" Link="PlantDefaults.Core.cs" />
     <Compile Include="../InvisibilityPotion/Plants/TreeSaplingRule.Core.cs" Link="TreeSaplingRule.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Plants/PlantPlacement.Core.cs" Link="PlantPlacement.Core.cs" />
     <Compile Include="../InvisibilityPotion/Effects/CarryWeight.Core.cs" Link="CarryWeight.Core.cs" />
   </ItemGroup>
 </Project>

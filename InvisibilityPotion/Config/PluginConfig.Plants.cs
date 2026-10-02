@@ -34,6 +34,8 @@ namespace InvisibilityPotion.Config
                 "Chance per newly generated Mountains zone to get a Baldr's Tear group (1-2 plants within 4 m, variants mixed; 0.2 = 1 zone in 5). Plants only on dry land at least 0.5 m above sea level. Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
             _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", PlantDefaults.HelFernZoneChance,
                 "Chance per newly generated Ashlands zone to get a Hel's Ember Fern group (3-6 plants within 6 m, variants mixed; 0.1 = 1 zone in 10). Plants only on solid ground at least 0.5 m above sea level and off lava. Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
+            _plantEntries["RemoveMisplacedWildPlants"] = Bind(PlantsSection, "RemoveMisplacedWildPlants", true,
+                "Wild Baldr's Tear and Hel's Ember Fern that stand below sea level (in water) or a fern on lava, left over from zones generated before the dry-land rules, are removed when their zone loads. Cultivated plants are never removed");
             _plantEntries["GroundRegrowMinutes"] = Bind(PlantsSection, "GroundRegrowMinutes", 240f,
                 "Minutes of world time (vanilla thistle: 240) until a picked Baldr's Tear or Hel's Ember Fern is ripe again", new AcceptableValueRange<float>(0f, 100000f));
             for (var t = 1; t <= 3; t++)
@@ -89,6 +91,7 @@ namespace InvisibilityPotion.Config
         public static float CultivateMinutes => PlantValue("CultivateMinutes", 240f);
         public static float BaldrZoneChance => PlantValue("BaldrZoneChance", PlantDefaults.BaldrZoneChance);
         public static float HelFernZoneChance => PlantValue("HelFernZoneChance", PlantDefaults.HelFernZoneChance);
+        public static bool RemoveMisplacedWildPlants => PlantValue("RemoveMisplacedWildPlants", true);
         public static float GroundRegrowMinutes => PlantValue("GroundRegrowMinutes", 240f);
         /// <summary>[Plants] YieldTN as (min, max); a malformed value falls back to the default with one warning per text.</summary>
         public static (int min, int max) Yield(int tier)

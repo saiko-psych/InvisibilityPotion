@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 (unreleased)
+
+- Wild Baldr's Tear and Hel's Ember Fern left in water or (ferns) on lava by zones generated before 0.3.0's dry-land rules are removed when their zone loads. Cultivated plants are never removed. Config `[Plants] RemoveMisplacedWildPlants` (default on, server-synced).
+
 ## 0.3.0
 
 - Custom models for the three veil meads, their mead bases, the veil ingredients and three levels of veil goggles.

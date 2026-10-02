@@ -21,9 +21,13 @@ namespace InvisibilityPotion.Plants
         public static readonly int PlantStageHash = "IP_PlantStage".GetStableHashCode();
         public static readonly int PlantTimeHash = "IP_PlantTime".GetStableHashCode();
         public static readonly int PlantScaleHash = "IP_PlantScale".GetStableHashCode();
+        /// <summary>Set to true by the Plant.Grow postfix on a ground plant grown from our sapling (Patches/CultivationPatches.cs).</summary>
+        public static readonly int CultivatedHash = "IP_Cultivated".GetStableHashCode();
         public const string VariantSalt = LichenRoll.VariantSalt;
         private const float StageInterval = 5f;
         private const float LocalPickHold = 6f;
+        private const float PlacementCheckDelay = 2f;
+        private const int PlacementCheckTries = 5;
 
         /// <summary>Every live harvest component (ip_plants).</summary>
         public static readonly HashSet<VeilHarvest> All = new HashSet<VeilHarvest>();
@@ -48,7 +52,12 @@ namespace InvisibilityPotion.Plants
         private VeilSight _sight;
         private bool _registered;
         private float _pickedLocallyUntil;
+        private int _placementTries;
         private static readonly HashSet<string> LoggedErrors = new HashSet<string>();
+        private static readonly HashSet<PlantPlacement.Reason> LoggedRemovals = new HashSet<PlantPlacement.Reason>();
+
+        /// <summary>Misplaced wild plants removed by this peer since startup (ip_plants).</summary>
+        public static int RemovedCount { get; private set; }
 
         public int Stage { get; private set; }
         /// <summary>Uniform size of a ground plant (IP_PlantScale), 1 for the lichen and plants without a size range.</summary>
@@ -122,6 +131,59 @@ namespace InvisibilityPotion.Plants
             ApplyScale();
             UpdateStage();
             InvokeRepeating(nameof(UpdateStage), UnityEngine.Random.Range(0.5f, StageInterval), StageInterval);
+            if (ChecksPlacement) Invoke(nameof(CheckPlacement), PlacementCheckDelay);
+        }
+
+        /// <summary>Wild-spawning ground plants only: Baldr's Tear (2) and Hel's Ember Fern (3); not the lichen, not IP_HuldraGround_*.</summary>
+        private bool ChecksPlacement => !OnTree && (Tier == 2 || Tier == 3);
+
+        /// <summary>
+        /// 0.3.1: zones generated before the dry-land rules still hold plants in water or (ferns) on lava. Same limits as
+        /// PlaceVegetation (altitude = y - 30, ZoneSystem.cs:1448-1452; fern lava mask = Heightmap.GetVegetationMask, Heightmap.cs:925-930,
+        /// checked like ZoneSystem.cs:1453-1460). Cultivated = ZDO key IP_Cultivated (set at grow time) or cultivated ground under the
+        /// root (Heightmap.IsCultivated, Heightmap.cs:946-950; covers plants grown before the key existed). False while the heightmap
+        /// under the plant is missing or has a rebuild queued (paint mask not ready).
+        /// </summary>
+        public bool TryGetPlacement(out PlantPlacement.Reason reason)
+        {
+            reason = PlantPlacement.Reason.None;
+            if (!ChecksPlacement || _nview == null || !_nview.IsValid()) return false;
+            var pos = transform.position;
+            var hm = Heightmap.FindHeightmap(pos);
+            if (hm == null || hm.HaveQueuedRebuild()) return false;
+            float mask;
+            bool cultivatedGround;
+            try
+            {
+                mask = Tier == 3 ? hm.GetVegetationMask(pos) : 0f;
+                cultivatedGround = hm.IsCultivated(pos);
+            }
+            catch (NullReferenceException) { return false; }   // paint mask not generated yet
+            var cultivated = _nview.GetZDO().GetBool(CultivatedHash) || cultivatedGround;
+            reason = PlantPlacement.Misplaced(pos.y - 30f, PlantVegetation.MinAltitude, mask, PlantVegetation.FernMaxLavaMask, Tier == 3, cultivated);
+            return true;
+        }
+
+        /// <summary>On the ZDO owner, once after Start: removes a misplaced wild plant through ZNetScene.Destroy (ZNetScene.cs:116).</summary>
+        private void CheckPlacement()
+        {
+            try
+            {
+                if (!Config.PluginConfig.RemoveMisplacedWildPlants || _nview == null || !_nview.IsValid() || !_nview.IsOwner()) return;
+                if (!TryGetPlacement(out var reason))
+                {
+                    if (++_placementTries < PlacementCheckTries) Invoke(nameof(CheckPlacement), PlacementCheckDelay);
+                    return;
+                }
+                if (reason == PlantPlacement.Reason.None || ZNetScene.instance == null) return;
+                var p = transform.position;
+                RemovedCount++;
+                if (LoggedRemovals.Add(reason))
+                    Plugin.Log.LogInfo($"plants: removed {_nview.name.Replace("(Clone)", "")} at ({p.x:F1},{p.y:F1},{p.z:F1}): {PlantPlacement.Describe(reason)} " +
+                                       "(further removals for this reason are not logged; ip_plants shows the count)");
+                ZNetScene.instance.Destroy(_nview.gameObject);
+            }
+            catch (Exception e) { LogOnce("placement" + e.GetType().Name, $"plants: {name}: placement check failed: {e}"); }
         }
 
         /// <summary>

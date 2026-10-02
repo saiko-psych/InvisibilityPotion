@@ -649,3 +649,15 @@ client matches the dedicated server; `make build`, `make run`.
   saplings, and selecting each one places that sprout (2.30.0 had a "wrong piece placed" bug, fixed in 2.30.1)
 - [ ] Join the dedicated server (Jötunn 2.30.0) with this client: accepted. Optional: with Jötunn 2.30.2 on the client the join is
   refused with Jötunn's version mismatch window (`docs/compatibility.md` §7)
+
+## 0.3.1 – misplaced wild plants removed (2026-10-03)
+
+Setup: an Ashlands/Mountains area generated before the dry-land rules (e.g. the Hel's Ember Fern in the Ashlands sea from the
+screenshot); one cultivated Baldr's Tear or fern nearby; `make build`, `make run`.
+
+- [ ] Log: `Patch health: N targets patched, 0 missing` (now including `Plant.Grow`); `[Plants] RemoveMisplacedWildPlants = true` in the config
+- [ ] Before walking up to the old zone, `ip_plants` near it lists the plant with `misplaced (below sea level)` or `misplaced (on lava)`
+  (with the switch set to false first, so it is still there), and the summary line `misplaced wild plants in range: N`
+- [ ] With the switch on (default): within a few seconds of the zone loading the fern in the sea is gone; log `plants: removed IP_... at (x,y,z): below sea level` (or `on lava`) once per reason; `ip_plants` shows `removed by this peer since start: N`
+- [ ] Wild plants on dry ash ground / dry mountain ground stay; no `misplaced` in `ip_plants`
+- [ ] A plant grown from a sapling after this update shows `cultivated,` in `ip_plants` and is never removed; an older cultivated plant on cultivated ground stays too

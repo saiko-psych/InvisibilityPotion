@@ -107,6 +107,9 @@ namespace InvisibilityPotion.Dev
                 foreach (var h in list.Take(40)) Say("  " + Line(h, me));
                 if (list.Count > 40) Say("  ... (capped at 40)");
                 foreach (var g in list.GroupBy(Prefab)) Say($"  {g.Key}: {g.Count()}");
+                var misplaced = list.Count(h => h.TryGetPlacement(out var why) && why != PlantPlacement.Reason.None);
+                Say($"  misplaced wild plants in range: {misplaced}; removed by this peer since start: {VeilHarvest.RemovedCount} " +
+                    $"([Plants] RemoveMisplacedWildPlants {Config.PluginConfig.RemoveMisplacedWildPlants})");
                 var trees = TreeLichen.All.Where(t => t != null && Vector3.Distance(t.transform.position, me) <= radius).ToList();
                 var withLichen = trees.Count(t => t.Lichen != null);
                 Say($"lichen trees within {radius:F0} m: {withLichen} of {trees.Count} eligible trees" +
@@ -132,7 +135,16 @@ namespace InvisibilityPotion.Dev
             var minutes = HarvestStage.MinutesToNext(h.BaseStage, ZNet.instance != null ? HarvestStage.ElapsedMinutes(ZNet.instance.GetTime().Ticks, h.BaseTicks) : 0, h.StageMinutes, h.MaxStage);
             return $"{Prefab(h)}{(h.OnTree ? " (lichen)" : "")} at {Vector3.Distance(pos, me):F1} m {Compass(me, pos)} ({pos.x:F0}, {pos.y:F0}, {pos.z:F0}): " +
                    $"stage {h.Stage}/{h.MaxStage}{(h.IsRipe ? " ripe" : $" next in {minutes:F0} min")}, base {h.BaseStage} @ {(h.BaseTicks == 0 ? "-" : new DateTime(h.BaseTicks).ToString("HH:mm"))}, " +
-                   $"needs goggles {h.Tier}, revealed {(sight != null && sight.Revealed)}, scale {h.PlantScale:F2}{(h.VariantIndex >= 0 ? $", variant {"abc"[h.VariantIndex]}" : "")}{(h.OnTree ? "" : $", yaw {h.Yaw:F0}")}, owner {Owner(h.View)}";
+                   $"{Placement(h)}needs goggles {h.Tier}, revealed {(sight != null && sight.Revealed)}, scale {h.PlantScale:F2}{(h.VariantIndex >= 0 ? $", variant {"abc"[h.VariantIndex]}" : "")}{(h.OnTree ? "" : $", yaw {h.Yaw:F0}")}, owner {Owner(h.View)}";
+        }
+
+        /// <summary>"misplaced (below sea level), " / "cultivated, " / "" for ip_plants.</summary>
+        private static string Placement(VeilHarvest h)
+        {
+            if (h.OnTree || h.View == null || !h.View.IsValid()) return "";
+            var cultivated = h.View.GetZDO().GetBool(VeilHarvest.CultivatedHash) ? "cultivated, " : "";
+            if (!h.TryGetPlacement(out var why)) return cultivated;
+            return why == PlantPlacement.Reason.None ? cultivated : $"misplaced ({PlantPlacement.Describe(why)}), ";
         }
 
         private class GrowCommand : ConsoleCommand

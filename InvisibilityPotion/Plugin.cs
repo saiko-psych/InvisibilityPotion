@@ -48,6 +48,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Player", "GetMaxCarryWeight"),
             PatchHealth.TargetKey("Player", "PlacePiece"),
             PatchHealth.TargetKey("Player", "CheckRun"),   // round S: no sprinting while Veil Broken runs
+            PatchHealth.TargetKey("Plant", "Grow"),   // 0.3.1: marks cultivated ground plants (IP_Cultivated)
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();
