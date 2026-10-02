@@ -27,6 +27,8 @@ namespace InvisibilityPotion.Config
                 "Metres within which goggles show the lichen on a tree (the tree's distant LOD does not carry it); 0 = no limit", new AcceptableValueRange<float>(0f, 1000f));
             _plantEntries["HuldraCultivable"] = Bind(PlantsSection, "HuldraCultivable", true,
                 "Huldra's Hair can be planted with the Cultivator on cultivated ground (costs 1 Huldra's Hair). Read at startup");
+            _plantEntries["CultivateMinutes"] = Bind(PlantsSection, "CultivateMinutes", 240f,
+                "Minutes of world time (vanilla thistle: 240) until a planted Baldr's Tear or Hel's Ember Fern sprout is grown (Cultivator, cultivated ground in its own biome). Read at startup", new AcceptableValueRange<float>(1f, 100000f));
             _plantEntries["BaldrZoneChance"] = Bind(PlantsSection, "BaldrZoneChance", 0.167f,
                 "Chance per newly generated Mountains zone to get a Baldr's Tear group (1-2 plants within 4 m, variants mixed). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
             _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", 0.0667f,
@@ -50,6 +52,7 @@ namespace InvisibilityPotion.Config
         public static float LichenStageMinutes => PlantValue("LichenStageMinutes", 120f);
         public static float LichenRevealDistance => PlantValue("LichenRevealDistance", 40f);
         public static bool HuldraCultivable => PlantValue("HuldraCultivable", true);
+        public static float CultivateMinutes => PlantValue("CultivateMinutes", 240f);
         public static float BaldrZoneChance => PlantValue("BaldrZoneChance", 0.167f);
         public static float HelFernZoneChance => PlantValue("HelFernZoneChance", 0.0667f);
         public static float GroundRegrowMinutes => PlantValue("GroundRegrowMinutes", 240f);

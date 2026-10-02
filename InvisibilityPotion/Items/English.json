@@ -39,5 +39,9 @@
   "ip_plant_helsemberfern": "Hel's Ember Fern",
   "ip_plant_growing": "growing",
   "piece_ip_huldrasapling": "Huldra's Hair sprout",
-  "piece_ip_huldrasapling_description": "Plant a tuft of Huldra's Hair on cultivated ground. Only veil goggles show it growing."
+  "piece_ip_huldrasapling_description": "Plant a tuft of Huldra's Hair on cultivated ground. Only veil goggles show it growing.",
+  "piece_ip_baldrsapling": "Baldr's Tear sprout",
+  "piece_ip_baldrsapling_description": "Plant Baldr's Tear on cultivated ground in the Mountains. Only veil goggles (level II) show it growing.",
+  "piece_ip_fernsapling": "Hel's Ember Fern sprout",
+  "piece_ip_fernsapling_description": "Plant Hel's Ember Fern on cultivated ground in the Ashlands. Only veil goggles (level III) show it growing."
 }

@@ -113,9 +113,9 @@ namespace InvisibilityPotion.Dev
                     (trees.Count > 0 ? $" ({100.0 * withLichen / trees.Count:F1} %, chance {Config.PluginConfig.LichenTreeChance}); " +
                                        $"biomes {string.Join(", ", trees.GroupBy(t => t.LastBiome).Select(b => $"{b.Key} {b.Count()}"))}" : ""));
                 var saplings = UnityEngine.Object.FindObjectsByType<Plant>(FindObjectsSortMode.None)
-                    .Where(pl => pl != null && pl.name.StartsWith(Cultivation.SaplingName, StringComparison.Ordinal) && Vector3.Distance(pl.transform.position, me) <= radius).ToList();
+                    .Where(pl => pl != null && Cultivation.IsOurSapling(pl.name) && Vector3.Distance(pl.transform.position, me) <= radius).ToList();
                 foreach (var s in saplings)
-                    Say($"  sapling at {Vector3.Distance(s.transform.position, me):F1} m {Compass(me, s.transform.position)}: status {s.m_status}, owner {Owner(s.m_nview)}");
+                    Say($"  sapling {s.name.Replace("(Clone)", "")} at {Vector3.Distance(s.transform.position, me):F1} m {Compass(me, s.transform.position)}: status {s.m_status}, owner {Owner(s.m_nview)}");
             }
 
             private static void Unpin()
@@ -139,7 +139,7 @@ namespace InvisibilityPotion.Dev
         {
             public override string Name => "ip_grow";
             public override string Help => "ip_grow [stage]: looked-at (or nearest within 10 m) hidden plant: set its stage (default: next; lichen 1..3, ground plants 1 = picked, 2 = ripe) | " +
-                                           "on a Huldra sapling: let it grow up on its next update (within 10 s)";
+                                           "on a sapling of this mod: let it grow up on its next update (within 10 s)";
 
             public override void Run(string[] args)
             {
@@ -168,7 +168,7 @@ namespace InvisibilityPotion.Dev
                 if (CrosshairHit(10f, out var hit))
                 {
                     var plant = hit.collider.GetComponentInParent<Plant>();
-                    if (plant != null && plant.name.StartsWith(Cultivation.SaplingName, StringComparison.Ordinal)) return plant;
+                    if (plant != null && Cultivation.IsOurSapling(plant.name)) return plant;
                 }
                 return null;
             }
