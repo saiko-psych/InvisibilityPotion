@@ -794,22 +794,22 @@ public class FloatListNonFiniteTests
     [Fact]
     public void ParticleCaps_InnerPerAnchorVolumeAndRing()
     {
-        // Round M ruling 2c: inner <= 10 per anchor, fog volume <= 40, whatever rate x lifetime asks for.
-        Assert.Equal(10, FogSettings.InnerParticleCap);
-        Assert.Equal(40, FogSettings.OuterVolumeParticleCap);
+        // Round M ruling 2c (caps raised by the controller: 24 per anchor, volume 80): brightness is handled by alpha, not by starving.
+        Assert.Equal(24, FogSettings.InnerParticleCap);
+        Assert.Equal(80, FogSettings.OuterVolumeParticleCap);
         var s = FogSettings.Defaults(2);   // inner 14/s x 2.5 s = 35 wanted
-        Assert.Equal(10, s.InnerMaxParticles);
+        Assert.Equal(24, s.InnerMaxParticles);
         s.Rate = 1f; s.Lifetime = 1f;     // small budgets stay below the cap (MaxParticles minimum 8)
         Assert.Equal(FogSettings.MaxParticles(1f, 1f), s.InnerMaxParticles);
-        Assert.True(s.InnerMaxParticles <= 10);
+        Assert.True(s.InnerMaxParticles <= 24);
         // Mesh: one emitter for the body, capped at 10 per enabled anchor.
         var m = FogSettings.Defaults(2);
-        Assert.Equal(130, m.MeshMaxParticles(13));
-        Assert.Equal(20, m.MeshMaxParticles(2));
+        Assert.Equal(Math.Min(24 * 13, FogSettings.MaxParticles(m.MeshEmitterRate(13), m.Lifetime)), m.MeshMaxParticles(13));
+        Assert.Equal(Math.Min(48, FogSettings.MaxParticles(m.MeshEmitterRate(2), m.Lifetime)), m.MeshMaxParticles(2));
         Assert.True(m.MeshMaxParticles(0) >= 8);
         // Volume: 4/s + 2/m, 9 s -> capped at 40.
         var v = FogSettings.Defaults(2);
-        Assert.Equal(40, v.OuterMaxParticles);
+        Assert.Equal(Math.Min(80, FogSettings.MaxParticles(v.OuterRate + v.OuterEffectiveRateDistance * FogSettings.GroundBudgetSpeed, v.OuterLifetime)), v.OuterMaxParticles);
         v.OuterRate = 1f; v.OuterRateDistance = 0f; v.OuterLifetime = 2f;
         Assert.Equal(FogSettings.MaxParticles(1f, 2f), v.OuterMaxParticles);
         // Ring keeps the round J budget (rate x lifetime, hard cap only).

@@ -180,8 +180,8 @@ namespace InvisibilityPotion.Visuals
         /// Inner: per anchor (the Mesh emitter gets this x enabled anchors); outer volume: per emitter. The ground cap is
         /// <see cref="GroundParticleBudget"/> (both ground layers together).
         /// </summary>
-        public const int InnerParticleCap = 10;
-        public const int OuterVolumeParticleCap = 40;
+        public const int InnerParticleCap = 24;   // round M: 10 starved the enveloping cloud (rate 14 x 2.5 s = 35 wanted); brightness is handled by alpha, not by starving
+        public const int OuterVolumeParticleCap = 80;
         /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
         public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
