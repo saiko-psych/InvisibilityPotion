@@ -395,3 +395,36 @@ def render(png_name, preview=None, blend_name=None, res=(1280, 720), volumetrics
     bpy.ops.render.render(write_still=True)
     if preview: shutil.copyfile(scene.render.filepath, preview)
     if blend_name: bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, blend_name))
+
+
+def render_panels(panels, png_name, preview=None, blend_name=None, height=720):
+    """Render several camera views side by side into one PNG (out/<png_name>, copied to `preview`).
+    panels: dicts with `width` (px), `cam` = (location, target, lens) and `show` = the objects visible in that view
+    (every other mesh, empty and light is hidden for the panel). Panel widths should add up to the image width."""
+    import numpy as np
+    scene = bpy.context.scene
+    cam = scene.camera or camera((0, -1, 0), (0, 0, 0), 50)
+    togglable = [o for o in scene.objects if o.type in ('MESH', 'LIGHT', 'EMPTY')]
+    parts = []
+    for i, p in enumerate(panels):
+        show = set()
+        for o in p["show"]:
+            show.add(o); show.update(o.children_recursive)
+        for o in togglable: o.hide_render = o not in show
+        loc, tgt, lens = p["cam"]
+        cam.location = loc; cam.data.lens = lens
+        cam.rotation_euler = (Vector(tgt) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+        path = os.path.join(OUT, f"_panel{i}.png")
+        render(f"_panel{i}.png", res=(p["width"], height))
+        img = bpy.data.images.load(path)
+        parts.append(np.array(img.pixels[:], dtype=np.float32).reshape(height, p["width"], 4))
+        bpy.data.images.remove(img); os.remove(path)
+    for o in togglable: o.hide_render = False
+    full = np.concatenate(parts, axis=1)
+    W = full.shape[1]
+    out = bpy.data.images.new("panels", W, height, alpha=True)
+    out.pixels = full.ravel().tolist()
+    out.filepath_raw = os.path.join(OUT, png_name); out.file_format = 'PNG'
+    out.save()
+    if preview: shutil.copyfile(out.filepath_raw, preview)
+    if blend_name: bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, blend_name))
