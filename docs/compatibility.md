@@ -27,7 +27,7 @@ All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `P
 | `Player.PlacePiece` | postfix | no | Normal | Reveal trigger (hammer, hoe, cultivator). |
 | `VisEquipment.UpdateLodgroup` | postfix | no | Normal | Re-applies the veil to new renderers. |
 | `VisEquipment.SetChestEquipped`, `SetLegEquipped` | prefix + postfix | no | Normal | Hands the original body materials back for the duration of the call. Armor/visual mods that write `m_bodyModel` materials outside these methods can lose the veil until the next equipment change. |
-| `Player.CanConsumeItem` | postfix | no (may set `__result = false`) | Normal | Refuses a weaker or equal mead. |
+| `Player.CanConsumeItem` | postfix | no (may set `__result = false`) | Normal | Refuses a weaker or equal mead, and every veil mead while the shared Veil Cooldown runs. Other consume/cooldown mods see vanilla's result before ours. |
 | `EnemyHud.TestShow` | postfix | no | Normal | Hides the nameplate of a tier III hidden player. Nameplate/HUD mods that draw their own player labels bypass this. |
 | `ZNet.UpdatePlayerList` | postfix | no | Normal | Server: clears the map position of hidden players. |
 | `ZDOMan.SendZDOs` | **transpiler** | no | Normal | Server: replaces the one `ZDO.GetPosition()` call that feeds `ZPackage.Write(Vector3)` in the ZDO header with `HeaderPosition` (spoofed height for hidden players). **Most fragile patch**, see below. |
