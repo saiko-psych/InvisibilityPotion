@@ -600,3 +600,22 @@ Veil Broken (tier II, then tier I)
 - [ ] `ip_state`: `veil broken: ... stamina regen x0.10, eitr regen x0.15, health regen x0.35, speed -0.50`
 - [ ] Tier I: one hit ends the veil, Veil Broken runs 20 s, movement 35 % slower, no sprinting
 - [ ] When Veil Broken ends (veil back, or tier I after 20 s): sprinting works again at once
+
+## Plan 5 – round T (much wider, vanilla-like wide fog)
+
+Setup: game closed, `make build`, `make run`. Real meads as in round Q (`ip_spawn MeadInvisibility_T2 3` etc.). If possible, compare with a real Black Forest or Swamp mist patch nearby. Paste the `Config migration`, `veil fog spawned` and `auto fog dump` lines.
+
+Config and log
+- [ ] `Config migration (look defaults revision 14): ...` once (tiers I/II reset); `[Fog.Tier1] OuterRadius = 7`, `OuterHeightSigma = 0.8`, `OuterSize = 4.5`, `OuterLifetime = 12`, `OuterBurst = 60`, `OuterAlpha = 0.3`; `[Fog.Tier2] OuterRadius = 9`, `OuterHeightSigma = 1`, `OuterSize = 5.5`, `OuterLifetime = 14`, `OuterBurst = 80`, `OuterAlpha = 0.4`; the descriptions of these keys name the tier defaults and say the fog "fades out softly" at the edge
+- [ ] `veil fog spawned T2`: follow line `rate 4/s + 0/m (local), ground spread 6.3 m with Gaussian density per m2 (sigma_r 2.835 m, cut at R)`, trail line `rate 6/s + 4/m (world), ground spread 9 m ... (sigma_r 4.05 m ...)`; burst 48 (follow) and 32 (trail); max 80 and 120; `fade in 0.15 / out 0.35, grow x1.35, spin +-4 deg/s`; `drift 0.05 m/s horizontal`; `overlap cap: ~N puffs over the player, ..., centre alpha xF ..., column opacity <= 0.5` on both lines with N about 46 and F about 0.27
+- [ ] `veil fog spawned T1`: ground spread 4.9 m (follow) / 7 m (trail), burst 36 / 24, `overlap cap` with N about 41 and F about 0.4
+- [ ] Auto fog dump (outer lines): `avg ground distance from the player` around 3 m (T1) / 4 m (T2); `avg vertex alpha (x material ... = X)` with X roughly 0.08..0.14 (OuterAlpha x the capped Gaussian factor x the life curve; T1 about 0.10, T2 about 0.11); `avg size` 3.5..6 m; `% below sigma` near 60..75 %
+
+Look (tier II, then tier I; third person, zoomed out, by day and at dusk)
+- [ ] The fog spreads far: clearly beyond the player, up to 7 m (T1) / 9 m (T2), low over the ground
+- [ ] The edge has no line or ring: the fog gets thinner and fainter and dissolves into the ground
+- [ ] The centre is not a white/grey blob: your character stays clearly visible (silhouette, armour colours); tier II a little stronger than tier I in the outer part
+- [ ] The puffs read like vanilla mist: large, very soft, low contrast; they drift very slowly sideways, grow a little and turn very slowly; no visible popping in or out (slow fade in and fade out)
+- [ ] Standing still 20 s: the patch stays even, no dense wall builds up; walking/sprinting: the trail lies low along the path and fades slowly
+- [ ] Frame rate inside the fog is fine (up to 200 puffs per tier, large sprites close to the camera)
+- [ ] `ip_fogui`: the wide-fog rows Radius (up to 14 m), Size (up to 9 m), Lifetime (up to 20 s) and Burst (up to 150) reach the new values
