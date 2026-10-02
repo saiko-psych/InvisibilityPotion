@@ -619,3 +619,22 @@ Look (tier II, then tier I; third person, zoomed out, by day and at dusk)
 - [ ] Standing still 20 s: the patch stays even, no dense wall builds up; walking/sprinting: the trail lies low along the path and fades slowly
 - [ ] Frame rate inside the fog is fine (up to 200 puffs per tier, large sprites close to the camera)
 - [ ] `ip_fogui`: the wide-fog rows Radius (up to 14 m), Size (up to 9 m), Lifetime (up to 20 s) and Burst (up to 150) reach the new values
+
+## Plan 5 – dry-land plants, zone chances, item stands (2026-10-03)
+
+Setup: game closed, `make build`, `make run`. Wild plants need newly generated zones (a new world or unexplored land).
+
+Config and log
+- [ ] `Config migration (plant defaults revision 1): [Plants] BaldrZoneChance 0.167 -> 0.2, [Plants] HelFernZoneChance 0.0667 -> 0.1` once (only for values still at the old default; a customised value stays); `[General] PlantDefaultsRevision = 1`
+- [ ] `plants: vegetation ...` lines: `max 0.2 per zone` (Baldr's Tear) / `max 0.1 per zone` (fern), `altitude 0.5..1000 m above sea, block True`; fern: `lava mask 0-0.15`
+- [ ] `ip_veg`: both entries show `max 0.2/zone` / `max 0.1/zone`, `altitude 0.5..1000 m above sea`, `ocean depth 0-0 (equal = off)`, `block True`; fern `vegetation mask 0-0.15`
+
+In the world
+- [ ] Ashlands: no Hel's Ember Fern in the sea, on the shore line or on/at the edge of lava; groups on solid ash ground only
+- [ ] Mountains: no Baldr's Tear in water
+- [ ] Ferns noticeably more common than before (about 1 Ashlands zone in 10), Baldr's Tear about 1 Mountains zone in 5
+
+Item stands (vanilla behaviour, see decompile notes)
+- [ ] Horizontal item stand: a veil mead (hotbar key while looking at the stand) is placed, like a vanilla `MeadHealthMinor`
+- [ ] Wall item stand: a veil mead is refused ("can't attach"), exactly like a vanilla mead
+- [ ] Mead bases are refused by both stands, like vanilla mead bases
