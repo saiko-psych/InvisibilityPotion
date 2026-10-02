@@ -66,7 +66,8 @@ namespace InvisibilityPotion.Plants
                 Step($"ground plant T{tier} mixed", () => PlantVegetation.Add(BuildGround(tier, null), tier));
             }
             Step("gate Plant_* props", GateProps);
-            Step("trees", TreeLichen.AttachToTrees);
+            Step("trees", () => TreeLichen.AttachToTrees("OnVanillaPrefabsAvailable"));
+            PrefabManager.OnPrefabsRegistered += () => Step("trees", () => TreeLichen.AttachToTrees("OnPrefabsRegistered"));
             Step("cultivation", Cultivation.Register);
         }
 
@@ -124,12 +125,12 @@ namespace InvisibilityPotion.Plants
         }
 
         /// <summary>Box collider on its own child "hover" (layer item: in Player.m_interactMask, Player.cs:671, but not in the camera, placement or attack masks).</summary>
-        public static BoxCollider AddHoverBox(GameObject parent, Vector3 minSize)
+        public static BoxCollider AddHoverBox(GameObject parent, Vector3 minSize, string layer = HoverLayerName)
         {
             var b = ModelPrefabs.LocalMeshBounds(parent);
             var go = new GameObject("hover");
             go.transform.SetParent(parent.transform, false);
-            go.layer = LayerMask.NameToLayer(HoverLayerName);
+            go.layer = LayerMask.NameToLayer(layer);
             var box = go.AddComponent<BoxCollider>();
             box.center = b.center;
             box.size = Vector3.Max(b.size, minSize);

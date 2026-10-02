@@ -61,7 +61,9 @@ namespace InvisibilityPotion.Plants
             root.transform.SetParent(PlantPrefabs.Holder, false);
             var stages = new GameObject[3];
             for (var i = 0; i < 3; i++) stages[i] = FlatStage(v, root.transform, $"S{i + 1}", StageSizes[i]);
-            PlantPrefabs.AddHoverBox(root, new Vector3(0.4f, 0.15f, 0.4f));
+            // piece_nonsolid: in the interact mask (hover, pick) and in the attack mask (Player.cs:671, 679), so any tool hit removes
+            // the plant through its Destructible, like a vanilla crop; drops nothing.
+            PlantPrefabs.AddHoverBox(root, new Vector3(0.4f, 0.15f, 0.4f), "piece_nonsolid");
             var nv = root.AddComponent<ZNetView>();
             nv.m_persistent = true;
             nv.m_syncInitialScale = true;
@@ -73,6 +75,10 @@ namespace InvisibilityPotion.Plants
             harvest.MaxStage = 3;
             harvest.OnTree = false;
             harvest.NameToken = PlantPrefabs.NameToken(1);
+            var destructible = root.AddComponent<Destructible>();   // Destructible.cs:5-45; effects copied from the sapling source in BuildSapling
+            destructible.m_health = 1f;
+            destructible.m_minToolTier = 0;
+            destructible.m_spawnWhenDestroyed = null;
             AssetBundles.Track(root);
             Plugin.Log.LogInfo($"cultivation: {root.name} built (S1..S3 flat, VeilSight 1, keys IP_PlantStage/IP_PlantTime)");
             return root;
@@ -99,8 +105,6 @@ namespace InvisibilityPotion.Plants
             var old = new[] { plant.m_healthy, plant.m_unhealthy, plant.m_healthyGrown, plant.m_unhealthyGrown }
                 .Where(o => o != null && o != go).Distinct().ToList();
             var layer = old.Count > 0 ? old[0].layer : go.layer;
-            var oldCollider = go.GetComponentsInChildren<Collider>(true).FirstOrDefault();
-            var colliderLayer = oldCollider != null ? oldCollider.gameObject.layer : LayerMask.NameToLayer("piece_nonsolid");
             foreach (var o in old) UnityEngine.Object.DestroyImmediate(o);
             var v = PlantPrefabs.Variants[0];
             plant.m_healthy = FlatStage(v, go.transform, "healthy", StageSizes[0]);
@@ -112,14 +116,28 @@ namespace InvisibilityPotion.Plants
             plant.m_unhealthy.SetActive(false);
             plant.m_healthyGrown.SetActive(false);
             plant.m_unhealthyGrown.SetActive(false);
-            var remaining = go.GetComponentsInChildren<Collider>(true).Length;
-            if (remaining == 0)
+            var remaining = go.GetComponentsInChildren<Collider>(true);
+            var fallback = "none needed";
+            if (remaining.Length == 0)
             {
-                var box = PlantPrefabs.AddHoverBox(go, new Vector3(0.3f, 0.1f, 0.3f));   // common to all four stages
-                box.gameObject.layer = colliderLayer;
+                // On the root itself: Plant.HaveGrowSpace takes GetComponent<Plant>() of every collider's own GameObject in its space
+                // mask (Plant.cs:389-401); a collider on a child would count as an obstacle and the sapling would never grow.
+                var b = ModelPrefabs.LocalMeshBounds(go);
+                var box = go.AddComponent<BoxCollider>();
+                box.center = b.center;
+                box.size = Vector3.Max(b.size, new Vector3(0.3f, 0.1f, 0.3f));
+                fallback = $"BoxCollider added on the root (layer {LayerMask.LayerToName(go.layer)}, size {box.size:F2})";
             }
             Plugin.Log.LogInfo($"cultivation: sapling visuals replaced ({old.Count} vanilla children removed, layer {LayerMask.LayerToName(layer)}); " +
-                               $"colliders kept {remaining}{(remaining == 0 ? $", hover box added on layer {LayerMask.LayerToName(colliderLayer)}" : "")}");
+                               $"colliders kept {remaining.Length} ({string.Join(", ", remaining.Select(c => $"{c.GetType().Name} on {(c.gameObject == go ? "root" : c.name)}"))}); fallback: {fallback}");
+            var srcDestructible = PrefabManager.Instance.GetPrefab(source)?.GetComponent<Destructible>();
+            foreach (var g in grown)
+            {
+                var d = g.GetComponent<Destructible>();
+                if (d == null || srcDestructible == null) continue;
+                d.m_destroyedEffect = srcDestructible.m_destroyedEffect;
+                d.m_hitEffect = srcDestructible.m_hitEffect;
+            }
 
             plant.m_name = "$piece_ip_huldrasapling";
             var growSeconds = 2f * Config.PluginConfig.LichenStageMinutes * 60f;
