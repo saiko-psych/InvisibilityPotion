@@ -57,7 +57,10 @@ namespace InvisibilityPotion.Config
             BindGlobal("FogCutoffDense", 0.8f, "Alpha cutoff for the dense veil (tier II/III)");
             BindGlobal("FogCutoffSelf", 0.3f, "Alpha cutoff the hidden player sees on themselves");
             BindGlobal("AllowPvpInvisibility", true, "Server switch for hiding players from other players (tier III)");
-            BindLook(FogSection, "FogAlphaMode", FogAlphaMode.Both.ToString(), "Where the fog alpha goes (all tiers): Both (split between material and particle colour), Material or Vertex");
+            // BepInEx has no section comments: the plain-words overview of the fog layers (FogSettings.Readme, round P ruling 4) is the
+            // description of the first [Fog] entry, so it stands at the top of the section in the file.
+            BindLook(FogSection, "FogAlphaMode", FogAlphaMode.Both.ToString(),
+                     FogSettings.Readme + "\n\nFogAlphaMode: where the fog alpha goes (all tiers): Both (split between material and particle colour), Material or Vertex");
             for (var t = 1; t <= 3; t++) BindFogTier(t);
             BindLook(VeilSection, "GhostColor", "0.75,0.8,0.9,1", "Colour of the Ghost body mode as r,g,b,a (_Color; the shader is alpha-tested, low alpha may cut the body away)");
             BindLook(VeilSection, "GhostEmission", 0.25f, "Multiplier on the Ghost material's glow (_EmissionColor); 1 = vanilla ghost glow");
@@ -182,7 +185,8 @@ namespace InvisibilityPotion.Config
         /// every file below revision 7 gets [Fog.Tier1] and [Fog.Tier2] fully reset, old values logged), revision 8 (plan 4, round M
         /// ruling: subtle mid-grey haze, low alphas, the fog volume left behind in world space; again a full [Fog.Tier1]/[Fog.Tier2]
         /// reset of every older file), revision 9 (plan 5, round O: fewer, larger particles per bone and halfway alphas, both tiers fully
-        /// reset again). Existing files keep their old values, so once per
+        /// reset again), revision 10 (plan 5, round P: a strong, wide fog volume that is there the moment the effect starts (OuterBurst);
+        /// both tiers fully reset, old values logged). Existing files keep their old values, so once per
         /// file ([Fog] LookDefaultsRevision below the current revision) the [Fog.TierN] sections of <see cref="LookDefaults.ResetTiers"/>
         /// are reset to the new defaults (every bound key, including the new Ground* keys), the obsolete outer factor keys are
         /// logged with their values (MigrateAndDropOrphans then removes them), and [Tier1] BodyVeilMode Distortion (the revision 1/2
@@ -209,7 +213,7 @@ namespace InvisibilityPotion.Config
                         kv.Value.BoxedValue = kv.Value.DefaultValue;
                     }
                 // Revision 6: the [Fog.Tier2] Outer* keys move to the ring defaults (files below FullResetRevision were reset above;
-                // since revision 7 (now 8) that is every older file, so this branch only runs if FullResetRevision is lowered again).
+                // since revision 7 (now 10) that is every older file, so this branch only runs if FullResetRevision is lowered again).
                 var outerReset = 0;
                 if (!LookDefaults.ResetsTiers(rev.Value))
                     foreach (var kv in _fogEntries[2])

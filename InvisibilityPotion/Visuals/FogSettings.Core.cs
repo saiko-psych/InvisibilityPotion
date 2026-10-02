@@ -95,12 +95,14 @@ namespace InvisibilityPotion.Visuals
     /// [Fog.Tier2] fully reset (<see cref="FullResetRevision"/> = 7), so the outer-only reset of revision 6 no longer runs alone.
     /// Revision 8 (plan 4, round M ruling): subtle haze: mid-grey fog, low alphas, the fog volume in world space (left behind);
     /// every older file gets [Fog.Tier1] and [Fog.Tier2] fully reset (<see cref="FullResetRevision"/> = 8).
+    /// Revision 9 (plan 5, round O): fewer, larger particles per bone, halfway alphas; full reset.
+    /// Revision 10 (plan 5, round P): an instant (OuterBurst), wide and strong fog volume that reads by day; full reset.
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 9;
-        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round M: 8).</summary>
-        public const int FullResetRevision = 9;
+        public const int Revision = 10;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round P: 10).</summary>
+        public const int FullResetRevision = 10;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -182,6 +184,12 @@ namespace InvisibilityPotion.Visuals
         /// </summary>
         public const int InnerParticleCap = 24;   // round M: 10 starved the enveloping cloud (rate 14 x 2.5 s = 35 wanted); brightness is handled by alpha, not by starving
         public const int OuterVolumeParticleCap = 80;
+        /// <summary>
+        /// Round P ruling 1: the burst particles of the volume get a start lifetime random in [min, max] x OuterLifetime, so the
+        /// instant field does not fade out all at the same moment.
+        /// </summary>
+        public const float OuterBurstLifetimeMinFactor = 0.4f;
+        public const float OuterBurstLifetimeMaxFactor = 1f;
         /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
         public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
@@ -221,6 +229,8 @@ namespace InvisibilityPotion.Visuals
         public float OuterLifetime = 3f;  // seconds; randomised like Lifetime
         /// <summary>Outer ring band height as a fraction of OuterRadius (random vertical jitter of the spawn point).</summary>
         public float OuterSpreadY = 0.35f;
+        /// <summary>Outer volume (round P): particles emitted at once when the emitter is created, so the fog exists immediately.</summary>
+        public float OuterBurst;
         public bool OuterTrail;
         /// <summary>Outer ring: turn speed around the player's up axis in deg/s (orbital velocity of the particles); 0 = still.</summary>
         public float OuterRotation;
@@ -313,15 +323,17 @@ namespace InvisibilityPotion.Visuals
         /// low alpha in a flattened sphere (OuterRadius x OuterSpreadY high, about +-1 m around hip height at 3 m), slow drift.
         /// Round M ruling 1: emitted into the world and left behind: world space (OuterTrail), no turn, 4/s plus 2 per metre
         /// walked, 9 s lifetime, so a walking player lays fog along the path and a standing one slowly fills the spot.
+        /// Round P ruling 2: strong enough to read by day and instant: OuterBurst fills the volume the moment the effect starts.
         /// </summary>
-        private static void ApplyFogVolume(FogSettings s, float alpha)
+        private static void ApplyFogVolume(FogSettings s, float alpha, float radius, float size, float rate, float rateDistance, float burst)
         {
             s.OuterEnabled = true;
             s.OuterShape = FogOuterShape.Volume;
             s.OuterAnchors = new List<string> { "Hips" };
             s.OuterHorizontal = false;
-            s.OuterSize = 3.4f; s.OuterAlpha = alpha; s.OuterRadius = 3f; s.OuterSpreadY = 0.35f;
-            s.OuterRate = 6f; s.OuterRateDistance = 3f; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
+            s.OuterSize = size; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f;
+            s.OuterRate = rate; s.OuterRateDistance = rateDistance; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
+            s.OuterBurst = burst;
         }
 
         /// <summary>Round M ruling 2a: mid grey, darker than the sky, so the fog reads as haze and never as light.</summary>
@@ -346,7 +358,8 @@ namespace InvisibilityPotion.Visuals
                     ApplyHazeColor(s); s.Emission = 0f;
                     s.SpreadX = 1f; s.SpreadY = 0.6f; s.SpreadZ = 1f; s.Drift = 0.03f;
                     s.Trail = false;
-                    ApplyFogVolume(s, 0.11f);
+                    // Round P (revision 10): the volume at 6 % effective alpha vanished by day; alpha 0.5, 3.5 m, instant (burst 30).
+                    ApplyFogVolume(s, 0.5f, 3.5f, 3.6f, 8f, 3f, 30f);
                     s.GroundEnabled = true;
                     s.GroundAlpha = 0.14f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
@@ -364,7 +377,8 @@ namespace InvisibilityPotion.Visuals
                     s.SpreadX = 1.125f; s.SpreadY = 0.6f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
                     // Round L ruling 1: light fog in a wide area around the player (replaces the round J ring of flat discs);
                     // round M: left behind in the world, alpha 0.06.
-                    ApplyFogVolume(s, 0.15f);
+                    // Round P (revision 10): stronger and wider than tier I (alpha 0.7, 4 m), instant (burst 45).
+                    ApplyFogVolume(s, 0.7f, 4f, 4f, 10f, 4f, 45f);
                     // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth); round M: alpha 0.12.
                     s.GroundEnabled = true;
                     s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.16f; s.GroundRadius = 0.9f;
@@ -522,6 +536,21 @@ namespace InvisibilityPotion.Visuals
             ? Math.Min(OuterVolumeParticleCap, MaxParticles(Math.Max(0f, OuterRate) + OuterEffectiveRateDistance * GroundBudgetSpeed, OuterLifetime))
             : MaxParticles(OuterRate, OuterLifetime);
 
+        /// <summary>
+        /// Particles the volume emitter emits at once when it is created (round P): OuterBurst rounded, at most
+        /// <see cref="OuterMaxParticles"/>; 0 for the Ring shape and when the outer layer is inactive.
+        /// </summary>
+        public int OuterBurstCount => OuterActive && OuterShape == FogOuterShape.Volume
+            ? Math.Min(OuterMaxParticles, (int)Math.Round(Math.Max(0f, OuterBurst), MidpointRounding.AwayFromZero))
+            : 0;
+
+        /// <summary>Start lifetime of one burst particle for a random <paramref name="random01"/> in 0..1 (clamped): 40..100 % of OuterLifetime.</summary>
+        public float OuterBurstLifetime(float random01)
+        {
+            var t = random01 < 0f ? 0f : random01 > 1f ? 1f : random01;
+            return OuterLifetime * (OuterBurstLifetimeMinFactor + (OuterBurstLifetimeMaxFactor - OuterBurstLifetimeMinFactor) * t);
+        }
+
         /// <summary>maxParticles for an inner emitter that emits <paramref name="rate"/> per second (lifetime = Lifetime).</summary>
         public int MaxParticles(float rate) => MaxParticles(rate, Lifetime);
 
@@ -557,6 +586,17 @@ namespace InvisibilityPotion.Visuals
 
         public const string AnchorPrefix = "Anchor.";
 
+        /// <summary>
+        /// Plain-words overview of the three fog layers (round P ruling 4); PluginConfig writes it as the description of the first
+        /// [Fog] entry, so it stands at the top of the section in the config file.
+        /// </summary>
+        public const string Readme =
+            "How the fog of a hidden player is built (each tier has its own [Fog.TierN] section):\n" +
+            "Body cloud (keys without a prefix: Rate, Size, Alpha, ...): fog sitting directly on the body. It moves with you and hides your outline.\n" +
+            "Wide fog (Outer* keys): large, light fog puffs filling a few metres around you. OuterBurst creates it the moment the effect starts, and you leave it behind as you walk.\n" +
+            "Ground fog (Ground* keys): flat fog patches at your feet. They stay where they appeared and spread, so your path fills with low fog.\n" +
+            "Alpha keys say how visible a layer is (0 = invisible, 1 = solid); Rate keys how many puffs appear; Lifetime keys how long a puff lingers.";
+
         /// <summary>Every key of a [Fog.TierN] section in file order, including one Anchor.&lt;Name&gt; per anchor.</summary>
         public static readonly IReadOnlyList<FogKey> Keys = BuildKeys();
 
@@ -564,55 +604,56 @@ namespace InvisibilityPotion.Visuals
         {
             var k = new List<FogKey>
             {
-                new FogKey("Enabled", FogValueKind.Bool, "Body-anchored fog around the hidden player"),
-                new FogKey("Rate", FogValueKind.Float, "Fog particles per second per body emitter"),
-                new FogKey("Size", FogValueKind.Float, "Fog particle size in metres (randomised 0.6x..1.25x)"),
-                new FogKey("Lifetime", FogValueKind.Float, "Fog particle lifetime in seconds (randomised 0.8x..1.2x)"),
-                new FogKey("Speed", FogValueKind.Float, "Fog particle start speed in m/s"),
-                new FogKey("Alpha", FogValueKind.Float, "Fog alpha 0..1"),
-                new FogKey("Color", FogValueKind.Text, "Fog colour as r,g,b (0..1)"),
-                new FogKey("DynamicColor", FogValueKind.Bool, "Blend the fog colour 50/50 with the environment's fog colour (day, night, weather); turns the fog dark in rain and at night"),
-                new FogKey("Emission", FogValueKind.Float, "Fog self-illumination 0..1 (_EmissionColor = Color x Emission); keeps the fog whitish in rain and at night but makes it glow, 0 = matte, lit by the scene only (default)"),
-                new FogKey("SpreadX", FogValueKind.Float, "Emitter shape scale sideways (multiplies each anchor's radius)"),
-                new FogKey("SpreadY", FogValueKind.Float, "Emitter shape scale vertically; below 1 flattens the fog"),
-                new FogKey("SpreadZ", FogValueKind.Float, "Emitter shape scale front/back"),
-                new FogKey("Drift", FogValueKind.Float, "Vertical drift of fog particles in m/s (world space); 0 = no plume, negative = sinks"),
-                new FogKey("Trail", FogValueKind.Bool, "true = world space: fog particles stay where they were emitted, so moving leaves a trail; false = they follow the body"),
-                new FogKey("MeshRate", FogValueKind.Float, "Mesh emitter: particles per second on the body surface; 0 = Rate x enabled anchors"),
-                new FogKey("OuterEnabled", FogValueKind.Bool, "Second, wider fog layer on the OuterAnchors bones"),
-                new FogKey("OuterAnchors", FogValueKind.Text, "Bones of the outer layer as a comma list of anchor names (Head, Chest, Hips, LeftShoulder, RightShoulder, LeftHand, RightHand, LeftUpperLeg, RightUpperLeg, LeftLowerLeg, RightLowerLeg, LeftFoot, RightFoot); the offset comes from the Anchor.* key, the radius from OuterRadius"),
-                new FogKey("OuterRadius", FogValueKind.Float, "Outer layer spawn radius in metres around each outer anchor"),
-                new FogKey("OuterAlpha", FogValueKind.Float, "Outer layer alpha 0..1 (independent of Alpha)"),
-                new FogKey("OuterRate", FogValueKind.Float, "Outer layer particles per second per outer anchor (independent of Rate; 0 = no outer layer)"),
-                new FogKey("OuterRateDistance", FogValueKind.Float, "Outer layer extra particles per metre walked (only with OuterTrail true: world space)"),
-                new FogKey("OuterSize", FogValueKind.Float, "Outer layer particle size in metres (randomised 0.6x..1.25x)"),
-                new FogKey("OuterSpreadY", FogValueKind.Float, "Outer layer height as a fraction of OuterRadius: Volume = vertical scale of the spawn sphere, Ring = band height (random vertical jitter); small = flat"),
-                new FogKey("OuterLifetime", FogValueKind.Float, "Outer layer particle lifetime in seconds (randomised 0.8x..1.2x)"),
-                new FogKey("OuterTrail", FogValueKind.Bool, "Outer layer in world space (leaves a trail), like Trail for the inner layer"),
-                new FogKey("OuterRotation", FogValueKind.Float, "Outer layer turn speed around the player in deg/s (negative = the other way, 0 = still)"),
-                new FogKey("OuterOffsetY", FogValueKind.Float, "Outer ring vertical offset in metres, added to the outer anchor's Anchor.* offset (negative = lower)"),
-                new FogKey("OuterShape", FogValueKind.Text, "Outer layer shape: Volume = large soft fog sprites inside a flattened sphere of OuterRadius (height OuterSpreadY x radius) around the player; Ring = a band near the rim of OuterRadius"),
-                new FogKey("OuterHorizontal", FogValueKind.Bool, "Outer layer particles lie flat, parallel to the ground (a visible flat ring from above); false = they face the camera like the inner fog"),
-                new FogKey("GroundEnabled", FogValueKind.Bool, "Ground fog field: flat fog patches at the feet that stay where they were emitted and spread, so walking leaves a field of fog"),
-                new FogKey("GroundRate", FogValueKind.Float, "Ground field particles per second (also while standing still)"),
-                new FogKey("GroundRateDistance", FogValueKind.Float, "Ground field extra particles per metre walked"),
-                new FogKey("GroundSize", FogValueKind.Float, "Ground field particle size in metres at birth"),
-                new FogKey("GroundGrow", FogValueKind.Float, "Ground field growth: a particle ends at GroundSize x GroundGrow (1 = no growth)"),
-                new FogKey("GroundLifetime", FogValueKind.Float, "Ground field particle lifetime in seconds"),
-                new FogKey("GroundAlpha", FogValueKind.Float, "Ground field alpha 0..1 (fades in over the first 15 % and out over the last 40 % of the lifetime)"),
-                new FogKey("GroundRadius", FogValueKind.Float, "Ground field spawn radius in metres around the feet"),
-                new FogKey("GroundHeight", FogValueKind.Float, "Ground field height in metres above the player's feet (-0.5..2)"),
-                new FogKey("GroundDrift", FogValueKind.Float, "Ground field random horizontal drift in m/s"),
-                new FogKey("DistortionStrength", FogValueKind.Float, "Refraction strength when this tier's body mode is Distortion (shader property _RefractionIntensity)"),
-                new FogKey("DistortionColor", FogValueKind.Text, "Colour of the Distortion body mode as r,g,b,a (shader property _Color)"),
-                new FogKey("DistortionWave", FogValueKind.Float, "Ripple speed of the Distortion body mode (_WaveVel, normal map borrowed from staff_shield_shard); negative = the borrowed vanilla value"),
-                new FogKey("FogMaterial", FogValueKind.Text, "Particle material of the fog: soft (swamp_mist with a neutral white soft sprite instead of its brownish dust texture), swamp_mist, ghost_smoke, wraith_smoke or slowwispysmoke"),
-                new FogKey("FogEmitterMode", FogValueKind.Text, "Bones = one emitter per anchor below; Mesh = one emitter on the body mesh surface with rate = Rate x enabled anchors (falls back to Bones when the mesh is not readable)"),
-                new FogKey("MeshOffset", FogValueKind.Float, "Mesh emitter: distance in metres the fog spawns off the body surface"),
+                new FogKey("Enabled", FogValueKind.Bool, "Body cloud on or off: the fog that sits on the hidden player's body"),
+                new FogKey("Rate", FogValueKind.Float, "Body cloud: new puffs per second on each body part; higher = a thicker cloud"),
+                new FogKey("Size", FogValueKind.Float, "Body cloud: size of one puff in metres (each puff is 0.6x to 1.25x of this)"),
+                new FogKey("Lifetime", FogValueKind.Float, "Body cloud: seconds a puff lingers before it fades; higher = a thicker, slower cloud"),
+                new FogKey("Speed", FogValueKind.Float, "Body cloud: how fast a new puff drifts away from the body, in metres per second"),
+                new FogKey("Alpha", FogValueKind.Float, "How visible the body cloud is (0 = invisible, 1 = solid)"),
+                new FogKey("Color", FogValueKind.Text, "Colour of all fog of this tier as r,g,b (each 0..1; 0.55,0.57,0.6 = mid grey)"),
+                new FogKey("DynamicColor", FogValueKind.Bool, "Mix the fog colour half and half with the weather's fog colour; the fog then turns dark in rain and at night"),
+                new FogKey("Emission", FogValueKind.Float, "How much the fog glows by itself (0 = matte, lit by the scene only; 1 = glows in its own colour, stays bright at night)"),
+                new FogKey("SpreadX", FogValueKind.Float, "Body cloud: how far it spreads sideways (multiplies each body part's radius)"),
+                new FogKey("SpreadY", FogValueKind.Float, "Body cloud: how far it spreads up and down; below 1 = flatter"),
+                new FogKey("SpreadZ", FogValueKind.Float, "Body cloud: how far it spreads to the front and back"),
+                new FogKey("Drift", FogValueKind.Float, "Body cloud: how fast puffs rise (positive) or sink (negative), in metres per second; 0 = they stay at the body"),
+                new FogKey("Trail", FogValueKind.Bool, "Body cloud: true = puffs stay where they appeared, so walking leaves a trail; false = they move with the body"),
+                new FogKey("MeshRate", FogValueKind.Float, "Body cloud with FogEmitterMode Mesh: puffs per second on the whole body surface; 0 = Rate x active body parts"),
+                new FogKey("OuterEnabled", FogValueKind.Bool, "Wide fog on or off: the large, light fog around the player"),
+                new FogKey("OuterAnchors", FogValueKind.Text, "Wide fog: body parts it is centred on, as a comma list (Head, Chest, Hips, LeftShoulder, RightShoulder, LeftHand, RightHand, LeftUpperLeg, RightUpperLeg, LeftLowerLeg, RightLowerLeg, LeftFoot, RightFoot); one fog source each"),
+                new FogKey("OuterRadius", FogValueKind.Float, "How far the wide fog reaches around you, in metres"),
+                new FogKey("OuterAlpha", FogValueKind.Float, "How visible the wide fog around you is (0 = invisible, 1 = solid). Tier II default 0.7"),
+                new FogKey("OuterRate", FogValueKind.Float, "Wide fog: new fog puffs per second while standing; higher = denser"),
+                new FogKey("OuterRateDistance", FogValueKind.Float, "Wide fog: extra puffs per metre walked, so the fog keeps up with a moving player (only with OuterTrail true)"),
+                new FogKey("OuterBurst", FogValueKind.Float, "Wide fog: puffs created at once when the effect starts, so the fog is there immediately instead of building up (Volume shape only; 0 = builds up over seconds)"),
+                new FogKey("OuterSize", FogValueKind.Float, "Wide fog: size of one puff in metres"),
+                new FogKey("OuterSpreadY", FogValueKind.Float, "Wide fog: height as a fraction of OuterRadius; small = a flat layer, 1 = a round ball"),
+                new FogKey("OuterLifetime", FogValueKind.Float, "Wide fog: seconds a puff lingers before it fades; higher = the fog stays longer where you were"),
+                new FogKey("OuterTrail", FogValueKind.Bool, "Wide fog: true = puffs stay where they appeared (you leave fog behind); false = the fog moves with you"),
+                new FogKey("OuterRotation", FogValueKind.Float, "Wide fog: how fast it turns around you in degrees per second (negative = the other way, 0 = still)"),
+                new FogKey("OuterOffsetY", FogValueKind.Float, "Wide fog: moves its centre up (positive) or down (negative), in metres"),
+                new FogKey("OuterShape", FogValueKind.Text, "Wide fog shape: Volume = soft fog filling the space around you; Ring = a band of fog near the edge of OuterRadius"),
+                new FogKey("OuterHorizontal", FogValueKind.Bool, "Wide fog: true = puffs lie flat like a carpet (seen from above); false = they face the camera like normal fog"),
+                new FogKey("GroundEnabled", FogValueKind.Bool, "Ground fog on or off: flat fog patches at your feet that stay behind and spread, so walking leaves a field of fog"),
+                new FogKey("GroundRate", FogValueKind.Float, "Ground fog: new patches per second, also while standing still"),
+                new FogKey("GroundRateDistance", FogValueKind.Float, "Ground fog: extra patches per metre walked"),
+                new FogKey("GroundSize", FogValueKind.Float, "Ground fog: size of a new patch in metres"),
+                new FogKey("GroundGrow", FogValueKind.Float, "Ground fog: how much a patch grows before it fades (2 = to double size, 1 = no growth)"),
+                new FogKey("GroundLifetime", FogValueKind.Float, "Ground fog: seconds a patch lingers"),
+                new FogKey("GroundAlpha", FogValueKind.Float, "How visible the ground fog is (0 = invisible, 1 = solid)"),
+                new FogKey("GroundRadius", FogValueKind.Float, "Ground fog: how far around your feet new patches appear, in metres"),
+                new FogKey("GroundHeight", FogValueKind.Float, "Ground fog: height above your feet in metres (-0.5..2)"),
+                new FogKey("GroundDrift", FogValueKind.Float, "Ground fog: how fast patches wander sideways, in metres per second"),
+                new FogKey("DistortionStrength", FogValueKind.Float, "Distortion body look (BodyVeilMode Distortion): how strongly the body bends the view behind it"),
+                new FogKey("DistortionColor", FogValueKind.Text, "Distortion body look: tint as r,g,b,a (a = how visible the tint is)"),
+                new FogKey("DistortionWave", FogValueKind.Float, "Distortion body look: how fast the ripples move; negative = the game's own speed"),
+                new FogKey("FogMaterial", FogValueKind.Text, "Texture of all fog puffs: soft (neutral soft puff, default), swamp_mist, ghost_smoke, wraith_smoke or slowwispysmoke (borrowed from the game)"),
+                new FogKey("FogEmitterMode", FogValueKind.Text, "Where the body cloud comes from: Bones = one source per body part below; Mesh = the whole body surface (falls back to Bones if that fails)"),
+                new FogKey("MeshOffset", FogValueKind.Float, "Body cloud with FogEmitterMode Mesh: how far off the body surface the puffs appear, in metres"),
             };
             foreach (var name in AnchorNames)
                 k.Add(new FogKey(AnchorPrefix + name, FogValueKind.Text,
-                    $"Fog emitter on the {name} bone: on|off,radius,x,y,z (offset in metres, player space: x right, y up, z forward)"));
+                    $"Body cloud source on the {name}: on|off,radius,x,y,z (radius and offset in metres; x right, y up, z forward)"));
             return k;
         }
 
@@ -649,6 +690,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRate": return FloatList.Format(OuterRate);
                 case "OuterRateDistance": return FloatList.Format(OuterRateDistance);
                 case "OuterSize": return FloatList.Format(OuterSize);
+                case "OuterBurst": return FloatList.Format(OuterBurst);
                 case "OuterRotation": return FloatList.Format(OuterRotation);
                 case "OuterOffsetY": return FloatList.Format(OuterOffsetY);
                 case "GroundEnabled": return Bool(GroundEnabled);
@@ -737,6 +779,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRate": OuterRate = Math.Max(0f, v); return true;
                 case "OuterRateDistance": OuterRateDistance = Math.Max(0f, v); return true;
                 case "OuterSize": OuterSize = Math.Max(0.01f, v); return true;
+                case "OuterBurst": OuterBurst = Math.Max(0f, v); return true;
                 case "Emission": Emission = Clamp01(v); return true;
                 case "DistortionStrength": DistortionStrength = Math.Max(0f, v); return true;
                 case "DistortionWave": DistortionWave = v < 0f ? -1f : v; return true;

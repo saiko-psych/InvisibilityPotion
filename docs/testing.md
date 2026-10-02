@@ -483,3 +483,18 @@ Config `[General] RevealOnToolUse` (admin, synced, default true). Reveal reason 
 - [ ] Picking plants by hand (berries, thistle, our hidden plants) -> no reveal
 - [ ] Staff cast still reveals as `StaffCast`; a sword swing that misses does not reveal
 - [ ] `[General] RevealOnToolUse = false`, `ip_reload_config` (line ends `reveal on tool use False`): axe, pickaxe, hammer, hoe, cultivator no longer reveal, without re-drinking
+
+## Plan 5 – round P (instant, wide, strong fog volume)
+
+Setup: game closed, `make build`, `make run`, `ip_give 2` in daylight, later `ip_end` and `ip_give 1`. Paste the `Config migration`, `veil fog spawned` and `auto fog dump` lines.
+
+- [ ] `Config migration (look defaults revision 10): N [Fog.Tier1]/[Fog.Tier2] values reset to the new defaults` once, each old value logged before (your ip_fogui save `OuterAlpha 1, OuterSize 6, OuterRate 5` included); tier III keeps its values
+- [ ] Config file: `[Fog]` starts with the plain-words overview (body cloud, wide fog, ground fog); the `Outer*`, `Ground*` and body cloud keys have one-line plain descriptions; `[Fog.Tier2] OuterBurst = 45`, `[Fog.Tier1] OuterBurst = 30`
+- [ ] Tier II `veil fog spawned T2`, `ip_fog_outer [Outer] Hips` line: `rate 10/s, Volume radius 4 m, height 0.35 x r, ..., Trail, camera-facing, + 4/m, burst 45, alive at spawn 45, size 4 m, alpha 0.7 ..., max 80`
+- [ ] Right after `ip_give 2`: the wide fog is there at once (no build-up over seconds), visible by day, about 4 m around the player
+- [ ] Over the first 10 s the field does not blink out at once (the burst puffs fade at different times while the rate keeps it filled)
+- [ ] Walking and running: the fog follows the player immediately (puffs per metre), older puffs stay behind and fade
+- [ ] `ip_fog outeralpha 0.5` (look change rebuild): the fog is rebuilt full at once, no pop-in; `ip_fog` prints `burst 45 (45 emitted)`
+- [ ] Tier I (`ip_end`, `ip_give 1`): the same, lighter (`alpha 0.5`, `radius 3.5 m`, `burst 30`), tier II visibly stronger
+- [ ] Tuning window (`ip_fogui`, "Wide fog" section): new row `Burst at start (volume)`; radius and size sliders reach 6 m
+- [ ] Night: the fog stays grey and matte (no glow)

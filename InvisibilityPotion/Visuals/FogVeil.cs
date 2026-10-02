@@ -473,6 +473,8 @@ namespace InvisibilityPotion.Visuals
             // OuterShape Ring (round J ruling): Circle shape near the rim of OuterRadius, band height OuterSpreadY x radius.
             // Round M ruling 1: with OuterTrail (world space) the volume is left behind; rateOverDistance lays it along the path,
             // the sprites grow by OuterVolumeGrow over their life, and at most OuterVolumeParticleCap live per emitter.
+            // Round P ruling 1: the volume emits OuterBurstCount particles at once when it is created (every spawn, so also every
+            // rebuild after a look change), so the fog exists the moment the effect starts instead of filling up over seconds.
             if (outer == null || animator == null) return;
             var volume = s.OuterShape == FogOuterShape.Volume;
             var outerLayer = new FogLayer
@@ -488,6 +490,7 @@ namespace InvisibilityPotion.Visuals
                 outerLayer.SizeMaxFactor = FogSettings.OuterVolumeSizeMaxFactor;
                 outerLayer.Speed = FogSettings.OuterVolumeSpeed;
                 outerLayer.Grow = FogSettings.OuterVolumeGrow;
+                outerLayer.Burst = s.OuterBurstCount;
             }
             foreach (var name in s.OuterAnchors)
             {
@@ -522,6 +525,7 @@ namespace InvisibilityPotion.Visuals
             public float RateDistance;  // rateOverDistance, particles per metre moved (world space only); 0 = none
             public float Grow = 1f;     // size at death = start size x Grow (linear sizeOverLifetime); 1 = constant size
             public int MaxParticles;    // maxParticles; 0 = rate x lifetime budget (FogSettings.MaxParticles)
+            public int Burst;           // particles emitted at once right after Play (outer volume, round P); 0 = none
             public Material Material;
         }
 
@@ -653,7 +657,23 @@ namespace InvisibilityPotion.Visuals
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
             ps.Play();
+            if (layer.Volume && layer.Burst > 0) EmitBurst(ps, layer.Burst, s);
             return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Layer = kind, VertexAlpha = layer.VertexAlpha };
+        }
+
+        /// <summary>
+        /// Round P ruling 1: fills the whole volume at once. The shape spreads the particles over the flattened sphere (EmitParams
+        /// only overrides the start lifetime: 40..100 % of OuterLifetime, random per particle, so the instant field does not fade out
+        /// all at the same moment); size, rotation, colour and speed come from the system as for normal emission.
+        /// </summary>
+        private static void EmitBurst(ParticleSystem ps, int count, FogSettings s)
+        {
+            var ep = new ParticleSystem.EmitParams();
+            for (var i = 0; i < count; i++)
+            {
+                ep.startLifetime = s.OuterBurstLifetime(UnityEngine.Random.value);
+                ps.Emit(ep, 1);
+            }
         }
 
         /// <summary>
@@ -940,7 +960,8 @@ namespace InvisibilityPotion.Visuals
                 var extra = e.Layer == FogLayerKind.Ground ? $" + {F(upperGround ? s.GroundUpperRateDistance : s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, " +
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
                           : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {F(s.OuterRadius)} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
-                                                            $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
+                                                            $"{s.OuterTrailMode}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}, + {F(s.OuterEffectiveRateDistance)}/m, burst {s.OuterBurstCount}, " +
+                                                            $"alive at spawn {(e.Ps != null ? e.Ps.particleCount : 0)}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)}), " +
                           $"max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}");
             }

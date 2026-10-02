@@ -59,13 +59,15 @@ public class FogSettingsTests
         Assert.True(t1.OuterEnabled);
         Assert.Equal(FogOuterShape.Volume, t1.OuterShape);
         Assert.Equal(new[] { "Hips" }, t1.OuterAnchors);
-        Assert.Equal(0.11f, t1.OuterAlpha, 5);
-        Assert.Equal(3f, t1.OuterRadius, 5);
-        Assert.Equal(3.4f, t1.OuterSize, 5);
+        // Round P: a strong, wide volume that exists the moment the effect starts (OuterBurst).
+        Assert.Equal(0.5f, t1.OuterAlpha, 5);
+        Assert.Equal(3.5f, t1.OuterRadius, 5);
+        Assert.Equal(3.6f, t1.OuterSize, 5);
         Assert.Equal(0.35f, t1.OuterSpreadY, 5);
-        Assert.Equal(6f, t1.OuterRate, 5);
+        Assert.Equal(8f, t1.OuterRate, 5);
         Assert.Equal(3f, t1.OuterRateDistance, 5);
         Assert.Equal(9f, t1.OuterLifetime, 5);
+        Assert.Equal(30f, t1.OuterBurst, 5);
         Assert.Equal(0f, t1.OuterRotation, 5);
         Assert.Equal(0f, t1.OuterOffsetY, 5);
         Assert.False(t1.OuterHorizontal);
@@ -124,12 +126,14 @@ public class FogSettingsTests
         Assert.Equal(FogTrailMode.Trail, t2.OuterTrailMode);
         Assert.Equal(FogOuterShape.Volume, t2.OuterShape);
         Assert.Equal(new[] { "Hips" }, t2.OuterAnchors);
-        Assert.Equal(3f, t2.OuterRadius, 5);
-        Assert.Equal(0.15f, t2.OuterAlpha, 5);
-        Assert.Equal(6f, t2.OuterRate, 5);
-        Assert.Equal(3f, t2.OuterRateDistance, 5);
-        Assert.Equal(3.4f, t2.OuterSize, 5);
+        // Round P: tier II stronger and wider than tier I.
+        Assert.Equal(4f, t2.OuterRadius, 5);
+        Assert.Equal(0.7f, t2.OuterAlpha, 5);
+        Assert.Equal(10f, t2.OuterRate, 5);
+        Assert.Equal(4f, t2.OuterRateDistance, 5);
+        Assert.Equal(4f, t2.OuterSize, 5);
         Assert.Equal(9f, t2.OuterLifetime, 5);
+        Assert.Equal(45f, t2.OuterBurst, 5);
         Assert.Equal(0.35f, t2.OuterSpreadY, 5);
         Assert.Equal(0f, t2.OuterOffsetY, 5);
         Assert.Equal(0f, t2.OuterRotation, 5);
@@ -157,6 +161,7 @@ public class FogSettingsTests
         Assert.Equal(0.03f, t3.DistortionStrength, 5);
         Assert.Equal(0.02f, t3.DA, 5);
         Assert.Equal(FogSettings.DefaultOuterAnchors, t3.OuterAnchors);
+        Assert.Equal(0f, t3.OuterBurst);
     }
 
     [Fact]
@@ -274,7 +279,8 @@ public class FogSettingsTests
     [Fact]
     public void LookDefaults_Revision6_ResetsOnlyTier2OuterKeys()
     {
-        Assert.Equal(9, LookDefaults.Revision);
+        Assert.Equal(LookDefaults.FullResetRevision, LookDefaults.Revision);
+        Assert.True(LookDefaults.OuterRingRevision < LookDefaults.FullResetRevision);
         Assert.Equal(6, LookDefaults.OuterRingRevision);
         // Revision 4 and 5 files keep their tuning except the [Fog.Tier2] Outer* keys.
         Assert.True(LookDefaults.ResetsOuterKey(2, "OuterRadius", 5));
@@ -290,7 +296,7 @@ public class FogSettingsTests
         // Every Outer* key the reset covers is a real key of the section.
         var outerKeys = 0;
         foreach (var k in FogSettings.Keys) if (LookDefaults.ResetsOuterKey(2, k.Name, 5)) outerKeys++;
-        Assert.Equal(14, outerKeys);
+        Assert.Equal(15, outerKeys);   // round P: OuterBurst
         // Since revision 7 the full reset covers every older file, so the outer-only reset no longer runs on its own.
         Assert.True(LookDefaults.ResetsTiers(3));
         Assert.True(LookDefaults.ResetsTiers(5));
@@ -462,10 +468,10 @@ public class FogSettingsTests
     [Fact]
     public void OuterParticleBudget_UsesOuterRateAndLifetime()
     {
-        var s = FogSettings.Defaults(2);   // outer rate 6, outer life 9
-        Assert.Equal(54f, s.LiveParticlesOuter, 3);
+        var s = FogSettings.Defaults(2);   // outer rate 10, outer life 9
+        Assert.Equal(90f, s.LiveParticlesOuter, 3);
         s.Rate = 0f;   // independent of the inner rate
-        Assert.Equal(54f, s.LiveParticlesOuter, 3);
+        Assert.Equal(90f, s.LiveParticlesOuter, 3);
         Assert.Equal(FogSettings.MaxParticles(14f, 3f), (int)System.Math.Ceiling(14f * 3f * 1.3f + 4f));
         s.OuterEnabled = false;
         Assert.Equal(0f, s.LiveParticlesOuter);
@@ -602,6 +608,97 @@ public class FogSettingsTests
         Assert.Equal(0.7f, spirit[1], 5);
         Assert.Equal(0.25f, g.SpiritStrength, 5);
     }
+
+    [Fact]
+    public void LookDefaults_Revision10_FullReset()
+    {
+        Assert.Equal(10, LookDefaults.Revision);
+        Assert.Equal(LookDefaults.Revision, LookDefaults.FullResetRevision);
+        Assert.True(LookDefaults.ResetsTiers(9));
+        Assert.False(LookDefaults.ResetsTiers(10));
+    }
+
+    [Fact]
+    public void OuterBurst_KeyClampsRoundTripsAndParses()
+    {
+        var key = Find("OuterBurst");
+        Assert.NotNull(key);
+        Assert.Equal(FogValueKind.Float, key.Kind);
+        var s = FogSettings.Defaults(2);
+        Assert.Equal("45", s.Get("OuterBurst"));
+        Assert.True(s.TrySet("OuterBurst", "-3")); Assert.Equal(0f, s.OuterBurst);
+        Assert.True(s.TrySet("OuterBurst", "12")); Assert.Equal(12f, s.OuterBurst, 5);
+        Assert.False(s.TrySet("OuterBurst", "lots"));
+        Assert.Equal(12f, s.Clone().OuterBurst, 5);
+        var parsed = FogSettings.Parse(1, k => k == "OuterBurst" ? "7" : null, new List<string>());
+        Assert.Equal(7f, parsed.OuterBurst, 5);
+    }
+
+    [Fact]
+    public void OuterBurstCount_RoundedCappedVolumeOnly()
+    {
+        var s = FogSettings.Defaults(2);
+        Assert.Equal(45, s.OuterBurstCount);
+        Assert.Equal(30, FogSettings.Defaults(1).OuterBurstCount);
+        Assert.Equal(0, FogSettings.Defaults(3).OuterBurstCount);
+        s.OuterBurst = 12.6f;
+        Assert.Equal(13, s.OuterBurstCount);
+        // Never more than the emitter can hold.
+        s.OuterBurst = 500f;
+        Assert.Equal(s.OuterMaxParticles, s.OuterBurstCount);
+        // The burst is a volume feature: the ring builds up as before.
+        s.OuterShape = FogOuterShape.Ring;
+        Assert.Equal(0, s.OuterBurstCount);
+        // An inactive outer layer emits nothing.
+        var off = FogSettings.Defaults(2);
+        off.OuterEnabled = false;
+        Assert.Equal(0, off.OuterBurstCount);
+        // The defaults fit below the volume cap.
+        Assert.True(FogSettings.Defaults(2).OuterBurstCount <= FogSettings.Defaults(2).OuterMaxParticles);
+    }
+
+    [Fact]
+    public void OuterBurstLifetime_IsFortyToHundredPercentOfOuterLifetime()
+    {
+        Assert.Equal(0.4f, FogSettings.OuterBurstLifetimeMinFactor, 5);
+        Assert.Equal(1f, FogSettings.OuterBurstLifetimeMaxFactor, 5);
+        var s = FogSettings.Defaults(2);   // 9 s
+        Assert.Equal(3.6f, s.OuterBurstLifetime(0f), 4);
+        Assert.Equal(9f, s.OuterBurstLifetime(1f), 4);
+        Assert.Equal(6.3f, s.OuterBurstLifetime(0.5f), 4);
+        Assert.Equal(3.6f, s.OuterBurstLifetime(-2f), 4);   // clamped
+        Assert.Equal(9f, s.OuterBurstLifetime(7f), 4);
+    }
+
+    [Fact]
+    public void Descriptions_ArePlainWords()
+    {
+        foreach (var k in FogSettings.Keys) Assert.False(string.IsNullOrWhiteSpace(k.Description), k.Name);
+        Assert.Contains("0 = invisible", Find("OuterAlpha").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1 = solid", Find("OuterAlpha").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wide fog", Find("OuterRadius").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("metres", Find("OuterRadius").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per second", Find("OuterRate").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per metre walked", Find("OuterRateDistance").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("at once", Find("OuterBurst").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lingers", Find("OuterLifetime").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("metres", Find("OuterSize").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("body cloud", Find("Alpha").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("body cloud", Find("Size").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("body cloud", Find("Rate").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ground fog", Find("GroundAlpha").Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Readme_ExplainsTheThreeLayers()
+    {
+        var text = FogSettings.Readme;
+        Assert.Contains("body cloud", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wide fog", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ground fog", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Outer", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Ground", text);
+    }
 }
 
 public class FloatListNonFiniteTests
@@ -706,9 +803,9 @@ public class FloatListNonFiniteTests
         Assert.Equal(0.03f, FogSettings.OuterVolumeSpeed, 5);
         Assert.Equal(0.25f, FogSettings.OuterVolumeFadeIn, 5);   // round M: peak at 25 % of the lifetime
         Assert.Equal(4.5f, 3.2f * FogSettings.OuterVolumeGrow, 4);   // round M: 3.2 m grows to 4.5 m
-        // Height of the flattened volume: about +-1 m around the anchor at the tier II defaults.
+        // Height of the flattened volume: about +-1.4 m around the anchor at the tier II defaults (round P: radius 4).
         var t2 = FogSettings.Defaults(2);
-        Assert.InRange(t2.OuterRadius * t2.OuterSpreadY, 0.9f, 1.1f);
+        Assert.InRange(t2.OuterRadius * t2.OuterSpreadY, 1.3f, 1.5f);
         Assert.False(t2.ExceedsParticleBudget);
         Assert.False(FogSettings.Defaults(1).ExceedsParticleBudget);
     }
@@ -823,7 +920,7 @@ public class FloatListNonFiniteTests
     {
         Assert.Contains(FogSettings.Keys, k => k.Name == "OuterRateDistance" && k.Kind == FogValueKind.Float);
         var s = FogSettings.Defaults(2);
-        Assert.Equal("3", s.Get("OuterRateDistance"));
+        Assert.Equal("4", s.Get("OuterRateDistance"));   // round P: tier II 4 per metre
         Assert.True(s.TrySet("OuterRateDistance", "-3")); Assert.Equal(0f, s.OuterRateDistance);
         Assert.True(s.TrySet("OuterRateDistance", "1.5")); Assert.Equal(1.5f, s.OuterRateDistance, 5);
         Assert.False(s.TrySet("OuterRateDistance", "far"));
@@ -864,7 +961,10 @@ public class FloatListNonFiniteTests
         Assert.True(s.R <= 0.6f && s.G <= 0.6f && s.B <= 0.6f);
         // Round O: alphas halfway between rounds L and M.
         Assert.InRange(s.Alpha, 0.14f, 0.24f);
-        Assert.InRange(s.OuterAlpha, 0.10f, 0.16f);
+        // Round P: the wide fog must read by day; tier II stronger than tier I.
+        Assert.InRange(s.OuterAlpha, 0.5f, 0.7f);
+        Assert.True(FogSettings.Defaults(2).OuterAlpha >= 0.6f);
+        Assert.True(FogSettings.Defaults(2).OuterAlpha > FogSettings.Defaults(1).OuterAlpha);
         Assert.InRange(s.GroundAlpha, 0.12f, 0.18f);
         Assert.Equal(0f, s.Emission);
         // Round O: fewer, larger particles per bone.
@@ -872,7 +972,7 @@ public class FloatListNonFiniteTests
         Assert.Equal(tier == 1 ? 1.1f : 1.2f, s.Size, 5);
         Assert.Equal(tier == 1 ? 2.4f : 2.6f, s.Lifetime, 5);
         Assert.Equal(tier == 1 ? 0.16f : 0.22f, s.Alpha, 5);
-        Assert.Equal(tier == 1 ? 0.11f : 0.15f, s.OuterAlpha, 5);
+        Assert.Equal(tier == 1 ? 0.5f : 0.7f, s.OuterAlpha, 5);
         Assert.Equal(tier == 1 ? 0.14f : 0.16f, s.GroundAlpha, 5);
     }
 }

@@ -299,7 +299,7 @@ namespace InvisibilityPotion.Dev
             _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(bodyHeight));
             _foldInner = Foldout(_foldInner, "Fog inner layer");
             if (_foldInner) DrawInner(s, saved, def, tier == current);
-            _foldOuter = Foldout(_foldOuter, "Fog outer layer (wide, flat)");
+            _foldOuter = Foldout(_foldOuter, "Wide fog (outer layer, Outer* keys)");
             if (_foldOuter) DrawOuter(s, saved, def);
             _foldGround = Foldout(_foldGround, "Fog ground field (flat patches at the feet, spread along the path)");
             if (_foldGround) DrawGround(s, saved, def);
@@ -355,14 +355,15 @@ namespace InvisibilityPotion.Dev
             DrawOuterShape(s, saved);
             var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner and ground off; not saved, all tiers)", GUILayout.Height(22f));
             if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
-            Row("Radius m", ref s.OuterRadius, 0.1f, 4f, 0.1f, def.OuterRadius, saved.OuterRadius);
+            Row("Radius m", ref s.OuterRadius, 0.1f, 6f, 0.1f, def.OuterRadius, saved.OuterRadius);
             Row(s.OuterShape == FogOuterShape.Volume ? "Height (x radius)" : "Band height (x radius)", ref s.OuterSpreadY, 0.01f, 1f, 0.01f, def.OuterSpreadY, saved.OuterSpreadY);
             Row("Rotation deg/s", ref s.OuterRotation, -60f, 60f, 1f, def.OuterRotation, saved.OuterRotation);
             Row("Offset Y m", ref s.OuterOffsetY, -1f, 1f, 0.05f, def.OuterOffsetY, saved.OuterOffsetY);
             Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.005f, def.OuterAlpha, saved.OuterAlpha);
             Row("Rate /s per anchor", ref s.OuterRate, 0f, 40f, 1f, def.OuterRate, saved.OuterRate);
             Row("Rate /m walked (trail only)", ref s.OuterRateDistance, 0f, 10f, 0.5f, def.OuterRateDistance, saved.OuterRateDistance);
-            Row("Size m", ref s.OuterSize, 0.1f, 5f, 0.1f, def.OuterSize, saved.OuterSize);
+            Row("Burst at start (volume)", ref s.OuterBurst, 0f, 80f, 1f, def.OuterBurst, saved.OuterBurst);
+            Row("Size m", ref s.OuterSize, 0.1f, 6f, 0.1f, def.OuterSize, saved.OuterSize);
             Row("Lifetime s", ref s.OuterLifetime, 0.2f, 10f, 0.25f, def.OuterLifetime, saved.OuterLifetime);
             var anchorsChanged = s.Get("OuterAnchors") != saved.Get("OuterAnchors");
             var c = GUI.color;

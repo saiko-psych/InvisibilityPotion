@@ -167,7 +167,7 @@ namespace InvisibilityPotion.Dev
             public override string Name => "ip_fog";
             public override string Help =>
                 "ip_fog [t1|t2|t3] ...: tier defaults to your current one (else 1) | ip_fog [tN]: print | ip_fog [tN] <key> <value>, keys: enabled, rate, size, life, speed, alpha, " +
-                "dynamic, emission (0..1), spreadx, spready, spreadz, drift, trail (on|off), outer (on|off), outerradius (m), outeralpha, outerrate (/s per anchor), outersize (m), " +
+                "dynamic, emission (0..1), spreadx, spready, spreadz, drift, trail (on|off), outer (on|off), outerradius (m), outeralpha, outerrate (/s per anchor), outerburst (puffs at once when the volume starts), outersize (m), " +
                 "outerspready (ring band height x radius), outerlife (s), outertrail (on|off), outerflat (on|off: quads parallel to the ground), outerrotation (deg/s, ring turn speed), outeroffsety (m), ground (on|off), groundrate (/s), grounddistance (/m), groundsize (m), groundgrow (x), groundlife (s), " +
                 "groundalpha, groundradius (m), groundheight (m), grounddrift (m/s), " +
                 "outeranchors (comma list, e.g. Chest,Hips,Head), material (soft|swamp_mist|ghost_smoke|wraith_smoke|slowwispysmoke), " +
@@ -179,7 +179,7 @@ namespace InvisibilityPotion.Dev
             private static readonly System.Collections.Generic.Dictionary<string, string> Aliases = new System.Collections.Generic.Dictionary<string, string>
             {
                 ["life"] = "Lifetime", ["dynamic"] = "DynamicColor", ["outer"] = "OuterEnabled", ["outerradius"] = "OuterRadius",
-                ["outeralpha"] = "OuterAlpha", ["outerrate"] = "OuterRate", ["outersize"] = "OuterSize",
+                ["outeralpha"] = "OuterAlpha", ["outerrate"] = "OuterRate", ["outersize"] = "OuterSize", ["outerburst"] = "OuterBurst",
                 ["material"] = "FogMaterial", ["emitter"] = "FogEmitterMode", ["wave"] = "DistortionWave",
                 ["outerlife"] = "OuterLifetime", ["outerspready"] = "OuterSpreadY", ["outertrail"] = "OuterTrail", ["outeranchors"] = "OuterAnchors",
                 ["outerflat"] = "OuterHorizontal", ["outerrotation"] = "OuterRotation", ["outeroffsety"] = "OuterOffsetY", ["ground"] = "GroundEnabled", ["grounddistance"] = "GroundRateDistance", ["groundlife"] = "GroundLifetime",
@@ -287,7 +287,7 @@ namespace InvisibilityPotion.Dev
                 Say($"T{tier} fog {(s.Enabled ? "on" : "off")}: rate {s.Rate}/s per emitter, size {s.Size} m, life {s.Lifetime} s, speed {s.Speed}, alpha {s.Alpha}, " +
                     $"color {s.Get("Color")} (dynamic {s.DynamicColor}, emission {s.Emission}), spread {s.SpreadX}/{s.SpreadY}/{s.SpreadZ}, drift {s.Drift}, alphamode {FogVeil.AlphaMode}, " +
                     $"material {s.FogMaterial}, emitter {s.EmitterMode} (mesh offset {s.MeshOffset}, mesh rate {s.MeshRate}), {s.InnerTrailMode}");
-                Say($"  outer {(s.OuterEnabled ? "on" : "off")} on {s.Get("OuterAnchors")}: radius {s.OuterRadius} m, alpha {s.OuterAlpha}, rate {s.OuterRate}/s per anchor, " +
+                Say($"  outer {(s.OuterEnabled ? "on" : "off")} on {s.Get("OuterAnchors")}: radius {s.OuterRadius} m, alpha {s.OuterAlpha}, rate {s.OuterRate}/s per anchor + {s.OuterRateDistance}/m, burst {s.OuterBurst} ({s.OuterBurstCount} emitted), " +
                     $"size {s.OuterSize} m, life {s.OuterLifetime} s, spread y {s.OuterSpreadY}, rotation {s.OuterRotation} deg/s, offset y {s.OuterOffsetY} m, {s.OuterTrailMode}, {(s.OuterHorizontal ? "flat" : "camera-facing")}; " +
                     $"~{s.LiveParticlesInner:0} live particles per inner emitter{(s.ExceedsParticleBudget ? $" (over {Fog.FogSettings.ParticleWarnThreshold})" : "")}");
                 Say($"  ground {(s.GroundEnabled ? "on" : "off")}: rate {s.GroundRate}/s + {s.GroundRateDistance}/m, size {s.GroundSize} m x{s.GroundGrow} grow, life {s.GroundLifetime} s, " +
