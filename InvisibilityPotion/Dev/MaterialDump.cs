@@ -13,13 +13,37 @@ namespace InvisibilityPotion.Dev
     /// Debug-only `ip_matdump` (items round L): every material of a prefab with its shader and every shader property's current
     /// value (floats, ranges, colours, vectors, textures), keywords and render queue. Purpose: read the wind / sway properties of
     /// vanilla vegetation (e.g. `ip_matdump Bush01`, `shrub_2`, `Pickable_Thistle`; `ip_matdump clutter [substring]` for the grass
-    /// clutter of ClutterSystem, which is not a ZNetScene prefab). Output goes to the console and Plugin.Log.
+    /// clutter of ClutterSystem, which is not a ZNetScene prefab). Output goes to the console and Plugin.Log. The Debug build also
+    /// logs <see cref="WindPrefabs"/> once per world load with the prefix "wind:" (log only).
     /// </summary>
     internal static class MaterialDump
     {
         private const int MaxMaterials = 40;
 
-        public static void Register() => CommandManager.Instance.AddConsoleCommand(new MatDumpCommand());
+        /// <summary>Vanilla wind references plus our T2/T3 plants, logged once per world load under "wind:" (round N ruling 5).</summary>
+        public static readonly string[] WindPrefabs = { "Bush01", "shrub_2", "Pickable_Thistle", "IP_BaldrsTear", "IP_HelsEmberFern" };
+
+        public static void Register()
+        {
+            CommandManager.Instance.AddConsoleCommand(new MatDumpCommand());
+            // OnPrefabsRegistered fires in ZNetScene.Awake, i.e. once per world load; log only, no console spam.
+            PrefabManager.OnPrefabsRegistered += LogWindReferences;
+        }
+
+        private static void LogWindReferences()
+        {
+            try
+            {
+                foreach (var n in WindPrefabs)
+                {
+                    var go = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(n) : null;
+                    if (go == null) go = PrefabManager.Instance.GetPrefab(n);
+                    if (go == null) { Plugin.Log.LogInfo($"wind: prefab {n} not found"); continue; }
+                    Dump(go.name, Materials(go), line => Plugin.Log.LogInfo("wind: " + line.TrimStart()));
+                }
+            }
+            catch (System.Exception e) { Plugin.Log.LogWarning($"wind: material dump failed: {e}"); }
+        }
 
         private class MatDumpCommand : ConsoleCommand
         {
@@ -32,7 +56,7 @@ namespace InvisibilityPotion.Dev
                 if (args[0] == "clutter") { DumpClutter(args.Length > 1 ? args[1] : ""); return; }
                 var go = AssetCommands.FindPrefab(args[0]);
                 if (go == null) { DevCommands.Say($"ip_matdump: unknown prefab {args[0]}"); return; }
-                Dump(go.name, Materials(go));
+                Dump(go.name, Materials(go), DevCommands.Say);
             }
 
             public override List<string> CommandOptionList() => ZNetScene.instance?.GetPrefabNames() ?? new List<string>();
@@ -60,32 +84,32 @@ namespace InvisibilityPotion.Dev
                 if (c?.m_prefab == null) continue;
                 if (filter.Length > 0 && c.m_name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0 &&
                     c.m_prefab.name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
-                Dump($"clutter {c.m_name} ({c.m_prefab.name}, enabled {c.m_enabled}, instanced {c.m_instanced})", Materials(c.m_prefab));
+                Dump($"clutter {c.m_name} ({c.m_prefab.name}, enabled {c.m_enabled}, instanced {c.m_instanced})", Materials(c.m_prefab), DevCommands.Say);
                 n++;
             }
             DevCommands.Say($"ip_matdump clutter: {n} clutter entr{(n == 1 ? "y" : "ies")} of {cs.m_clutter.Count}{(filter.Length > 0 ? $" matching '{filter}'" : "")}");
         }
 
-        private static void Dump(string title, List<(string where, Material mat)> mats)
+        private static void Dump(string title, List<(string where, Material mat)> mats, System.Action<string> say)
         {
-            DevCommands.Say($"ip_matdump {title}: {mats.Count} material slot(s)");
+            say($"ip_matdump {title}: {mats.Count} material slot(s)");
             var seen = new HashSet<Material>();
             foreach (var (where, mat) in mats.Take(MaxMaterials))
             {
-                if (mat == null) { DevCommands.Say($"  {where}: null material"); continue; }
-                if (!seen.Add(mat)) { DevCommands.Say($"  {where}: {mat.name} (dumped above)"); continue; }
+                if (mat == null) { say($"  {where}: null material"); continue; }
+                if (!seen.Add(mat)) { say($"  {where}: {mat.name} (dumped above)"); continue; }
                 var sh = mat.shader;
-                DevCommands.Say($"  {where}: material {mat.name}, shader {(sh != null ? sh.name : "null")}, queue {mat.renderQueue}, " +
+                say($"  {where}: material {mat.name}, shader {(sh != null ? sh.name : "null")}, queue {mat.renderQueue}, " +
                                 $"keywords [{string.Join(" ", mat.shaderKeywords)}]");
                 if (sh == null) continue;
                 for (var i = 0; i < sh.GetPropertyCount(); i++)
                 {
                     var name = sh.GetPropertyName(i);
-                    DevCommands.Say($"    {name} ({sh.GetPropertyType(i)}) = {Value(mat, name, sh.GetPropertyType(i))}");
+                    say($"    {name} ({sh.GetPropertyType(i)}) = {Value(mat, name, sh.GetPropertyType(i))}");
                 }
             }
-            if (mats.Count > MaxMaterials) DevCommands.Say($"  ... capped at {MaxMaterials} material slots");
-            DevCommands.Say($"ip_matdump {title}: end");
+            if (mats.Count > MaxMaterials) say($"  ... capped at {MaxMaterials} material slots");
+            say($"ip_matdump {title}: end");
         }
 
         private static string Value(Material m, string name, ShaderPropertyType type)
