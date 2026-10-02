@@ -10,12 +10,14 @@ namespace InvisibilityPotion.Items
     /// </summary>
     public static class ModelScale
     {
-        public const float Bottle = 1.6f;
-        public const float Bowl = 2.4f;
+        public const float Bottle = 2.0f;
+        public const float Bowl = 3.0f;
         public const float Plant = 1.5f;
+        /// <summary>The bark lichen patch (Plant_T1_*) is a flat 0.35 x 0.5 m mat and vanished in the grass at x1.5 (round J).</summary>
+        public const float Lichen = 3.0f;
         public const float Goggles = 1f;
         /// <summary>Ingredient pickups (Ingredient_T1..3, items) grow like the plants they come from.</summary>
-        public const float Ingredient = 1.5f;
+        public const float Ingredient = 4.5f;
 
         /// <summary>Factor for a bundle prefab name (MeadBottle_*, MeadBowl_*, Plant_*, Goggles_*, Ingredient_*); 1 for anything else.</summary>
         public static float For(string bundlePrefab)
@@ -23,6 +25,7 @@ namespace InvisibilityPotion.Items
             var n = bundlePrefab ?? "";
             if (n.StartsWith("MeadBottle_", StringComparison.Ordinal)) return Bottle;
             if (n.StartsWith("MeadBowl_", StringComparison.Ordinal)) return Bowl;
+            if (n.StartsWith("Plant_T1", StringComparison.Ordinal)) return Lichen;
             if (n.StartsWith("Plant_", StringComparison.Ordinal)) return Plant;
             if (n.StartsWith("Goggles_", StringComparison.Ordinal)) return Goggles;
             if (n.StartsWith("Ingredient_", StringComparison.Ordinal)) return Ingredient;
