@@ -573,3 +573,30 @@ Veil Broken (tier II, then tier III, then tier I)
 - [ ] `ip_state`: `veil broken: 9.3s of 12s left, stamina regen x0.15, eitr regen x0.25, health regen x0.50, speed -0.30` and three `veil broken config T1/T2/T3: 15s / 12s / 8s ...` lines
 - [ ] `[Tier2] DebuffSpeedModifier = -2` (out of range), restart: BepInEx clamps it to -0.9; `DebuffDuration = 0`, `ip_reload_config`: no Veil Broken at all on tier II
 - [ ] Status bar: the three tier effects still show their own names and icons (Faint Veil, Deep Veil, Shadow Veil)
+
+## Plan 5 – round S (ground-heavy fog pyramid, lighter tier II, harsher Veil Broken, no sprinting)
+
+Setup: game closed, `make build`, `make run`. Real meads as in round Q (`ip_spawn MeadInvisibility_T2 3` etc.). Paste the `Patch health`, `Config migration`, `veil fog spawned`, `auto fog dump` and `ip_state` lines.
+
+Config and log
+- [ ] `Patch health: ... targets patched, 0 missing` (the list now includes `Player.CheckRun`)
+- [ ] `Config migration (look defaults revision 13): ...` once (tiers I/II reset); `[Fog.Tier2] OuterAlpha = 0.45`, `OuterRadius = 4.5`, `OuterSize = 3.6`, `OuterBurst = 60`, `Alpha = 0.14`; `[Fog.Tier1] OuterAlpha = 0.35`, `Alpha = 0.12`; new key `OuterHeightSigma = 0.9` in both, its description in plain words ("how high it rises above the ground")
+- [ ] `Config migration (gameplay defaults revision 5): ...` once: `DebuffStaminaRegenMultiplier 0.15 -> 0.1`, `DebuffEitrRegenMultiplier 0.25 -> 0.15`, `DebuffHealthRegenMultiplier 0.5 -> 0.35`, `[Tier1] DebuffSpeedModifier -0.2 -> -0.35`, `[Tier2]/[Tier3] -0.3 -> -0.5`, `[Tier1] DebuffDuration 15 -> 20` (values you changed stay)
+
+Wide fog shape (tier II, then tier I)
+- [ ] `veil fog spawned T2`: both outer lines read `rate 4/s + 0/m (local)` (follow) and `rate 6/s + 4/m (world)` (trail), `ground spread 3.15 m` / `4.5 m with density (1 - r/R)^2 per m2, height half-Gaussian sigma 0.9 m (floor 0.1 m, cap 3 sigma) ...`, burst 36 (follow) and 24 (trail)
+- [ ] Auto fog dump: each outer line ends `explicit emission: ..., emitted N so far`; the live line shows `avg height above the player` well below 1 m and `... % below sigma (half-Gaussian: 68 %)` near 60..75 %; `rate 0/s + 0/m` on the Unity emission is expected (the volume emits by itself)
+- [ ] Look from the side (third person, zoomed out): the fog is a low, wide mound, densest at your feet, thinning upwards and outwards; no ball around the hips
+- [ ] Tier II: your character is clearly visible through the fog (silhouette, armour colours); the fog is a hint, not a cover
+- [ ] Walking and sprinting (before any reveal): fog keeps up, the trail lies low along the path and fades
+- [ ] Standing still 10 s: the follow puffs still drift slowly; nothing builds up into a dense wall
+- [ ] `ip_fog t2 outersigma 0.4`: a flat ground fog; `ip_fog t2 outersigma 2`: a tall cloud; `ip_fogui` shows the row "Height sigma m (ground-heavy)" for the Volume shape
+- [ ] Tier I: the same shape, lighter
+
+Veil Broken (tier II, then tier I)
+- [ ] Tier II, hit a creature: Veil Broken runs until the veil returns (12 s); walking is at half speed; holding sprint does not sprint (no run animation, no stamina drain from running)
+- [ ] Stamina regenerates at 10 %, health at 35 %, eitr at 15 % (staff build)
+- [ ] Inventory, "Active effects": tooltip "... you move much slower, cannot sprint ...", plus `Health regen -65%`, `Stamina regen -90%`, `Eitr regen -85%`, `Movement -50%`
+- [ ] `ip_state`: `veil broken: ... stamina regen x0.10, eitr regen x0.15, health regen x0.35, speed -0.50`
+- [ ] Tier I: one hit ends the veil, Veil Broken runs 20 s, movement 35 % slower, no sprinting
+- [ ] When Veil Broken ends (veil back, or tier I after 20 s): sprinting works again at once

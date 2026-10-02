@@ -12,6 +12,8 @@
 - Tool use reveals you: axe and pickaxe swings, building with the hammer, hoe and cultivator (config `RevealOnToolUse`).
 - Veil Cooldown: one shared cooldown after drinking (30/60/90 s by tier, shorter than the veil so a stronger mead can still replace a running one). The reveal debuff is now "Veil Broken": stamina regeneration 25 % for 15 s. Breaking the veil by your own action empties the stamina bar. Unchanged old defaults in the config are migrated automatically.
 - Harsher Veil Broken, lasting until the veil returns (tier II/III; tier I 15 s): stamina regeneration 15 %, eitr 25 %, health 50 %, movement 30 % slower (tier I 20 %); new `[TierN]` keys `DebuffSpeedModifier`, `DebuffEitrRegenMultiplier`, `DebuffHealthRegenMultiplier`.
+- Veil Broken harsher still (tier I lasts 20 s): stamina regeneration 10 %, eitr 15 %, health 35 %, movement 50 % slower (tier I 35 %), no sprinting. Unchanged old defaults are migrated automatically.
+- The fog veil is lighter (you stay visible to other players; the veil hides you from monsters, the fog is only a hint) and sits low: dense near the ground and near you, thinning with height and distance.
 
 ## 0.2.0
 
