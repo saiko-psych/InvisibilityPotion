@@ -9,7 +9,8 @@ namespace InvisibilityPotion.Plants
     /// component and no Plant. Placement: the ghost is valid only within <see cref="TreeSaplingRule.TrunkRadius"/> of the trunk of
     /// an eligible fir/pine (ZDO prefab hash) that has no lichen yet; the check runs in the Harmony postfix on
     /// Player.UpdatePlacementGhost (Patches/PlacementPatches.cs), because vanilla Piece.m_mustConnectTo matches a single name by
-    /// substring (Player.cs:3851-3877) and has no message of its own. On the placed instance (ZDO owner = the placer, Start runs
+    /// substring (Player.cs:3851-3877) and has no message of its own. The same postfix snaps a valid ghost onto the trunk surface
+    /// (<see cref="SnapGhost"/>), so the placed instance stands where the patch will grow. On the placed instance (ZDO owner = the placer, Start runs
     /// after PlacePiece's SetCreator, Player.cs:3092-3102) it asks the tree's owner to force lichen at S1
     /// (<see cref="TreeLichen.RequestPlant"/>), marks itself used and removes itself after the place effect played. A sapling
     /// left from an older version (ground lichen) or one that finds no tree refunds its cost (Piece.DropResources) and goes.
@@ -46,8 +47,10 @@ namespace InvisibilityPotion.Plants
                     var verdict = Find(transform.position, out var tree);
                     if (verdict == TreeSaplingRule.Verdict.Ok)
                     {
-                        tree.RequestPlant();
-                        Plugin.Log.LogInfo($"cultivation: {Cultivation.SaplingName} at {transform.position:F1} -> {tree.PrefabName} at {tree.transform.position:F1}: plant requested");
+                        tree.ToTrunkCoords(transform.position, out var h, out var angle);
+                        tree.RequestPlant(h, angle);
+                        Plugin.Log.LogInfo($"cultivation: {Cultivation.SaplingName} at {transform.position:F2} -> {tree.PrefabName} at {tree.transform.position:F1}: " +
+                                           $"plant requested at h={h:F2} m angle {angle:F0}");
                     }
                     else
                     {
@@ -94,6 +97,35 @@ namespace InvisibilityPotion.Plants
             var r = TreeSaplingRule.Choose(Candidates, TreeLichen.EligibleHashes);
             if (r.Index >= 0) tree = Trees[r.Index];
             return r.Verdict;
+        }
+
+        private static bool _loggedSnap;
+
+        /// <summary>
+        /// Puts a valid ghost on <paramref name="tree"/>'s trunk: the aim point is where the camera ray (the ray vanilla places with,
+        /// GameCamera transform, Player.PieceRayTest Player.cs:4223) hits the trunk capsule, else vanilla's ghost position; its height
+        /// is clamped to <see cref="TrunkCoords.MinHeight"/>-<see cref="TrunkCoords.MaxHeight"/> above the tree base; the ghost goes to
+        /// the trunk surface at that height and angle (<see cref="TreeLichen.TrunkPose"/>, the same maths the planted patch uses)
+        /// with its +Z along the outward normal. Runs after vanilla positioned the ghost, so PlacePiece (Player.cs:3082) uses it.
+        /// </summary>
+        public static void SnapGhost(GameObject ghost, TreeLichen tree)
+        {
+            var aim = ghost.transform.position;
+            var aimedAtTrunk = false;
+            var cap = tree.Trunk;
+            var cam = GameCamera.instance;
+            if (cap != null && cam != null && cap.Raycast(new Ray(cam.transform.position, cam.transform.forward), out var hit, 50f))
+            {
+                aim = hit.point;
+                aimedAtTrunk = true;
+            }
+            tree.ToTrunkCoords(aim, out var h, out var angle);
+            var onTrunk = tree.TrunkPose(h, angle, out var pos, out var normal);
+            ghost.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(normal, Vector3.up));
+            if (_loggedSnap) return;
+            _loggedSnap = true;
+            Plugin.Log.LogInfo($"cultivation: sapling ghost snapped to {tree.PrefabName} at {tree.transform.position:F1}: aim {(aimedAtTrunk ? "camera ray on the trunk" : "vanilla ghost position")} " +
+                               $"{aim:F2} -> h={h:F2} m angle {angle:F0}, ghost at {pos:F2} ({(onTrunk ? $"trunk {cap.GetType().Name} '{cap.name}'" : "no trunk capsule, fallback radius")})");
         }
 
         /// <summary>Queued by the placement patch when TryPlacePiece is refused; shown in LateUpdate so it replaces $msg_invalidplacement (Player.cs:3050-3052).</summary>

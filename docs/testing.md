@@ -444,6 +444,7 @@ Huldra's Hair on a tree:
 - [ ] On a tree that already carries lichen (goggles on, or `ip_lichen force` first): red, `Huldra's Hair already grows on this tree`
 - [ ] Place it: the sprout vanishes after about 1.5 s, the cost is used, `cultivation: IP_HuldraSapling at ... -> FirTree at ...: plant requested` and `lichen: planted on FirTree at ... : force 1, stage 1 (S1), patch created`; with goggles I the S1 patch sits on the trunk at once; `ip_plants` shows it at stage 1/3, next in 120 min; `ip_grow` → S2 → S3, pick works
 - [ ] Works outside the Black Forest too (a pine in the Mountains)
+- [ ] Ghost on the trunk (round N follow-up): aiming at a fir/pine trunk, the ghost is the upright bark patch (as on wild lichen trees, not lying flat) stuck to the bark, facing outward, at the aimed height (it stops at about 0.6 m and 2.2 m above the base) and follows around the trunk as you walk around; log once `cultivation: sapling ghost snapped to FirTree ...: aim camera ray on the trunk ... -> h=... m angle ..., ghost at ... (trunk CapsuleCollider '...')`. After placing, the S1 patch appears exactly where the ghost was (`plant requested at h=... angle ...`, `lichen: FirTree ... (planted): patch at ..., h=... angle ..., via CapsuleCollider ... (ClosestPoint)`), also after a relog and on a second client; wild lichen trees keep their default spot (h=1.3)
 - [ ] Without goggles the tree looks vanilla
 - [ ] Old world with a ground Huldra sprout from the first slice: on load it logs `...: NoTree; cost refunded, sapling removed` and drops 1 Huldra's Hair
 

@@ -212,7 +212,7 @@ namespace InvisibilityPotion.Plants
         /// <summary>
         /// Round N ruling 2: IP_HuldraSapling is planted on a fir/pine trunk. A clone of a vanilla crop sapling (Piece, ZNetView,
         /// Destructible, place effects) without its Plant: no ground or cultivated-ground rule (the ray may hit the trunk), a
-        /// <see cref="TreeSapling"/> that converts it into lichen on the tree, the flat lichen S1 as the ghost's look.
+        /// <see cref="TreeSapling"/> that converts it into lichen on the tree, the vertical bark patch S1 as the ghost's look.
         /// </summary>
         private static void BuildTreeSapling(GameObject[] grownForDestructible)
         {
@@ -224,7 +224,10 @@ namespace InvisibilityPotion.Plants
             var layer = old.Count > 0 ? old[0].layer : go.layer;
             foreach (var o in old) UnityEngine.Object.DestroyImmediate(o);
             UnityEngine.Object.DestroyImmediate(plant);
-            var look = FlatStage(PlantPrefabs.Variants[0], go.transform, "look", StageSizes[0]);
+            // The vertical bark patch S1 exactly as TreeLichen builds it (LichenTemplate stage S1, +Z outward); the placement postfix
+            // turns the ghost root so +Z is the trunk normal, so ghost and planted patch look the same.
+            var look = PlantPrefabs.StageFrom("Plant_T1_S1", go.transform, "look");
+            PlantPrefabs.Orient(look, true, "sapling look S1");
             foreach (var t in look.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
             var colliders = go.GetComponentsInChildren<Collider>(true);
             var srcDestructible = PrefabManager.Instance.GetPrefab(source)?.GetComponent<Destructible>();
@@ -257,7 +260,7 @@ namespace InvisibilityPotion.Plants
                 Requirements = new[] { new RequirementConfig(IngredientItems.ItemName(1), 1, 0, true) },
             }));
             Sapling = go;
-            Plugin.Log.LogInfo($"cultivation: {SaplingName} cloned from {source} (Plant removed, {old.Count} vanilla visuals replaced by the flat lichen; colliders {colliders.Length}: " +
+            Plugin.Log.LogInfo($"cultivation: {SaplingName} cloned from {source} (Plant removed, {old.Count} vanilla visuals replaced by the bark patch S1; colliders {colliders.Length}: " +
                                $"{string.Join(", ", colliders.Select(c => $"{c.GetType().Name} on {(c.gameObject == go ? "root" : c.name)} layer {LayerMask.LayerToName(c.gameObject.layer)}"))}), " +
                                $"piece table {PieceTables.Cultivator}, added {added}, enabled {Config.PluginConfig.HuldraCultivable}, tree sapling: within {TreeSaplingRule.TrunkRadius} m of " +
                                $"{string.Join("/", TreeLichen.EligibleTrees)} (hashes {string.Join("/", TreeLichen.EligibleHashes)}), icon {(icon != null ? "ingredient" : "none")}");

@@ -30,6 +30,9 @@ namespace InvisibilityPotion.Plants
         public static readonly string[] InspectOnly = { "FirTree_small", "FirTree_small_dead", "PineTree_01_dead", "Pine_tree_normal_small" };
 
         public static readonly int ForceHash = "IP_LichenForce".GetStableHashCode();
+        /// <summary>Planted position on the trunk (<see cref="TrunkCoords"/>): height above the tree base and angle around the axis; unset for wild lichen.</summary>
+        public static readonly int HeightHash = "IP_LichenH".GetStableHashCode();
+        public static readonly int AngleHash = "IP_LichenAngle".GetStableHashCode();
         /// <summary>Height of the patch centre above the tree root, metres (world, before the tree's scale).</summary>
         public const float PatchHeight = 1.3f;
         public const float FallbackRadius = 0.35f;
@@ -42,6 +45,8 @@ namespace InvisibilityPotion.Plants
 
         private ZNetView _nview;
         private GameObject _lichen;
+        private CapsuleCollider _trunk;
+        private bool _trunkSearched;
 
         public GameObject Lichen => _lichen;
         public bool HasLichen => _lichen != null;
@@ -60,7 +65,7 @@ namespace InvisibilityPotion.Plants
             try { Evaluate(); }
             catch (Exception e) { LogOnce("eval" + e.GetType().Name, $"lichen: {PrefabName}: evaluation failed: {e}"); }
             if (_nview == null || !_nview.IsValid()) return;
-            try { _nview.Register(RpcPlant, RPC_Plant); }
+            try { _nview.Register<float, float>(RpcPlant, RPC_Plant); }
             catch (ArgumentException e) { LogOnce("rpc", $"lichen: {PrefabName}: {RpcPlant} already registered ({e.Message})"); }
             InvokeRepeating(nameof(Poll), UnityEngine.Random.Range(0.5f, PollInterval), PollInterval);
         }
@@ -80,22 +85,108 @@ namespace InvisibilityPotion.Plants
             catch (Exception e) { LogOnce("poll" + e.GetType().Name, $"lichen: {PrefabName}: poll failed: {e}"); }
         }
 
-        /// <summary>Asks the tree's ZDO owner to plant Huldra's Hair (InvokeRPC routes to the owner, ZNetView.cs:331).</summary>
-        public void RequestPlant()
+        /// <summary>
+        /// Asks the tree's ZDO owner to plant Huldra's Hair at the trunk position (<paramref name="height"/>, <paramref name="angle"/>)
+        /// (<see cref="TrunkCoords"/>; InvokeRPC routes to the owner, ZNetView.cs:331).
+        /// </summary>
+        public void RequestPlant(float height, float angle)
         {
-            if (_nview != null && _nview.IsValid()) _nview.InvokeRPC(RpcPlant);
+            if (_nview != null && _nview.IsValid()) _nview.InvokeRPC(RpcPlant, height, angle);
         }
 
-        /// <summary>Owner side: IP_LichenForce = 1, IP_LichenStage = 1 (S1), IP_LichenTime = now; the patch appears at once here.</summary>
-        private void RPC_Plant(long sender)
+        /// <summary>
+        /// Owner side: IP_LichenForce = 1, IP_LichenStage = 1 (S1), IP_LichenTime = now, IP_LichenH / IP_LichenAngle = the sapling's
+        /// trunk position; the patch appears at once here, on other peers through <see cref="Poll"/> (same ZDO revision).
+        /// </summary>
+        private void RPC_Plant(long sender, float height, float angle)
         {
             if (_nview == null || !_nview.IsValid() || !_nview.IsOwner()) return;
             var zdo = _nview.GetZDO();
+            var stored = TrunkCoords.IsStored(height, angle);
             zdo.Set(ForceHash, 1);
             zdo.Set(VeilHarvest.LichenStageHash, 1);
             zdo.Set(VeilHarvest.LichenTimeHash, ZNet.instance.GetTime().Ticks);
+            zdo.Set(HeightHash, stored ? height : TrunkCoords.Unset);
+            zdo.Set(AngleHash, stored ? TrunkCoords.Normalize(angle) : 0f);
             Evaluate();
-            Plugin.Log.LogInfo($"lichen: planted on {PrefabName} at {transform.position:F1} for peer {sender}: force 1, stage 1 (S1), patch {(_lichen != null ? "created" : "missing")}");
+            if (_lichen != null) Place(_lichen.transform);   // a patch that already existed moves to the planted spot
+            Plugin.Log.LogInfo($"lichen: planted on {PrefabName} at {transform.position:F1} for peer {sender}: force 1, stage 1 (S1), " +
+                               $"trunk position {(stored ? $"h={height:F2} m angle {angle:F0}" : $"invalid (h={height}, angle {angle}), default placement")}, " +
+                               $"patch {(_lichen != null ? $"at {_lichen.transform.position:F2}" : "missing")}");
+        }
+
+        // ---------- trunk geometry (shared by the sapling ghost and the planted patch) ----------
+
+        /// <summary>
+        /// The trunk collider: the first non-trigger CapsuleCollider on layer Default among the tree's colliders (round N log: FirTree
+        /// 'Pine_tree' / Pinetree_01 'trunk'), cached; null when the tree has none (then the ray placement / fixed radius is used).
+        /// </summary>
+        public CapsuleCollider Trunk
+        {
+            get
+            {
+                if (_trunkSearched) return _trunk;
+                _trunkSearched = true;
+                var def = LayerMask.NameToLayer("Default");
+                _trunk = null;
+                foreach (var c in GetComponentsInChildren<CapsuleCollider>(true))
+                {
+                    if (c == null || c.isTrigger || c.gameObject.layer != def) continue;
+                    if (_lichen != null && c.transform.IsChildOf(_lichen.transform)) continue;
+                    _trunk = c;
+                    break;
+                }
+                return _trunk;
+            }
+        }
+
+        /// <summary>Point on the capsule's axis at world height <paramref name="y"/> (vertical trunks: the capsule centre's x/z).</summary>
+        private static Vector3 AxisAt(CapsuleCollider cap, float y)
+        {
+            var c = cap.transform.TransformPoint(cap.center);
+            var local = cap.direction == 0 ? Vector3.right : cap.direction == 2 ? Vector3.forward : Vector3.up;
+            var d = cap.transform.TransformDirection(local);
+            return Mathf.Abs(d.y) > 0.2f ? c + d * ((y - c.y) / d.y) : new Vector3(c.x, y, c.z);
+        }
+
+        /// <summary>Trunk coordinates of a world point (the aim point or the placed sapling): clamped height, angle around the axis.</summary>
+        public void ToTrunkCoords(Vector3 world, out float height, out float angle)
+        {
+            var root = transform.position;
+            height = TrunkCoords.ClampHeight(world.y - root.y);
+            var cap = Trunk;
+            var axis = cap != null ? AxisAt(cap, root.y + height) : root;
+            angle = TrunkCoords.AngleDegrees(world.x - axis.x, world.z - axis.z);
+        }
+
+        /// <summary>
+        /// Patch pose for trunk coordinates: the closest point on the trunk capsule (Collider.ClosestPoint) to a point far outward
+        /// along <paramref name="angle"/> at <paramref name="height"/>, i.e. the surface point there, moved
+        /// <see cref="TrunkCoords.SurfaceOffset"/> outward; the normal is horizontal (patch +Z). False when the trunk is missing or
+        /// ClosestPoint gave no surface point (disabled collider): then a fixed radius around the tree base.
+        /// </summary>
+        public bool TrunkPose(float height, float angle, out Vector3 pos, out Vector3 normal)
+        {
+            var root = transform.position;
+            TrunkCoords.Direction(angle, out var dx, out var dz);
+            var dir = new Vector3(dx, 0f, dz);
+            var cap = Trunk;
+            if (cap != null && cap.enabled && cap.gameObject.activeInHierarchy)
+            {
+                var axis = AxisAt(cap, root.y + height);
+                var far = axis + dir * RayStart;
+                var p = cap.ClosestPoint(far);
+                if ((p - far).sqrMagnitude > 1e-6f)
+                {
+                    var n = Vector3.ProjectOnPlane(p - axis, Vector3.up);
+                    normal = n.sqrMagnitude > 1e-4f ? n.normalized : dir;
+                    pos = p + normal * TrunkCoords.SurfaceOffset;
+                    return true;
+                }
+            }
+            normal = dir;
+            pos = root + Vector3.up * height + dir * (FallbackRadius * transform.lossyScale.x + TrunkCoords.SurfaceOffset);
+            return false;
         }
 
         private void OnDestroy() => All.Remove(this);
@@ -160,6 +251,14 @@ namespace InvisibilityPotion.Plants
         /// </summary>
         private void Place(Transform patch)
         {
+            var zdo = _nview != null && _nview.IsValid() ? _nview.GetZDO() : null;
+            var storedH = zdo != null ? zdo.GetFloat(HeightHash, TrunkCoords.Unset) : TrunkCoords.Unset;
+            var storedA = zdo != null ? zdo.GetFloat(AngleHash, 0f) : 0f;
+            if (zdo != null && zdo.GetInt(ForceHash, 0) > 0 && TrunkCoords.IsStored(storedH, storedA))
+            {
+                PlacePlanted(patch, storedH, storedA);
+                return;
+            }
             var root = transform.position;
             var wg = WorldGenerator.instance;
             var angle = LichenRoll.AngleDegrees(wg != null ? wg.GetSeed() : 0, root.x, root.z);
@@ -191,8 +290,7 @@ namespace InvisibilityPotion.Plants
                 pos = root + Vector3.up * PatchHeight + outward * FallbackRadius * transform.lossyScale.x;
             }
             patch.SetPositionAndRotation(pos, Quaternion.LookRotation(normal, Vector3.up));
-            var s = transform.lossyScale;
-            patch.localScale = new Vector3(1f / Mathf.Max(0.01f, s.x), 1f / Mathf.Max(0.01f, s.y), 1f / Mathf.Max(0.01f, s.z));
+            var s = UnitWorldScale(patch);
             var key = PrefabName;
             PlacementLogs.TryGetValue(key, out var n);
             if (n < 5)
@@ -207,6 +305,29 @@ namespace InvisibilityPotion.Plants
             }
         }
 
+        /// <summary>Round N follow-up: a planted patch sits exactly where the sapling ghost was (IP_LichenH / IP_LichenAngle).</summary>
+        private void PlacePlanted(Transform patch, float height, float angle)
+        {
+            var onTrunk = TrunkPose(height, angle, out var pos, out var normal);
+            patch.SetPositionAndRotation(pos, Quaternion.LookRotation(normal, Vector3.up));
+            var s = UnitWorldScale(patch);
+            var key = PrefabName + "/planted";
+            PlacementLogs.TryGetValue(key, out var n);
+            if (n >= 5) return;
+            PlacementLogs[key] = n + 1;
+            var radius = Vector3.ProjectOnPlane(pos - transform.position, Vector3.up).magnitude;
+            Plugin.Log.LogInfo($"lichen: {PrefabName} at {transform.position:F1} (planted): patch at {pos:F2}, r={radius:F2} m, h={height:F2} m, angle {angle:F0}, " +
+                               (onTrunk ? $"via {Trunk.GetType().Name} '{Trunk.name}' (ClosestPoint)" : "no trunk capsule, fallback radius") + $", tree scale {s.x:F2}");
+        }
+
+        /// <summary>The child keeps a world scale of 1 whatever the tree's random scale; returns the tree's lossy scale.</summary>
+        private Vector3 UnitWorldScale(Transform patch)
+        {
+            var s = transform.lossyScale;
+            patch.localScale = new Vector3(1f / Mathf.Max(0.01f, s.x), 1f / Mathf.Max(0.01f, s.y), 1f / Mathf.Max(0.01f, s.z));
+            return s;
+        }
+
 #if DEBUG
         /// <summary>Debug (ip_lichen): writes IP_LichenForce (1 on, -1 off, 0 roll) as the ZDO owner and re-evaluates at once.</summary>
         public void DevForce(int value)
@@ -214,6 +335,7 @@ namespace InvisibilityPotion.Plants
             if (_nview == null || !_nview.IsValid()) return;
             if (!_nview.IsOwner()) _nview.ClaimOwnership();
             _nview.GetZDO().Set(ForceHash, value);
+            if (value <= 0) _nview.GetZDO().Set(HeightHash, TrunkCoords.Unset);   // a later force/roll uses the default spot
             if (value == 0 && _lichen != null) { Destroy(_lichen); _lichen = null; }
             Evaluate();
         }
