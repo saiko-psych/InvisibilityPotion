@@ -36,7 +36,7 @@ namespace InvisibilityPotion.Items
             Plugin.Log.LogInfo($"assets: manifest resources: {string.Join(", ", asm.GetManifestResourceNames())}");
 #endif
             ResourceName = (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsServer) ? BundleName + ".windows" : BundleName;
-            _bundle = AssetUtils.LoadAssetBundleFromResources(ResourceName, asm);
+            _bundle = LoadFromEmbedded(asm, ResourceName);
             if (_bundle == null)
             {
                 Plugin.Log.LogError($"assets: bundle '{ResourceName}' not found or not loadable; items fall back to vanilla clones");
@@ -51,6 +51,32 @@ namespace InvisibilityPotion.Items
             var materials = _bundle.LoadAllAssets<Material>();
             Plugin.Log.LogInfo($"assets: loaded '{ResourceName}' ({AssetNames.Count} assets, {_prefabs.Count} prefabs, {materials.Length} materials)");
             foreach (var name in AssetNames) Plugin.Log.LogInfo($"assets:   {name}");
+        }
+
+        /// <summary>
+        /// Loads the embedded bundle from a byte copy. Jötunn's AssetUtils.LoadAssetBundleFromResources (2.30.2) uses
+        /// AssetBundle.LoadFromStream inside a using block: the stream is disposed right after the header is read, and the later
+        /// asset reads fail with "ManagedStream object must be readable" plus mismatched-serialization errors (round I crash).
+        /// </summary>
+        private static AssetBundle LoadFromEmbedded(System.Reflection.Assembly asm, string bundleName)
+        {
+            string resource = null;
+            foreach (var n in asm.GetManifestResourceNames())
+                if (n.EndsWith("." + bundleName, StringComparison.Ordinal)) { resource = n; break; }
+            if (resource == null) return null;
+            using (var stream = asm.GetManifestResourceStream(resource))
+            {
+                if (stream == null) return null;
+                var bytes = new byte[stream.Length];
+                var read = 0;
+                while (read < bytes.Length)
+                {
+                    var n = stream.Read(bytes, read, bytes.Length - read);
+                    if (n <= 0) break;
+                    read += n;
+                }
+                return AssetBundle.LoadFromMemory(bytes);
+            }
         }
 
         public static bool Loaded => _prefabs.Count > 0;

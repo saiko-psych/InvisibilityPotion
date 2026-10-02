@@ -117,3 +117,7 @@ Observed while building (in-game results still open, see `docs/testing.md`, "Pla
 - S5 is expected to work: `AssetUtils.LoadAssetBundleFromResources` matches the manifest name by `EndsWith` (`InvisibilityPotion.Assets.ip_assets`; the Windows bundle is `....ip_assets.windows`, which does not end with `ip_assets`). The Debug build logs the manifest names to confirm.
 
 Open, settled in-game by the plan-4 checklist: S1 (Windows load), S2 (do the mock shaders resolve, does `Custom/Vegetation` exist, does the glass read as glass), S4 (`ip_components MeadHealthMinor`), S6 (held/stand visuals through `attach`).
+
+### Loader pitfall (2026-10-02, round I crash)
+
+`AssetUtils.LoadAssetBundleFromResources` (Jötunn 2.30.2) calls `AssetBundle.LoadFromStream` inside a `using` block, so the stream is disposed right after the header is read; the first `LoadAllAssets` then fails with `ManagedStream object must be readable` and "Mismatched serialization in the builtin class 'Mesh'" errors, followed by a native crash (signal 5). `Items/AssetBundles.cs` therefore copies the resource into a byte array and uses `AssetBundle.LoadFromMemory`.
