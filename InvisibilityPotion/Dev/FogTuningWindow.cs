@@ -56,7 +56,7 @@ namespace InvisibilityPotion.Dev
         private float _scale = 1f;
         private int _tab;
         private Vector2 _scroll;
-        private bool _foldInner = true, _foldOuter = true, _foldAnchors, _foldLook = true;
+        private bool _foldInner = true, _foldOuter = true, _foldGround = true, _foldAnchors, _foldLook = true;
         private bool _dirty;
         private float _dirtySince;
         private string _appliedAt = "-";
@@ -301,6 +301,8 @@ namespace InvisibilityPotion.Dev
             if (_foldInner) DrawInner(s, saved, def, tier == current);
             _foldOuter = Foldout(_foldOuter, "Fog outer layer (wide, flat)");
             if (_foldOuter) DrawOuter(s, saved, def);
+            _foldGround = Foldout(_foldGround, "Fog ground field (flat patches at the feet, spread along the path)");
+            if (_foldGround) DrawGround(s, saved, def);
             _foldAnchors = Foldout(_foldAnchors, "Anchors (inner bones: radius, offset x y z)");
             if (_foldAnchors) DrawAnchors(s, saved, tier == current);
             _foldLook = Foldout(_foldLook, "Look (body mode, distortion, shadow, spirit)");
@@ -339,7 +341,8 @@ namespace InvisibilityPotion.Dev
             Row("Drift m/s", ref s.Drift, -0.5f, 0.5f, 0.01f, def.Drift, saved.Drift);
             DrawFogMaterial(s);
             var inner = s.EmitterMode == FogEmitterMode.Mesh ? $"mesh ~{s.LiveParticlesMesh:0}" : $"~{s.LiveParticlesInner:0} per bone emitter";
-            GUILayout.Label($"Live particles (rate x lifetime): {inner}{(s.OuterEnabled ? $", outer ~{s.LiveParticlesOuter:0} per emitter" : "")}", _wrap);
+            GUILayout.Label($"Live particles (rate x lifetime): {inner}{(s.OuterEnabled ? $", outer ~{s.LiveParticlesOuter:0} per emitter" : "")}" +
+                            $"{(s.GroundEnabled ? $", ground ~{s.LiveParticlesGround:0} running" : "")}", _wrap);
             if (s.ExceedsParticleBudget)
                 GUILayout.Label($"Over {FogSettings.ParticleWarnThreshold} particles per emitter: heavy and capped at {FogSettings.ParticleHardCap}. Lower rate or lifetime.", _warn);
         }
@@ -348,7 +351,8 @@ namespace InvisibilityPotion.Dev
         {
             ToggleRow("Outer layer", ref s.OuterEnabled, def.OuterEnabled, saved.OuterEnabled);
             ToggleRow("Outer trail (world space)", ref s.OuterTrail, def.OuterTrail, saved.OuterTrail);
-            var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner off; not saved, all tiers)", GUILayout.Height(22f));
+            ToggleRow("Outer flat (quads parallel to the ground)", ref s.OuterHorizontal, def.OuterHorizontal, saved.OuterHorizontal);
+            var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner and ground off; not saved, all tiers)", GUILayout.Height(22f));
             if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
             Row("Radius m", ref s.OuterRadius, 0.1f, 4f, 0.1f, def.OuterRadius, saved.OuterRadius);
             Row("Spread Y (flat < 1)", ref s.OuterSpreadY, 0.05f, 2f, 0.05f, def.OuterSpreadY, saved.OuterSpreadY);
@@ -377,6 +381,21 @@ namespace InvisibilityPotion.Dev
                 }
                 GUILayout.EndHorizontal();
             }
+        }
+
+        private void DrawGround(FogSettings s, FogSettings saved, FogSettings def)
+        {
+            ToggleRow("Ground field", ref s.GroundEnabled, def.GroundEnabled, saved.GroundEnabled);
+            Row("Rate /s", ref s.GroundRate, 0f, 30f, 0.5f, def.GroundRate, saved.GroundRate);
+            Row("Rate per metre walked", ref s.GroundRateDistance, 0f, 10f, 0.25f, def.GroundRateDistance, saved.GroundRateDistance);
+            Row("Size m (at birth)", ref s.GroundSize, 0.1f, 4f, 0.05f, def.GroundSize, saved.GroundSize);
+            Row("Grow x (size at death)", ref s.GroundGrow, 0.5f, 8f, 0.1f, def.GroundGrow, saved.GroundGrow);
+            Row("Lifetime s", ref s.GroundLifetime, 0.5f, 20f, 0.5f, def.GroundLifetime, saved.GroundLifetime);
+            Row("Alpha", ref s.GroundAlpha, 0f, 1f, 0.02f, def.GroundAlpha, saved.GroundAlpha);
+            Row("Radius m", ref s.GroundRadius, 0f, 3f, 0.05f, def.GroundRadius, saved.GroundRadius);
+            Row("Height m (above feet)", ref s.GroundHeight, -0.5f, 2f, 0.05f, def.GroundHeight, saved.GroundHeight);
+            Row("Drift m/s (random)", ref s.GroundDrift, 0f, 0.5f, 0.01f, def.GroundDrift, saved.GroundDrift);
+            GUILayout.Label($"Live particles: ~{s.LiveParticlesGround:0} while running ({FogSettings.GroundBudgetSpeed:0} m/s), max {s.GroundMaxParticles}", _wrap);
         }
 
         private void DrawLook(FogSettings s, FogSettings saved, FogSettings def, int tier)

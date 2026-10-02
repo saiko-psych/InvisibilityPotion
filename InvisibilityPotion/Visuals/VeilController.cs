@@ -107,6 +107,15 @@ namespace InvisibilityPotion.Visuals
             _instance._veil.CollectParticleCounts(p, into);
         }
 
+#if DEBUG
+        /// <summary>Every fact about a player's fog emitters (ip_fog dump, ip_state). Empty when the player has no veil.</summary>
+        public static void DumpFog(Player p, List<string> into)
+        {
+            if (_instance == null) { into.Clear(); return; }
+            _instance._veil.DumpFog(p, into);
+        }
+#endif
+
         private bool RemoveIfUnseen(Player p)
         {
             if (p != null && _seen.Contains(p)) return false;

@@ -12,8 +12,9 @@ namespace InvisibilityPotion.Visuals
 
     /// <summary>
     /// Wraps a veiled player in fog: an inner layer on body bones (head, chest, hips, shoulders, hands, legs, feet) or on the body
-    /// mesh surface, optionally a second, wide and flat outer layer on selected bones; each layer either follows the body (local
-    /// space) or leaves a trail (world space). Changes the body according to the tier's mode.
+    /// mesh surface, optionally a second, wide and flat outer layer on selected bones, and optionally a ground fog field at the feet
+    /// (world space, ground-parallel particles that stay and spread); inner and outer either follow the body (local space) or leave
+    /// a trail (world space). Changes the body according to the tier's mode.
     /// Every change is recorded in a per-player snapshot; Remove restores it exactly, whichever mode applied it.
     /// Look values are static, per tier and live-tunable (Debug: ip_fog, ip_veil, ip_fogui); any change bumps
     /// <see cref="Version"/>, which makes the next Apply rebuild the veil. Apply is only called by VeilController.Refresh.
@@ -33,6 +34,8 @@ namespace InvisibilityPotion.Visuals
         private static readonly int ZFadeDistanceId = Shader.PropertyToID("_ZFadeDistance");
         private static readonly int CameraFadeMinId = Shader.PropertyToID("_CameraFadeDistanceMin");
         private static readonly int CameraFadeMaxId = Shader.PropertyToID("_CameraFadeDistanceMax");
+        private static readonly int CameraYFadeId = Shader.PropertyToID("_CameraYFadeDistance");
+        private static readonly int BillboardId = Shader.PropertyToID("_Billboard");
         // swamp_mist (Custom/LitParticles) ships _ZFadeDistance 1 (soft-particle fade within 1 m of the surface behind) and
         // _CameraFadeDistanceMin/Max 1/5 (fades particles within 5 m of the camera): made for a ground mist the camera walks
         // through, but our fog always sits 3-5 m from the third-person camera and close to the ground/body, so most of it was faded
@@ -51,6 +54,8 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Every GameObject this veil creates starts with this name; ApplyBody and the particle hiding skip them.</summary>
         public const string FogObjectName = "ip_fog";
         private const string OuterObjectName = "ip_fog_outer";
+        private const string GroundObjectName = "ip_fog_ground";
+        private const string GroundAnchorName = "Ground";
         private const float DynamicColorBlend = 0.5f;
 
         // ---------- live look state ----------
@@ -70,7 +75,7 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Runtime body-mode override per tier (index 1..3), null = use the tier's config. Set by ip_veil.</summary>
         public static readonly BodyVeilMode?[] ModeOverride = new BodyVeilMode?[4];
 #if DEBUG
-        /// <summary>Tuning window "Solo outer": spawn only the outer layer (inner layer off) without touching the settings. Debug only.</summary>
+        /// <summary>Tuning window "Solo outer": spawn only the outer layer (inner layer and ground field off) without touching the settings. Debug only.</summary>
         public static bool SoloOuter;
 #endif
         /// <summary>Bumped on every look change; a snapshot of another version is rebuilt on the next Apply.</summary>
@@ -122,7 +127,7 @@ namespace InvisibilityPotion.Visuals
             return false;
         }
 
-        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Distortion, BodyVeilMode.Distortion, BodyVeilMode.Distortion };
+        private static readonly BodyVeilMode[] _configuredModes = { BodyVeilMode.Off, BodyVeilMode.Off, BodyVeilMode.Distortion, BodyVeilMode.Distortion };
 
         /// <summary>The tier's configured body mode, parsed once per LoadFromConfig.</summary>
         public static BodyVeilMode ConfiguredMode(int tier) => tier >= 1 && tier <= 3 ? _configuredModes[tier] : BodyVeilMode.Off;
@@ -154,6 +159,7 @@ namespace InvisibilityPotion.Visuals
             public BodyVeilMode Requested;
             public BodyVeilMode Effective;
             public bool FogWanted;
+            public float BuiltAt;   // Time.time of the (re)build; the Debug dump prints the veil's age to expose rebuild loops
             public readonly List<FogEmitter> Fog = new List<FogEmitter>();
             public readonly List<Material> FogMaterials = new List<Material>();   // per-veil instances (inner, outer), destroyed on Remove
             public bool MaterialHasColor;
@@ -179,7 +185,7 @@ namespace InvisibilityPotion.Visuals
             public GameObject Go;
             public ParticleSystem Ps;
             public string Anchor;
-            public bool Outer;
+            public FogLayerKind Layer;
             public float VertexAlpha;
         }
         private readonly Dictionary<Player, Snapshot> _snapshots = new Dictionary<Player, Snapshot>();
@@ -205,11 +211,15 @@ namespace InvisibilityPotion.Visuals
             {
                 Tier = tier, IsLocal = isLocal, ForceHide = forceHide, Version = Version,
                 Requested = requested, Effective = Resolve(requested, isLocal, tier),
-                FogWanted = !forceHide && fog.Enabled && (fog.InnerActive || fog.OuterActive),
+                FogWanted = !forceHide && fog.Enabled && (fog.InnerActive || fog.OuterActive || fog.GroundActive),
+                BuiltAt = Time.time,
             };
             _snapshots[p] = snap;
             if (snap.FogWanted) SpawnFog(p, snap);
             if (snap.Fog.Count == 0) snap.FogWanted = false;   // nothing spawned (no material/bones): do not retry every tick
+#if DEBUG
+            if (isLocal) LogSpawn(snap);
+#endif
             ApplyBody(p, snap);
             Plugin.Log.LogDebug($"veil T{tier} on {p.GetPlayerName()}: mode {snap.Requested} (effective {snap.Effective}){(forceHide ? " [hidden from players]" : "")}, " +
                                 $"fog {snap.Fog.Count} emitters, {snap.Hidden.Count} hidden, {snap.SharedMaterials.Count} swapped, {snap.Colors.Count} tinted, {snap.Cutoffs.Count} cut");
@@ -389,8 +399,9 @@ namespace InvisibilityPotion.Visuals
             var color = FogColor(s);
             snap.AppliedColor = color;
             var innerActive = s.InnerActive;
+            var groundActive = s.GroundActive;
 #if DEBUG
-            if (SoloOuter) innerActive = false;
+            if (SoloOuter) innerActive = groundActive = false;
 #endif
             var innerVertexAlpha = 0f;
             var inner = innerActive ? MakeFogMaterial(source, snap, color, s.Alpha, s.Emission, out innerVertexAlpha) : null;
@@ -398,6 +409,8 @@ namespace InvisibilityPotion.Visuals
             Material outer = null;
             var outerVertexAlpha = 0f;
             if (s.OuterActive) outer = MakeFogMaterial(source, snap, color, s.OuterAlpha, s.Emission, out outerVertexAlpha);
+            var groundVertexAlpha = 0f;
+            var ground = groundActive ? MakeFogMaterial(source, snap, color, s.GroundAlpha, s.Emission, out groundVertexAlpha) : null;
 
             var animator = p.m_animator;
             if (animator == null && !_noAnimatorWarned)
@@ -423,11 +436,18 @@ namespace InvisibilityPotion.Visuals
                     if (animator == null) break;
                     var bone = BoneFor(animator, a.Name);
                     if (bone == null) continue;
-                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, false, a.Radius, new Vector3(a.X, a.Y, a.Z), color, innerLayer, s, snap.MaterialHasColor));
+                    snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, FogLayerKind.Inner, a.Radius, new Vector3(a.X, a.Y, a.Z), color, innerLayer, s, snap.MaterialHasColor));
                 }
                 // No animator at all: one emitter at chest height so the fog does not silently disappear.
                 if (animator == null && anyEnabled)
-                    snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", false, 0.4f, new Vector3(0f, 1f, 0f), color, innerLayer, s, snap.MaterialHasColor));
+                    snap.Fog.Add(SpawnEmitter(p.transform, p.transform, "Root", FogLayerKind.Inner, 0.4f, new Vector3(0f, 1f, 0f), color, innerLayer, s, snap.MaterialHasColor));
+            }
+
+            // Ground field: one world-space emitter at the feet (Hips projected to the ground; the root without an animator).
+            if (ground != null)
+            {
+                var hips = animator != null ? FindBone(animator, "Hips") : null;
+                snap.Fog.Add(SpawnGroundEmitter(p.transform, hips, color, s, ground, groundVertexAlpha, snap.MaterialHasColor));
             }
 
             // Outer layer: always on bones (OuterAnchors, independent of the inner anchors' on/off), wide and flat, in both emitter
@@ -436,7 +456,7 @@ namespace InvisibilityPotion.Visuals
             var outerLayer = new FogLayer
             {
                 Rate = s.OuterRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
-                Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer,
+                Trail = s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
             };
             foreach (var name in s.OuterAnchors)
             {
@@ -444,7 +464,7 @@ namespace InvisibilityPotion.Visuals
                 if (a == null) continue;
                 var bone = BoneFor(animator, a.Name);
                 if (bone == null) continue;
-                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, true, s.OuterRadius, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
+                snap.Fog.Add(SpawnEmitter(p.transform, bone, a.Name, FogLayerKind.Outer, s.OuterRadius, new Vector3(a.X, a.Y, a.Z), color, outerLayer, s, snap.MaterialHasColor));
             }
         }
 
@@ -460,6 +480,7 @@ namespace InvisibilityPotion.Visuals
         {
             public float Rate, Size, Lifetime, SpreadX, SpreadY, SpreadZ, VertexAlpha;
             public FogTrailMode Trail;
+            public bool Horizontal;   // HorizontalBillboard (quads parallel to the ground) instead of camera-facing billboards
             public Material Material;
         }
 
@@ -532,10 +553,10 @@ namespace InvisibilityPotion.Visuals
             }
         }
 
-        private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, bool outerLayer, float radius, Vector3 offset,
+        private static FogEmitter SpawnEmitter(Transform root, Transform bone, string anchor, FogLayerKind kind, float radius, Vector3 offset,
                                                Color color, FogLayer layer, FogSettings s, bool materialHasColor)
         {
-            var go = new GameObject(outerLayer ? OuterObjectName : FogObjectName);
+            var go = new GameObject(kind == FogLayerKind.Outer ? OuterObjectName : FogObjectName);
             go.SetActive(false);   // configure before the system starts playing
             go.transform.SetParent(root, false);   // destroyed with the player; position driven by the follower
             var follower = go.AddComponent<FogAnchorFollower>();
@@ -554,8 +575,93 @@ namespace InvisibilityPotion.Visuals
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
             ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Outer = outerLayer, VertexAlpha = layer.VertexAlpha };
+            return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Layer = kind, VertexAlpha = layer.VertexAlpha };
         }
+
+        /// <summary>
+        /// Ground fog field (round H): one world-space emitter at the feet. Quads parallel to the ground (HorizontalBillboard), so
+        /// they do not stand in the terrain the way upright billboards do (the borrowed soft-particle depth fade eats those). Each
+        /// particle stays where it was emitted, almost still, and grows from GroundSize to GroundSize x GroundGrow; rateOverTime plus
+        /// rateOverDistance (world space only) lays the field along the walked path. Alpha fades in over the first 15 % and out over
+        /// the last 40 % of the lifetime.
+        /// </summary>
+        private static FogEmitter SpawnGroundEmitter(Transform root, Transform hips, Color color, FogSettings s, Material material, float vertexAlpha, bool materialHasColor)
+        {
+            var go = new GameObject(GroundObjectName);
+            go.SetActive(false);
+            go.transform.SetParent(root, false);
+            var follower = go.AddComponent<FogAnchorFollower>();
+            follower.Bone = hips != null ? hips : root;
+            follower.Root = root;
+            follower.Ground = true;
+            follower.GroundHeight = s.GroundHeight;
+            follower.Snap();
+
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.scalingMode = ParticleSystemScalingMode.Local;
+            main.startLifetime = Mathf.Max(0.05f, s.GroundLifetime);
+            main.startSpeed = GroundStartSpeed;
+            main.startSize = new ParticleSystem.MinMaxCurve(s.GroundSize * 0.8f, s.GroundSize * 1.2f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = materialHasColor ? new Color(1f, 1f, 1f, vertexAlpha) : new Color(color.r, color.g, color.b, vertexAlpha);
+            main.gravityModifier = 0f;
+            main.maxParticles = s.GroundMaxParticles;
+
+            var emission = ps.emission;
+            emission.enabled = true;
+            emission.rateOverTime = Mathf.Max(0f, s.GroundRate);
+            emission.rateOverDistance = Mathf.Max(0f, s.GroundRateDistance);
+
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = Mathf.Max(0.001f, s.GroundRadius);
+            shape.scale = new Vector3(1f, GroundShapeFlatten, 1f);   // a flat disc at GroundHeight
+
+            // Random horizontal drift. All three axes must use the same curve mode (Unity rejects mixed modes).
+            var vel = ps.velocityOverLifetime;
+            var drift = Mathf.Max(0f, s.GroundDrift);
+            vel.enabled = drift > 0.0001f;
+            vel.space = ParticleSystemSimulationSpace.World;
+            vel.x = new ParticleSystem.MinMaxCurve(-drift, drift);
+            vel.y = new ParticleSystem.MinMaxCurve(0f, 0f);
+            vel.z = new ParticleSystem.MinMaxCurve(-drift, drift);
+
+            var grow = Mathf.Max(0.1f, s.GroundGrow);
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            // Curve x multiplier: 1 at birth, GroundGrow at death; ease-out so the patch spreads early and settles.
+            var curve = new AnimationCurve(new Keyframe(0f, 1f / grow, 0f, 2f * (1f - 1f / grow)), new Keyframe(1f, 1f, 0f, 0f));
+            sol.size = new ParticleSystem.MinMaxCurve(grow, curve);
+
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.15f), new GradientAlphaKey(1f, 0.6f), new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(gradient);
+
+            var psr = go.GetComponent<ParticleSystemRenderer>();
+            psr.sharedMaterial = material;
+            psr.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+            psr.shadowCastingMode = ShadowCastingMode.Off;
+            psr.receiveShadows = false;
+            psr.lightProbeUsage = LightProbeUsage.Off;
+
+            go.SetActive(true);
+            ps.Play();
+            return new FogEmitter { Go = go, Ps = ps, Anchor = GroundAnchorName, Layer = FogLayerKind.Ground, VertexAlpha = vertexAlpha };
+        }
+
+        /// <summary>Ground particles are almost still (start speed in m/s, outward from the spawn disc).</summary>
+        private const float GroundStartSpeed = 0.01f;
+        /// <summary>Vertical shape scale of the ground spawn sphere: a flat disc a few centimetres thick.</summary>
+        private const float GroundShapeFlatten = 0.05f;
 
         private static readonly HashSet<string> _meshWarned = new HashSet<string>();
         private const string MeshAnchorName = "Mesh";
@@ -625,7 +731,7 @@ namespace InvisibilityPotion.Visuals
 
             go.SetActive(true);
             ps.Play();
-            return new FogEmitter { Go = go, Ps = ps, Anchor = MeshAnchorName, Outer = false, VertexAlpha = layer.VertexAlpha };
+            return new FogEmitter { Go = go, Ps = ps, Anchor = MeshAnchorName, Layer = FogLayerKind.Inner, VertexAlpha = layer.VertexAlpha };
         }
 
         /// <summary>
@@ -675,7 +781,7 @@ namespace InvisibilityPotion.Visuals
 
             var psr = go.GetComponent<ParticleSystemRenderer>();
             psr.sharedMaterial = layer.Material;
-            psr.renderMode = ParticleSystemRenderMode.Billboard;
+            psr.renderMode = layer.Horizontal ? ParticleSystemRenderMode.HorizontalBillboard : ParticleSystemRenderMode.Billboard;
             psr.shadowCastingMode = ShadowCastingMode.Off;
             psr.receiveShadows = false;
             psr.lightProbeUsage = LightProbeUsage.Off;
@@ -688,10 +794,126 @@ namespace InvisibilityPotion.Visuals
             into.Clear();
             if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
             foreach (var e in snap.Fog)
-                if (e.Ps != null) into.Add(new KeyValuePair<string, int>(e.Outer ? e.Anchor + " (outer)" : e.Anchor, e.Ps.particleCount));
+                if (e.Ps != null) into.Add(new KeyValuePair<string, int>(e.Layer == FogLayerKind.Inner ? e.Anchor : $"{e.Anchor} ({e.Layer.ToString().ToLowerInvariant()})", e.Ps.particleCount));
         }
 
         public bool HasVeil(Player p) => p != null && _snapshots.ContainsKey(p);
+
+#if DEBUG
+        // ---------- diagnostics (Debug only) ----------
+
+        private static string _lastSpawnLog;
+        private static readonly ParticleSystem.Particle[] ParticleBuf = new ParticleSystem.Particle[FogSettings.ParticleHardCap];
+
+        /// <summary>
+        /// One line per emitter of the local veil right after it was built (name, layer, anchor, rate, size, alpha), so the log of
+        /// a test round carries the facts. Identical consecutive builds are logged once (the tuning window rebuilds often).
+        /// </summary>
+        private static void LogSpawn(Snapshot snap)
+        {
+            var s = Fog[snap.Tier];
+            var lines = new List<string> { $"veil fog spawned T{snap.Tier} (local, body {snap.Effective}): {snap.Fog.Count} emitters" };
+            foreach (var e in snap.Fog)
+            {
+                float rate, size, alpha;
+                switch (e.Layer)
+                {
+                    case FogLayerKind.Outer: rate = s.OuterRate; size = s.OuterSize; alpha = s.OuterAlpha; break;
+                    case FogLayerKind.Ground: rate = s.GroundRate; size = s.GroundSize; alpha = s.GroundAlpha; break;
+                    default: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.Rate; size = s.Size; alpha = s.Alpha; break;
+                }
+                var extra = e.Layer == FogLayerKind.Ground ? $" + {F(s.GroundRateDistance)}/m, grow x{F(s.GroundGrow)}, height {F(s.GroundHeight)} m"
+                          : e.Layer == FogLayerKind.Outer ? $", radius {F(s.OuterRadius)} m, spread y {F(s.OuterSpreadY)}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}" : "";
+                lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)})");
+            }
+            var text = string.Join("\n", lines);
+            if (text == _lastSpawnLog) return;
+            _lastSpawnLog = text;
+            foreach (var l in lines) Plugin.Log.LogInfo(l);
+        }
+
+        private static string F(float v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        private static string V(Vector3 v) => $"({F(v.x)}, {F(v.y)}, {F(v.z)})";
+        private static string C(Color c) => $"({F(c.r)}, {F(c.g)}, {F(c.b)}, {F(c.a)})";
+
+        private static string Curve(ParticleSystem.MinMaxCurve c)
+        {
+            switch (c.mode)
+            {
+                case ParticleSystemCurveMode.Constant: return F(c.constant);
+                case ParticleSystemCurveMode.TwoConstants: return $"{F(c.constantMin)}..{F(c.constantMax)}";
+                default: return $"{c.mode} x{F(c.curveMultiplier)}";
+            }
+        }
+
+        private static string MatFloat(Material m, int id) => m != null && m.HasProperty(id) ? F(m.GetFloat(id)) : "-";
+        private static string MatColor(Material m, int id) => m != null && m.HasProperty(id) ? C(m.GetColor(id)) : "-";
+
+        /// <summary>
+        /// Every fact about every fog emitter of a player's veil (ip_fog dump, ip_state): object, layer, anchor, play state, counts,
+        /// emission, sizes, spaces, renderer, material values, bounds, positions relative to the player and the camera, and
+        /// statistics of the live particles (current alpha and size, distance to the camera). Empty when the player has no veil.
+        /// </summary>
+        public void DumpFog(Player p, List<string> into)
+        {
+            into.Clear();
+            if (p == null || !_snapshots.TryGetValue(p, out var snap)) return;
+            var gc = GameCamera.instance;
+            var cam = gc != null ? gc.m_camera : null;
+            var camPos = cam != null ? cam.transform.position : Vector3.zero;
+            var playerPos = p.transform.position;
+            into.Add($"veil T{snap.Tier} on {p.GetPlayerName()}: body {snap.Requested} (effective {snap.Effective}), version {snap.Version}/{Version}, " +
+                     $"age {F(Time.time - snap.BuiltAt)} s, fog wanted {snap.FogWanted}, {snap.Fog.Count} emitters, {snap.FogMaterials.Count} fog materials, alpha mode {AlphaMode}");
+            into.Add($"  player {V(playerPos)}, camera {(cam != null ? V(camPos) : "-")} (distance {(gc != null ? F(gc.m_distance) : "-")} m, fov {(cam != null ? F(cam.fieldOfView) : "-")}, " +
+                     $"depth mode {(cam != null ? cam.depthTextureMode.ToString() : "-")}, rendering path {(cam != null ? cam.actualRenderingPath.ToString() : "-")})");
+            foreach (var e in snap.Fog)
+            {
+                if (e.Go == null || e.Ps == null) { into.Add($"  [{e.Layer}] {e.Anchor}: destroyed"); continue; }
+                var ps = e.Ps;
+                var main = ps.main;
+                var em = ps.emission;
+                var shape = ps.shape;
+                var psr = e.Go.GetComponent<ParticleSystemRenderer>();
+                var mat = psr != null ? psr.sharedMaterial : null;
+                var pos = e.Go.transform.position;
+                into.Add($"  {e.Go.name} [{e.Layer}] {e.Anchor}: active {e.Go.activeInHierarchy}, playing {ps.isPlaying}, emitting {ps.isEmitting}, particles {ps.particleCount}/{main.maxParticles}, " +
+                         $"rate {Curve(em.rateOverTime)}/s + {Curve(em.rateOverDistance)}/m (emission {em.enabled}), startSize {Curve(main.startSize)}, lifetime {Curve(main.startLifetime)}, " +
+                         $"speed {Curve(main.startSpeed)}, space {main.simulationSpace}, scaling {main.scalingMode}, shape {shape.shapeType} r {F(shape.radius)} scale {V(shape.scale)}, " +
+                         $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}");
+                into.Add(psr == null ? "    renderer: none" :
+                         $"    renderer enabled {psr.enabled}, visible {psr.isVisible}, mode {psr.renderMode}, sortingFudge {F(psr.sortingFudge)}, maxParticleSize {F(psr.maxParticleSize)}, " +
+                         $"minParticleSize {F(psr.minParticleSize)}, layer {LayerMask.LayerToName(e.Go.layer)} ({e.Go.layer}), culling mask has layer {(cam != null ? ((cam.cullingMask & (1 << e.Go.layer)) != 0).ToString() : "-")}; " +
+                         $"material '{(mat != null ? mat.name : "-")}' shader '{(mat != null && mat.shader != null ? mat.shader.name : "-")}' queue {(mat != null ? mat.renderQueue.ToString() : "-")}, " +
+                         $"_Color {MatColor(mat, ColorId)}, _EmissionColor {MatColor(mat, EmissionColorId)}, _ZFadeDistance {MatFloat(mat, ZFadeDistanceId)}, " +
+                         $"_CameraFadeDistanceMin/Max {MatFloat(mat, CameraFadeMinId)}/{MatFloat(mat, CameraFadeMaxId)}, _CameraYFadeDistance {MatFloat(mat, CameraYFadeId)}, _Billboard {MatFloat(mat, BillboardId)}");
+                var line = $"    bounds centre {(psr != null ? V(psr.bounds.center) : "-")} size {(psr != null ? V(psr.bounds.size) : "-")}; emitter {V(pos)} = player + {V(pos - playerPos)}" +
+                           (cam != null ? $", {F(Vector3.Distance(camPos, pos))} m from the camera" : "");
+                var n = ps.GetParticles(ParticleBuf);
+                if (n > 0)
+                {
+                    float alphaSum = 0f, sizeSum = 0f, minCam = float.MaxValue, maxCam = 0f, ySum = 0f;
+                    var local = main.simulationSpace == ParticleSystemSimulationSpace.Local;
+                    for (var i = 0; i < n; i++)
+                    {
+                        var pt = ParticleBuf[i];
+                        alphaSum += pt.GetCurrentColor(ps).a / 255f;
+                        sizeSum += pt.GetCurrentSize(ps);
+                        var wp = local ? e.Go.transform.TransformPoint(pt.position) : pt.position;
+                        ySum += wp.y - playerPos.y;
+                        if (cam == null) continue;
+                        var d = Vector3.Distance(camPos, wp);
+                        if (d < minCam) minCam = d;
+                        if (d > maxCam) maxCam = d;
+                    }
+                    var matAlpha = mat != null && mat.HasProperty(ColorId) ? mat.GetColor(ColorId).a : 1f;
+                    line += $"; live {n}: avg vertex alpha {F(alphaSum / n)} (x material {F(matAlpha)} = {F(alphaSum / n * matAlpha)}), avg size {F(sizeSum / n)} m, " +
+                            $"avg height above the player {F(ySum / n)} m" + (cam != null ? $", camera distance {F(minCam)}..{F(maxCam)} m" : "");
+                }
+                else line += "; no live particles";
+                into.Add(line);
+            }
+        }
+#endif
 
         /// <summary>Vanilla material name and the prefabs that carry it, per selectable fog material (research doc 2026-10-01, section 4).</summary>
         private static readonly Dictionary<string, KeyValuePair<string, string[]>> FogMaterialSources = new Dictionary<string, KeyValuePair<string, string[]>>
@@ -1232,16 +1454,27 @@ namespace InvisibilityPotion.Visuals
         }
     }
 
-    /// <summary>Keeps a fog emitter on its bone: bone position plus an offset in the player's frame, rotation of the player.</summary>
+    /// <summary>
+    /// Keeps a fog emitter on its bone: bone position plus an offset in the player's frame, rotation of the player. Ground mode
+    /// (ground fog field): the bone's x/z at the root's height plus GroundHeight, i.e. the bone projected to the feet.
+    /// </summary>
     internal sealed class FogAnchorFollower : MonoBehaviour
     {
         public Transform Bone;
         public Transform Root;
         public Vector3 Offset;
+        public bool Ground;
+        public float GroundHeight;
 
         public void Snap()
         {
             if (Bone == null || Root == null) return;
+            if (Ground)
+            {
+                var b = Bone.position;
+                transform.SetPositionAndRotation(new Vector3(b.x, Root.position.y + GroundHeight, b.z), Root.rotation);
+                return;
+            }
             transform.SetPositionAndRotation(Bone.position + Root.rotation * Offset, Root.rotation);
         }
 
