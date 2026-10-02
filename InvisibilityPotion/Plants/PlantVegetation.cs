@@ -51,6 +51,14 @@ namespace InvisibilityPotion.Plants
                 return;
             }
             Registered.Add(veg);
+            if (tier == 3)
+            {
+                // Ashlands lava is painted into the vegetation mask; PlaceVegetation checks the mask only when min != max
+                // (ZoneSystem.cs:1453-1459, fields :70/:72). CustomVegetation.Vegetation is the ZoneVegetation Jötunn injects.
+                veg.Vegetation.m_minVegetation = 0f;
+                veg.Vegetation.m_maxVegetation = 0.5f;
+                Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: vegetation mask {veg.Vegetation.m_minVegetation}-{veg.Vegetation.m_maxVegetation} (keeps ferns off lava)");
+            }
             Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: biome {cfg.Biome}, max {cfg.Max:0.###} per zone, " +
                                $"group {cfg.GroupSizeMin}-{cfg.GroupSizeMax} r {cfg.GroupRadius} m, tilt {cfg.MinTilt}-{cfg.MaxTilt}, scale {cfg.ScaleMin}-{cfg.ScaleMax}");
             if (!_hooked)
@@ -79,7 +87,7 @@ namespace InvisibilityPotion.Plants
                 if (zv == null) { yield return $"{cv.Name}: not in ZoneSystem"; continue; }
                 var inSystem = ZoneSystem.instance != null && ZoneSystem.instance.m_vegetation.Contains(zv);
                 yield return $"{cv.Name}: biome {zv.m_biome}, area {zv.m_biomeArea}, max {zv.m_max:0.###}/zone, group {zv.m_groupSizeMin}-{zv.m_groupSizeMax} r {zv.m_groupRadius}, " +
-                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude}, block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
+                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, vegetation mask {zv.m_minVegetation}-{zv.m_maxVegetation}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude}, block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
             }
         }
     }
