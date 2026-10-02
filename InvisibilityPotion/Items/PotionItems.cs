@@ -38,7 +38,7 @@ namespace InvisibilityPotion.Items
             }
             try { CopyConsumeEffects(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Copying potion start/stop effects failed: {e}"); }
-            // Icons: render the bottles for the items and reuse them for the status effects.
+            // Icons: render the bottles for the item icons.
             for (var t = 1; t <= 3; t++)
             {
                 try
@@ -51,13 +51,8 @@ namespace InvisibilityPotion.Items
                         continue;
                     }
                     var sprite = RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation);
-                    if (sprite != null)
-                    {
-                        prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { sprite };
-                        // Same instance Jotunn puts into the ObjectDB and the mead's m_consumeStatusEffect.
-                        var se = Effects.StatusEffects.Prefab(t);
-                        if (se != null) se.m_icon = sprite;
-                    }
+                    // The status effects use the embedded veil icons (Icons.Veil, set in StatusEffects.Register), not this render.
+                    if (sprite != null) prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { sprite };
                     var baseSprite = RenderManager.Instance.Render(basePrefab, RenderManager.IsometricRotation);
                     if (baseSprite != null) basePrefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_icons = new[] { baseSprite };
                 }

@@ -31,6 +31,7 @@ namespace InvisibilityPotion.Effects
                 se.Tier = t;
                 se.m_name = $"$ip_se_name_t{t}";
                 se.m_tooltip = $"$ip_se_tooltip_t{t}";
+                se.m_icon = Items.Icons.Veil(t);  // embedded se_veil_t{t}.png; the HUD hides status effects without an icon
                 se.m_startMessage = "$ip_se_start";
                 se.m_stopMessage = "$ip_se_stop";
                 se.m_startMessageType = MessageHud.MessageType.Center;
