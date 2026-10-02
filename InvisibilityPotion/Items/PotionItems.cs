@@ -38,6 +38,8 @@ namespace InvisibilityPotion.Items
             }
             try { CopyConsumeEffects(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Copying potion start/stop effects failed: {e}"); }
+            try { Effects.StatusEffects.LogVanillaCooldownReference(); }   // round Q: live check of the vanilla potion cooldown data
+            catch (System.Exception e) { Plugin.Log.LogWarning($"Cooldown reference log failed: {e.Message}"); }
             // Icons: render the bottles for the item icons.
             for (var t = 1; t <= 3; t++)
             {

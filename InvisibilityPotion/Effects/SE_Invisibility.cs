@@ -10,6 +10,7 @@ namespace InvisibilityPotion.Effects
         public int Tier;                       // set on the prefab by StatusEffects.Register
         public InvisibilityStateMachine Machine { get; private set; }
         private bool _cleaned;
+        private bool _cooldownPending;   // start the Veil Cooldown on the next UpdateStatusEffect (adds only from there)
 
         private TierConfig Cfg => PluginConfig.Tier(Tier);
         private Player Owner => m_character as Player;
@@ -32,6 +33,7 @@ namespace InvisibilityPotion.Effects
             base.Setup(character);
             Machine = new InvisibilityStateMachine(cfg);
             _cleaned = false;
+            _cooldownPending = true;
             var owner = character as Player;
             if (owner != null)
             {
@@ -60,6 +62,17 @@ namespace InvisibilityPotion.Effects
         {
             base.UpdateStatusEffect(dt);
             if (Machine == null || Owner == null) return;
+            if (_cooldownPending)
+            {
+                // Round Q ruling 3: drinking starts the shared Veil Cooldown (all three meads) for this tier's Cooldown.
+                _cooldownPending = false;
+                var cooldown = Cfg.Cooldown;
+                if (VeilCooldown.Starts(cooldown))
+                {
+                    SE_VeilCooldown.NextDuration = cooldown;
+                    Owner.GetSEMan().AddStatusEffect(StatusEffects.CooldownHash, resetTime: true);   // add is safe inside SEMan.Update
+                }
+            }
             var r = Machine.Tick(dt);
             if (r.DrainStamina && PluginConfig.Global.DrainStaminaOnAttackReveal)
             {
@@ -97,6 +110,7 @@ namespace InvisibilityPotion.Effects
             base.ResetTime();
             if (Machine == null) return;
             Machine = new InvisibilityStateMachine(Cfg);
+            _cooldownPending = true;   // a re-drink of the same tier (after its cooldown ran out) starts a new cooldown
             if (Owner != null) HiddenState.Write(Owner, Tier, true);
         }
 

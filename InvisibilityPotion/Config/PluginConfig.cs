@@ -103,7 +103,9 @@ namespace InvisibilityPotion.Config
                 ["CarryWeightMultiplier"] = Bind(section, "CarryWeightMultiplier", carry,
                                                  "Max carry weight while the effect is active, as a fraction of the normal limit (Megingjord and world settings included). 1 = no penalty. Being over the limit slows the player as in vanilla",
                                                  new AcceptableValueRange<float>(0f, 1f)),
-                ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
+                ["Cooldown"] = Bind(section, "Cooldown", GameplayDefaults.Cooldown(tier),
+                                    "Veil Cooldown in seconds, started when this tier is drunk. The cooldown is shared: while it runs, no veil mead (tier I, II or III) can be drunk. " +
+                                    "Shown in the status bar like a vanilla potion cooldown. 0 = no cooldown"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount. Read once at startup from the local file; applies locally and is not server-controlled yet"),
                 ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
                                         $"How the hidden player's body is drawn. Exactly one of (case-sensitive, an unknown value falls back to the default): Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit. Fog and distortion look: [Fog.Tier{tier}]. The Debug command ip_veil overrides it in memory",

@@ -56,11 +56,23 @@ namespace InvisibilityPotion.Config
     /// <summary>
     /// Revisions of the server-synced [TierN] gameplay defaults (pure; PluginConfig applies it once per file). A key still at its
     /// old default moves to the new one; a value the admin changed stays. Revision 1 (round Q): DebuffStaminaRegenMultiplier
-    /// 0.5 -> 0.25, DebuffDuration 20 -> 15.
+    /// 0.5 -> 0.25, DebuffDuration 20 -> 15. Revision 2 (round Q): Cooldown 0 (reserved, unused before) -> 90/180/240 s.
     /// </summary>
     public static class GameplayDefaults
     {
-        public const int Revision = 1;
+        public const int Revision = 2;
+
+        /// <summary>[TierN] Cooldown default: the shared Veil Cooldown started by drinking tier N (seconds).</summary>
+        public static float Cooldown(int tier)
+        {
+            switch (tier)
+            {
+                case 1: return 90f;
+                case 2: return 180f;
+                case 3: return 240f;
+                default: return 0f;
+            }
+        }
 
         public const float DebuffStaminaRegenMultiplier = 0.25f;
         public const float DebuffDuration = 15f;
@@ -73,10 +85,24 @@ namespace InvisibilityPotion.Config
                 if (key == "DebuffStaminaRegenMultiplier" && Same(current, 0.5f)) return DebuffStaminaRegenMultiplier;
                 if (key == "DebuffDuration" && Same(current, 20f)) return DebuffDuration;
             }
+            if (fromRevision < 2 && key == "Cooldown" && Same(current, 0f)) return Cooldown(tier);
             return current;
         }
 
         private static bool Same(float a, float b) => Math.Abs(a - b) < 0.0001f;
+    }
+
+    /// <summary>
+    /// Round Q ruling 3: the potion cooldown, mirroring vanilla (a status effect that lives for the cooldown and blocks the
+    /// consume in Player.CanConsumeItem). One shared "Veil Cooldown" blocks all three veil meads. Pure.
+    /// </summary>
+    public static class VeilCooldown
+    {
+        /// <summary>Drinking starts a cooldown only for a positive, finite [TierN] Cooldown (0 = off).</summary>
+        public static bool Starts(float cooldown) => !float.IsNaN(cooldown) && !float.IsInfinity(cooldown) && cooldown > 0f;
+
+        /// <summary>A veil mead is refused while the shared cooldown has time left; other items never.</summary>
+        public static bool Refuses(bool incomingIsVeil, float cooldownRemaining) => incomingIsVeil && cooldownRemaining > 0f;
     }
 
     public static class ModifierMath

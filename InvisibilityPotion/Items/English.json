@@ -21,6 +21,8 @@
   "ip_se_stop": "The veil fades",
   "ip_se_revealed_name": "Veil Broken",
   "ip_se_revealed_tooltip": "Your veil was broken. Stamina regenerates slowly.",
+  "ip_se_cooldown_name": "Veil Cooldown",
+  "ip_se_cooldown_tooltip": "No veil mead can be drunk until this runs out.",
   "ip_msg_lower_tier": "A stronger veil is already active",
   "item_veilgoggles_t1": "Watchman's Glass",
   "item_veilgoggles_t1_description": "Crude resin lenses in bronze rims. Through them, Huldra's Hair shows on the bark of Black Forest firs and pines.",

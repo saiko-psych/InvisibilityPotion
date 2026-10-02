@@ -479,7 +479,12 @@ namespace InvisibilityPotion.Dev
                         : $"self: T{inv.Tier} phase={inv.Machine.Phase} elapsed={inv.Machine.Elapsed:F1}s rehide={inv.Machine.RehideTimer:F1}s pending={inv.Machine.PendingReveal}; zdo tier={tier} hidden={hidden} hiddenFromPlayers={fromPlayers}");
                     Say($"carry: max {p.GetMaxCarryWeight():F0} (multiplier {(inv == null ? 1f : Cfg.PluginConfig.Tier(inv.Tier).CarryWeightMultiplier):F2}; config T1 {Cfg.PluginConfig.Tier(1).CarryWeightMultiplier:F2}, T2 {Cfg.PluginConfig.Tier(2).CarryWeightMultiplier:F2}, T3 {Cfg.PluginConfig.Tier(3).CarryWeightMultiplier:F2})");
                     var g = Cfg.PluginConfig.Global;
-                    Say($"reveal on: damage={g.RevealOnDamage} block={g.RevealOnBlock} bowDraw={g.RevealOnBowDraw} toolUse={g.RevealOnToolUse}");
+                    Say($"reveal on: damage={g.RevealOnDamage} block={g.RevealOnBlock} bowDraw={g.RevealOnBowDraw} toolUse={g.RevealOnToolUse}; drain stamina on own-action reveal={g.DrainStaminaOnAttackReveal}");
+                    // Round Q: shared Veil Cooldown and the Veil Broken debuff.
+                    var cd = p.GetSEMan().GetStatusEffect(Effects.StatusEffects.CooldownHash);
+                    var rev = p.GetSEMan().GetStatusEffect(Effects.StatusEffects.RevealedHash) as SE_Stats;
+                    Say($"cooldown: {(cd == null ? "none" : $"{cd.GetRemaningTime():F1}s of {cd.m_ttl:F0}s left")} (config T1 {Cfg.PluginConfig.Tier(1).Cooldown:F0}, T2 {Cfg.PluginConfig.Tier(2).Cooldown:F0}, T3 {Cfg.PluginConfig.Tier(3).Cooldown:F0}); " +
+                        $"veil broken: {(rev == null ? "none" : $"{rev.GetRemaningTime():F1}s of {rev.m_ttl:F0}s left, stamina regen x{rev.m_staminaRegenMultiplier:F2}")}; stamina {p.GetStamina():F0}/{p.GetMaxStamina():F0}");
                     var mine = ZDOMan.GetSessionID();
                     foreach (var c in Character.GetAllCharacters())
                     {
