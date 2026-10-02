@@ -8,7 +8,7 @@ using InvisibilityPotion.Visuals;
 namespace InvisibilityPotion.Config
 {
     /// <summary>Binds every config entry (server-synced via Jötunn, admin only) and exposes plain TierConfig/GlobalConfig snapshots.</summary>
-    public static class PluginConfig
+    public static partial class PluginConfig
     {
         private static ConfigFile _file;
         private static readonly Dictionary<int, Dictionary<string, ConfigEntryBase>> _tierEntries = new Dictionary<int, Dictionary<string, ConfigEntryBase>>();
@@ -45,9 +45,9 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, "Honey:10,Thistle:5", LookDefaults.BodyVeilModes[1]);
-            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, "Honey:10,Thistle:5,Bloodbag:3", LookDefaults.BodyVeilModes[2]);
-            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, "Honey:10,Thistle:5,Bloodbag:3,YmirRemains:1", LookDefaults.BodyVeilModes[3]);
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, MeadRecipes.NewDefault(1), LookDefaults.BodyVeilModes[1]);
+            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, MeadRecipes.NewDefault(2), LookDefaults.BodyVeilModes[2]);
+            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, MeadRecipes.NewDefault(3), LookDefaults.BodyVeilModes[3]);
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
@@ -68,7 +68,9 @@ namespace InvisibilityPotion.Config
 #if DEBUG
             Dev.FogTuningWindow.BindConfig(file);   // before MigrateAndDropOrphans, or the stored window values would be dropped as orphans
 #endif
+            BindPlants();   // plan 5: [Plants], [Goggles] (Config/PluginConfig.Plants.cs)
             MigrateLookDefaults();
+            MigrateMeadRecipes();
             MigrateAndDropOrphans();
             Refresh();
         }

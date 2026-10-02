@@ -109,6 +109,14 @@ namespace InvisibilityPotion
             {
                 Log.LogError($"Veil controller setup failed: {e}");
             }
+            try
+            {
+                gameObject.AddComponent<Plants.VeilSightDriver>();   // plan 5: goggle level poll and plant visibility
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Veil sight driver setup failed: {e}");
+            }
 #if DEBUG
             Dev.DevCommands.Register();
             gameObject.AddComponent<Dev.FogTuningWindow>();

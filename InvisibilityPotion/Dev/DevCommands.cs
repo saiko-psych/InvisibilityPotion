@@ -26,6 +26,7 @@ namespace InvisibilityPotion.Dev
             MeshExport.Register();
             MaterialDump.Register();
             EffectCommands.Register();
+            PlantCommands.Register();
         }
 
         internal static void Say(string line)
@@ -443,6 +444,7 @@ namespace InvisibilityPotion.Dev
                         var target = ai.GetTargetCreature();
                         Say($"  {c.name.Replace("(Clone)", "")}: target={(target == null ? "-" : target.GetHoverName())} unsensed={ai.m_timeSinceSensedTargetCreature:F1}s alerted={ai.IsAlerted()} owner={(owner == mine ? "local" : owner.ToString())}");
                     }
+                    PlantCommands.StateLines(Say);
                     var fog = new System.Collections.Generic.List<string>();
                     VeilController.DumpFog(p, fog);
                     foreach (var l in fog) Say(l);
