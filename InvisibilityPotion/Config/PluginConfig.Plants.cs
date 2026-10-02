@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using InvisibilityPotion.Goggles;
+using InvisibilityPotion.Plants;
 
 namespace InvisibilityPotion.Config
 {
@@ -27,13 +28,14 @@ namespace InvisibilityPotion.Config
             _plantEntries["HuldraCultivable"] = Bind(PlantsSection, "HuldraCultivable", true,
                 "Huldra's Hair can be planted with the Cultivator on cultivated ground (costs 1 Huldra's Hair). Read at startup");
             _plantEntries["BaldrZoneChance"] = Bind(PlantsSection, "BaldrZoneChance", 0.167f,
-                "Chance per newly generated Mountains zone to get a Baldr's Tear group (split over three variants). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
-            _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", 0.167f,
-                "Chance per newly generated Ashlands zone to get a Hel's Ember Fern group (split over three variants). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
+                "Chance per newly generated Mountains zone to get a Baldr's Tear group (1-2 plants within 4 m, variants mixed). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
+            _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", 0.0667f,
+                "Chance per newly generated Ashlands zone to get a Hel's Ember Fern group (3-6 plants within 6 m, variants mixed). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
             _plantEntries["GroundRegrowMinutes"] = Bind(PlantsSection, "GroundRegrowMinutes", 240f,
                 "In-game minutes until a picked Baldr's Tear or Hel's Ember Fern is ripe again", new AcceptableValueRange<float>(0f, 100000f));
             for (var t = 1; t <= 3; t++)
-                _plantEntries[$"YieldT{t}"] = Bind(PlantsSection, $"YieldT{t}", 2, $"Items per pick of the tier {t} plant", new AcceptableValueRange<int>(1, 20));
+                _plantEntries[$"YieldT{t}"] = Bind(PlantsSection, $"YieldT{t}", PlantYield.DefaultYieldText(t),
+                    $"Items per pick of the tier {t} plant as min-max, rolled per pick" + (t == 1 ? "" : "; bigger plants give up to 25 % more, smaller up to 25 % less"));
             for (var t = 1; t <= 3; t++)
                 _plantEntries[$"RecipeT{t}"] = Bind(GogglesSection, $"RecipeT{t}", GoggleLevel.DefaultRecipe(t),
                     $"Recipe of the tier {t} veil goggles at the {GoggleLevel.Station(t)}: Item:Amount,Item:Amount. Read once at startup");
@@ -51,7 +53,16 @@ namespace InvisibilityPotion.Config
         public static float BaldrZoneChance => PlantValue("BaldrZoneChance", 0.167f);
         public static float HelFernZoneChance => PlantValue("HelFernZoneChance", 0.167f);
         public static float GroundRegrowMinutes => PlantValue("GroundRegrowMinutes", 240f);
-        public static int Yield(int tier) => PlantValue($"YieldT{tier}", 2);
+        /// <summary>[Plants] YieldTN as (min, max); a malformed value falls back to the default with one warning per text.</summary>
+        public static (int min, int max) Yield(int tier)
+        {
+            var text = PlantValue($"YieldT{tier}", PlantYield.DefaultYieldText(tier));
+            if (PlantYield.TryParseRange(text, out var min, out var max)) return (min, max);
+            if (_badYields.Add(text)) Plugin.Log?.LogWarning($"[Plants] YieldT{tier} '{text}' is not min-max; using {PlantYield.DefaultYieldText(tier)}");
+            return PlantYield.DefaultYields[tier];
+        }
+
+        private static readonly HashSet<string> _badYields = new HashSet<string>();
         public static string GoggleRecipe(int tier) => PlantValue($"RecipeT{tier}", GoggleLevel.DefaultRecipe(tier));
         public static bool RevealHiddenPlayers => PlantValue("RevealHiddenPlayers", true);
 

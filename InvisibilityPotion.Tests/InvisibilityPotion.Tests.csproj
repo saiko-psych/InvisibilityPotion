@@ -27,5 +27,6 @@
     <Compile Include="../InvisibilityPotion/Plants/LichenRoll.Core.cs" Link="LichenRoll.Core.cs" />
     <Compile Include="../InvisibilityPotion/Net/PlayerReveal.Core.cs" Link="PlayerReveal.Core.cs" />
     <Compile Include="../InvisibilityPotion/Config/MeadRecipes.Core.cs" Link="MeadRecipes.Core.cs" />
+    <Compile Include="../InvisibilityPotion/Plants/PlantYield.Core.cs" Link="PlantYield.Core.cs" />
   </ItemGroup>
 </Project>
