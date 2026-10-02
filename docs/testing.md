@@ -460,6 +460,19 @@ Wind:
 - [ ] Baldr's Tear leaves/petals, the fern fronds and Huldra's Hair strands sway gently in wind (compare with a nearby vanilla bush); no plant flies apart or sinks; stems stay still
 
 
+## Plan 5 – plants variation round (blossom angles, fern ages, embedded groups)
+
+Preview: `tools/blender/preview-plants-v6.png`. Bundles rebuilt; the log lists `Plant_T2_d/e`, `Plant_T3_d/e` among the plant prefabs.
+
+- [ ] Log: `plants: IP_BaldrsTear built (T2, ..., variants a/b/c/d/e mixed by position ...)`, same for `IP_HelsEmberFern`; `IP_BaldrsTear_a..e` and `IP_HelsEmberFern_a..e` exist (`ip_prefabs IP_BaldrsTear_`)
+- [ ] Log: `plants: vegetation IP_BaldrsTear: ... ground offset -0.03 m, ground tilt chance 1` (and the fern); `ip_veg` prints `ground offset -0.03, ground tilt chance 1` for both
+- [ ] Goggles II, `ip_spawn IP_BaldrsTear_a`, `_b`, `_c` side by side: the blossom nods steeply (a), half-open at about 30 degrees (b), nearly level on an almost straight stem (c); `_d` has two open blossoms, `_e` a single closed bud with the blue tear hanging from it
+- [ ] Goggles III, `ip_spawn IP_HelsEmberFern_d`: small young fern (3 fronds), dark heart, no ember light; `_e`: wide old fern, 8 drooping fronds with grey charred tips, bright heart and a stronger ember light
+- [ ] `ip_spawn IP_HelsEmberFern 5` on a slope: the five ferns stand on a loose ring 1.5-4 m round the spot 5 m ahead (not in a row), each tilted with the slope, slightly sunk (no floating edge of the basalt base), different sizes and mixed variants; the console/log line lists per plant `(x,z) tilt N deg scale S`
+- [ ] Same with `ip_spawn IP_BaldrsTear 4` on a Mountain slope: snow mounds follow the slope, no mound hangs in the air
+- [ ] `ip_spawn Troll 2` and `ip_spawn VeilIngredient_T2 3` still spawn in a row 5 m ahead (ring only for plants)
+- [ ] New Mountains / Ashlands zones (explore new ground): wild groups look embedded (tilted with the terrain, bases slightly in the ground) and mix variants a-e; older plants may show another variant than before (5 variants instead of 3, cosmetic)
+
 ## Plan 5 – carry weight while invisible
 
 Config `[TierN] CarryWeightMultiplier` (admin, synced, 0..1, defaults T1 0.75, T2 0.6, T3 0.5; 1 = off). Applies to the full limit including Megingjord and the world carry-weight setting.
