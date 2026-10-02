@@ -21,8 +21,9 @@ and 5.4.2351 both ship BepInEx 5.4.23.5). Version matrix: `docs/compatibility.md
 |---|---|
 | `scripts/server-setup.sh [--dry-run] [--force] <ssh-host> <server-path>` | One time on a vanilla server: installs BepInExPack_Valheim, Jötunn and our DLL. Rerunnable. |
 | `scripts/deploy-server.sh [--dry-run] [--force] <ssh-host> [server-path]` | Every later update: copies only our DLL (the asset bundle is embedded). `server-path` defaults to `$IP_SERVER_PATH`. |
+| `scripts/deploy-proxmox.sh [--dry-run] [--logs]` | Only for the author's Proxmox container (CT 132): copies the Release DLL as `InvisibleMod.dll` into the overlay and restarts the server. See the section below; the two scripts above must not be used there. |
 
-Both take `--dll FILE` (default `InvisibilityPotion/Package/plugins/InvisibilityPotion.dll`, the output of `make package`) and
+`server-setup.sh` and `deploy-server.sh` take `--dll FILE` (default `InvisibilityPotion/Package/plugins/InvisibilityPotion.dll`, the output of `make package`) and
 refuse a Debug DLL (it contains the dev console commands). Both refuse while `valheim_server.x86_64` runs on the server unless
 `--force`; a plugin is only loaded at startup, so the server needs a restart anyway. `server-path` is absolute or relative to the
 remote home directory (no `~`). Nothing on the server is ever deleted.
@@ -114,6 +115,46 @@ scripts/deploy-server.sh <ssh-host> <server-path>
 exist before copying. For a new Jötunn or BepInExPack version, rerun `server-setup.sh` with `--jotunn`/`--bepinex` (and update
 `InvisibilityPotion/Package/manifest.json`).
 
+## Proxmox overlay deployment (the author's setup)
+
+The author's Valheim server runs in the LXC container **CT 132** on the Proxmox host `proxymoxy` and is managed by the
+author's own setup (systemd unit `valheim` inside the container, Jötunn 2.30.0 on BepInExPack_Valheim 5.4.2350, plugins in an
+overlay directory). **Do not use `server-setup.sh` or `deploy-server.sh` for that server**: they assume a plain server
+directory reachable over SSH, install their own BepInEx/Jötunn and write `BepInEx/plugins/InvisibilityPotion/`, none of which
+matches the container layout. Use `scripts/deploy-proxmox.sh` instead; it follows the author's convention exactly:
+
+```sh
+make package                                  # Release build; deploy-proxmox.sh builds nothing itself
+scripts/deploy-proxmox.sh --dry-run           # print the commands
+scripts/deploy-proxmox.sh                     # copy and restart
+scripts/deploy-proxmox.sh --logs              # last 2 minutes of the server journal, filtered
+```
+
+What it runs (defaults shown):
+
+```sh
+scp InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll root@proxymoxy:/tmp/InvisibleMod.dll
+ssh root@proxymoxy "pct push 132 /tmp/InvisibleMod.dll /opt/valheim/mods/overlay/BepInEx/plugins/InvisibleMod.dll && pct exec 132 -- systemctl restart valheim"
+# --logs:
+ssh root@proxymoxy "pct exec 132 -- journalctl -u valheim --no-pager --since '-2 min' | grep -iE 'Loading \[|InvisibleMod|InvisibilityPotion|exception|Patch health'"
+```
+
+- Overridable through the environment: `HOST` (`proxymoxy`), `CT` (`132`), `TARGET` (plugin directory in the container,
+  `/opt/valheim/mods/overlay/BepInEx/plugins`), `NAME` (`InvisibleMod.dll`), `DLL` (the local Release DLL).
+- The DLL is `InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll` from `make package` (the same file the package zip
+  contains). A Debug DLL is refused (same check as the other scripts: it contains the `ip_give` dev command).
+- The script does not stop the server first: `pct push` overwrites the DLL of the running server and the restart follows right
+  after (the author's convention). The running process has the old DLL loaded; on the client, overwriting a loaded plugin DLL
+  crashed the game (see `CLAUDE.md`). If the server ever crashes in that window, the world save of the graceful stop is lost
+  back to the last autosave. Safer order when it matters: `pct exec 132 -- systemctl stop valheim`, push, then `start`.
+- **File name**: BepInEx's chainloader loads every `*.dll` under `BepInEx/plugins/` regardless of its file name and identifies
+  plugins by their `[BepInPlugin]` GUID (`TypeLoader`: `Directory.GetFiles(dir, "*.dll", AllDirectories)`), so `InvisibleMod.dll`
+  works and the log still says `Loading [InvisibilityPotion 0.3.x]` and `[Info   :InvisibilityPotion]`. Do not leave a second
+  copy of the mod (for example an old `InvisibilityPotion.dll`) in the plugin directories: per GUID the chainloader keeps only
+  the highest version and logs `Skipping [InvisibilityPotion ...] because a newer version exists`; with equal versions the
+  winner is arbitrary, so an old build can silently win.
+- Clients joining this server need Jötunn **2.30.0** exactly (see the version note at the top).
+
 ## Configuration on the server
 
 - File: `<server-path>/BepInEx/config/saikopsych.InvisibilityPotion.cfg`. It is created on the first start with the mod; stop
@@ -132,4 +173,4 @@ exist before copying. For a new Jötunn or BepInExPack version, rerun `server-se
 - The plugin is not yet tested on a headless dedicated server (asset bundle load and icon rendering run at startup; both log
   errors instead of failing the plugin). The first server start is the test: check the log for `Asset bundle load failed`,
   `Item registration failed` or other `[Error  :InvisibilityPotion]` lines.
-- The user's server is an LXC container with a vanilla Valheim server and no BepInEx yet; host and path come later.
+- The author's server is an LXC container on Proxmox with its own BepInEx/Jötunn overlay; deploy with `scripts/deploy-proxmox.sh` (section above).

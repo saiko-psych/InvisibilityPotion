@@ -1,4 +1,4 @@
-# Shared helpers for server-setup.sh and deploy-server.sh (sourced by bash, not run).
+# Shared helpers for server-setup.sh, deploy-server.sh and deploy-proxmox.sh (sourced by bash, not run).
 # No secrets here: the SSH host is whatever `ssh <host>` resolves (use ~/.ssh/config for user, port and key).
 
 RELEASE_DLL_DEFAULT="InvisibilityPotion/Package/plugins/InvisibilityPotion.dll"   # written by `make package`

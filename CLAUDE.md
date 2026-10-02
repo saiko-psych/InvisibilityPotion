@@ -36,5 +36,6 @@ See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans
 - One-time Steam launch option on Valheim: `./start_game_bepinex.sh %command%`. Use `make run`; launching the binary directly is untested on this machine.
 - Dev auto-join reads `<game>/BepInEx/config/InvisibilityPotion.autojoin` (`world=`, `character=`). `make run` writes that file from the Makefile variables `IP_DEV_WORLD` (default `testing`) and `IP_DEV_CHARACTER` (default empty = first character), overridable as `make run IP_DEV_WORLD=other`. The plugin falls back to the env vars of the same names only when the file or a key is missing (env vars do not reach a game started through Steam). The file is one-shot: the plugin deletes it after reading, so a normal Steam start does not auto-join.
 - Local test world: `testing`
+- The author's server (Proxmox host `proxymoxy`, LXC CT 132) is deployed only with `scripts/deploy-proxmox.sh` (after `make package`), never with `server-setup.sh`/`deploy-server.sh`; see `docs/server.md`.
 - `Environment.props` (gitignored) holds `VALHEIM_INSTALL`; root `Directory.Build.props` sets `SolutionDir` so Jötunn's props load when building the csproj directly.
 - `InvisibilityPotion/Package/plugins/` and `*.zip` are build output (gitignored).
