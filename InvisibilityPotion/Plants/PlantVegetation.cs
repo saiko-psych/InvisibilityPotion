@@ -24,6 +24,20 @@ namespace InvisibilityPotion.Plants
         /// Jötunn 2.30.2's VegetationConfig has no property for it (ilspy), so it is set on CustomVegetation.Vegetation.
         /// </summary>
         public const float GroundTiltChance = 1f;
+        /// <summary>
+        /// ZoneVegetation.m_minAltitude (ZoneSystem.cs:66): PlaceVegetation rejects a point whose ground height minus 30 (hard-coded
+        /// sea level, ZoneSystem.cs:1448-1452; m_waterLevel :472 is also 30; p.y is the terrain raycast hit, :2903-2911) is outside
+        /// [m_minAltitude, m_maxAltitude]. 0.5 m keeps every group member on dry land (each member is checked at its own position).
+        /// Vanilla Ashlands bushes use 1 (bundle data).
+        /// </summary>
+        public const float MinAltitude = 0.5f;
+        /// <summary>
+        /// ZoneVegetation.m_maxVegetation for the fern (ZoneSystem.cs:72, checked at :1453-1460 only when min != max). Ashlands lava is
+        /// the paint-mask alpha, the same channel Heightmap.GetVegetationMask reads (Heightmap.cs:925-930; IsLava/GetLava read it
+        /// too, :958-978, damage from 0.6). 0.5 still allowed glowing lava edges; vanilla Ashlands bushes use 0.15, trees and smoke
+        /// puffs 0.2 (bundle data), so the fern uses 0.15.
+        /// </summary>
+        public const float FernMaxLavaMask = 0.15f;
 
         public static readonly List<CustomVegetation> Registered = new List<CustomVegetation>();
         private static bool _hooked;
@@ -53,6 +67,7 @@ namespace InvisibilityPotion.Plants
                 ScaleMin = PlantYield.ScaleRanges[tier].min,
                 ScaleMax = PlantYield.ScaleRanges[tier].max,
                 GroundOffset = GroundOffset,
+                MinAltitude = MinAltitude,
             };
             var veg = new CustomVegetation(prefab, true, cfg);
             if (!ZoneManager.Instance.AddCustomVegetation(veg))
@@ -63,17 +78,24 @@ namespace InvisibilityPotion.Plants
             }
             Registered.Add(veg);
             veg.Vegetation.m_chanceToUseGroundTilt = GroundTiltChance;
+            // Dry, solid land only. CustomVegetation.Vegetation is the ZoneVegetation Jötunn injects; set again here so the values do
+            // not depend on how Jötunn maps its config. Ocean depth: equal min and max switch the check off (ZoneSystem.cs:1461-1468);
+            // Heightmap.GetOceanDepth interpolates 30 minus the corner heights of the whole heightmap (Heightmap.cs:366-378, :385-393), too
+            // coarse for a plant, and no vanilla Ashlands/Mountains entry uses it. The altitude check covers water per point.
+            veg.Vegetation.m_minAltitude = MinAltitude;
+            veg.Vegetation.m_minOceanDepth = 0f;
+            veg.Vegetation.m_maxOceanDepth = 0f;
+            veg.Vegetation.m_blockCheck = true;   // IsBlocked: Default/static_solid/Default_small/piece above the point (ZoneSystem.cs:2732, mask :677)
             if (tier == 3)
             {
-                // Ashlands lava is painted into the vegetation mask; PlaceVegetation checks the mask only when min != max
-                // (ZoneSystem.cs:1453-1459, fields :70/:72). CustomVegetation.Vegetation is the ZoneVegetation Jötunn injects.
                 veg.Vegetation.m_minVegetation = 0f;
-                veg.Vegetation.m_maxVegetation = 0.5f;
-                Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: vegetation mask {veg.Vegetation.m_minVegetation}-{veg.Vegetation.m_maxVegetation} (keeps ferns off lava)");
+                veg.Vegetation.m_maxVegetation = FernMaxLavaMask;
+                Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: lava mask {veg.Vegetation.m_minVegetation}-{veg.Vegetation.m_maxVegetation} (keeps ferns off lava)");
             }
             Plugin.Log.LogInfo($"plants: vegetation {prefab.name}: biome {cfg.Biome}, max {cfg.Max:0.###} per zone, " +
                                $"group {cfg.GroupSizeMin}-{cfg.GroupSizeMax} r {cfg.GroupRadius} m, tilt {cfg.MinTilt}-{cfg.MaxTilt}, scale {cfg.ScaleMin}-{cfg.ScaleMax}, " +
-                               $"ground offset {veg.Vegetation.m_groundOffset} m, ground tilt chance {veg.Vegetation.m_chanceToUseGroundTilt}");
+                               $"ground offset {veg.Vegetation.m_groundOffset} m, ground tilt chance {veg.Vegetation.m_chanceToUseGroundTilt}, " +
+                               $"altitude {veg.Vegetation.m_minAltitude}..{veg.Vegetation.m_maxAltitude} m above sea, block {veg.Vegetation.m_blockCheck}");
             if (!_hooked)
             {
                 _hooked = true;
@@ -100,7 +122,7 @@ namespace InvisibilityPotion.Plants
                 if (zv == null) { yield return $"{cv.Name}: not in ZoneSystem"; continue; }
                 var inSystem = ZoneSystem.instance != null && ZoneSystem.instance.m_vegetation.Contains(zv);
                 yield return $"{cv.Name}: biome {zv.m_biome}, area {zv.m_biomeArea}, max {zv.m_max:0.###}/zone, group {zv.m_groupSizeMin}-{zv.m_groupSizeMax} r {zv.m_groupRadius}, " +
-                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, ground offset {zv.m_groundOffset}, ground tilt chance {zv.m_chanceToUseGroundTilt}, vegetation mask {zv.m_minVegetation}-{zv.m_maxVegetation}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude}, block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
+                             $"tilt {zv.m_minTilt}-{zv.m_maxTilt}, ground offset {zv.m_groundOffset}, ground tilt chance {zv.m_chanceToUseGroundTilt}, vegetation mask {zv.m_minVegetation}-{zv.m_maxVegetation}, scale {zv.m_scaleMin}-{zv.m_scaleMax}, altitude {zv.m_minAltitude}..{zv.m_maxAltitude} m above sea, ocean depth {zv.m_minOceanDepth}-{zv.m_maxOceanDepth} (equal = off), block {zv.m_blockCheck}, enable {zv.m_enable}, in ZoneSystem {inSystem}";
             }
         }
     }
