@@ -67,7 +67,7 @@ public class FogSettingsTests
         Assert.Equal(8f, t1.OuterRate, 5);
         Assert.Equal(3f, t1.OuterRateDistance, 5);
         Assert.Equal(9f, t1.OuterLifetime, 5);
-        Assert.Equal(40f, t1.OuterBurst, 5);   // round Q
+        Assert.Equal(50f, t1.OuterBurst, 5);   // round R
         Assert.Equal(0.4f, t1.OuterFollowShare, 5);
         Assert.Equal(0f, t1.OuterRotation, 5);
         Assert.Equal(0f, t1.OuterOffsetY, 5);
@@ -134,7 +134,7 @@ public class FogSettingsTests
         Assert.Equal(4f, t2.OuterRateDistance, 5);
         Assert.Equal(4f, t2.OuterSize, 5);
         Assert.Equal(9f, t2.OuterLifetime, 5);
-        Assert.Equal(60f, t2.OuterBurst, 5);   // round Q
+        Assert.Equal(70f, t2.OuterBurst, 5);   // round R
         Assert.Equal(0.4f, t2.OuterFollowShare, 5);
         Assert.Equal(0.35f, t2.OuterSpreadY, 5);
         Assert.Equal(0f, t2.OuterOffsetY, 5);
@@ -612,12 +612,12 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void LookDefaults_Revision11_FullReset()
+    public void LookDefaults_Revision12_FullReset()
     {
-        Assert.Equal(11, LookDefaults.Revision);
+        Assert.Equal(12, LookDefaults.Revision);
         Assert.Equal(LookDefaults.Revision, LookDefaults.FullResetRevision);
-        Assert.True(LookDefaults.ResetsTiers(10));
-        Assert.False(LookDefaults.ResetsTiers(11));
+        Assert.True(LookDefaults.ResetsTiers(11));
+        Assert.False(LookDefaults.ResetsTiers(12));
     }
 
     [Fact]
@@ -627,7 +627,7 @@ public class FogSettingsTests
         Assert.NotNull(key);
         Assert.Equal(FogValueKind.Float, key.Kind);
         var s = FogSettings.Defaults(2);
-        Assert.Equal("60", s.Get("OuterBurst"));
+        Assert.Equal("70", s.Get("OuterBurst"));
         Assert.True(s.TrySet("OuterBurst", "-3")); Assert.Equal(0f, s.OuterBurst);
         Assert.True(s.TrySet("OuterBurst", "12")); Assert.Equal(12f, s.OuterBurst, 5);
         Assert.False(s.TrySet("OuterBurst", "lots"));
@@ -640,8 +640,8 @@ public class FogSettingsTests
     public void OuterBurstCount_RoundedCappedVolumeOnly()
     {
         var s = FogSettings.Defaults(2);
-        Assert.Equal(60, s.OuterBurstCount);
-        Assert.Equal(40, FogSettings.Defaults(1).OuterBurstCount);
+        Assert.Equal(70, s.OuterBurstCount);
+        Assert.Equal(50, FogSettings.Defaults(1).OuterBurstCount);
         Assert.Equal(0, FogSettings.Defaults(3).OuterBurstCount);
         s.OuterBurst = 12.6f;
         Assert.Equal(13, s.OuterBurstCount);
@@ -696,9 +696,11 @@ public class FogSettingsTests
     [Fact]
     public void OuterSplit_FollowAndTrailShareRateCapAndBurst()
     {
-        // Round Q ruling 1b/c: tier II defaults: rate 10, burst 60, share 0.4, cap 120 shared 48/72.
-        Assert.Equal(120, FogSettings.OuterVolumeParticleCap);
+        // Round Q ruling 1b/c, round R ruling A3: tier II defaults: rate 10, burst 70, share 0.4, cap 140 shared 56/84; the
+        // follow part gets 60 % of the burst (42) and holds its burst on top of its rate budget.
+        Assert.Equal(140, FogSettings.OuterVolumeParticleCap);
         Assert.Equal(0.7f, FogSettings.OuterFollowRadiusFactor, 5);
+        Assert.Equal(0.6f, FogSettings.OuterFollowBurstFraction, 5);
         var s = FogSettings.Defaults(2);
         Assert.Equal(0.4f, s.OuterFollowShareEffective, 5);
         Assert.True(s.OuterHasFollow);
@@ -706,30 +708,33 @@ public class FogSettingsTests
         Assert.Equal(4f, s.OuterFollowRate, 4);
         Assert.Equal(6f, s.OuterTrailRate, 4);
         Assert.Equal(2.8f, s.OuterFollowRadius, 4);
-        Assert.Equal(Math.Min(48, FogSettings.MaxParticles(4f, 9f)), s.OuterFollowMaxParticles);
-        Assert.Equal(Math.Min(72, FogSettings.MaxParticles(6f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
+        Assert.Equal(42, s.OuterFollowBurstCount);
+        Assert.Equal(28, s.OuterTrailBurstCount);
+        Assert.Equal(Math.Min(56, FogSettings.MaxParticles(4f, 9f) + 42), s.OuterFollowMaxParticles);
+        Assert.Equal(Math.Min(84, FogSettings.MaxParticles(6f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
+        Assert.True(s.OuterFollowBurstCount <= s.OuterFollowMaxParticles);
         Assert.True(s.OuterFollowMaxParticles + s.OuterTrailMaxParticles <= FogSettings.OuterVolumeParticleCap);
         Assert.Equal(s.OuterFollowMaxParticles + s.OuterTrailMaxParticles, s.OuterMaxParticles);
-        Assert.Equal(24, s.OuterFollowBurstCount);
-        Assert.Equal(36, s.OuterTrailBurstCount);
-        // Tier I: burst 40 -> 16 follow + 24 trail.
+        // Tier I: burst 50 -> 30 follow + 20 trail.
         var t1 = FogSettings.Defaults(1);
-        Assert.Equal(16, t1.OuterFollowBurstCount);
-        Assert.Equal(24, t1.OuterTrailBurstCount);
-        // Share 0: one trail system as in round P (whole rate, whole cap).
+        Assert.Equal(30, t1.OuterFollowBurstCount);
+        Assert.Equal(20, t1.OuterTrailBurstCount);
+        Assert.True(t1.OuterFollowBurstCount <= t1.OuterFollowMaxParticles);
+        // Share 0: one trail system as in round P (whole rate, whole cap, whole burst).
         s.OuterFollowShare = 0f;
         Assert.False(s.OuterHasFollow);
         Assert.Equal(0, s.OuterFollowMaxParticles);
         Assert.Equal(0, s.OuterFollowBurstCount);
         Assert.Equal(10f, s.OuterTrailRate, 4);
-        Assert.Equal(Math.Min(120, FogSettings.MaxParticles(10f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
-        Assert.Equal(60, s.OuterTrailBurstCount);
+        Assert.Equal(Math.Min(140, FogSettings.MaxParticles(10f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
+        Assert.Equal(70, s.OuterTrailBurstCount);
         // Share 1: everything follows, no trail system.
         s.OuterFollowShare = 1f;
         Assert.True(s.OuterHasFollow);
         Assert.False(s.OuterHasTrail);
         Assert.Equal(0, s.OuterTrailMaxParticles);
         Assert.Equal(0, s.OuterTrailBurstCount);
+        Assert.Equal(70, s.OuterFollowBurstCount);   // the whole burst follows
         Assert.Equal(10f, s.OuterFollowRate, 4);
         // Without OuterTrail the whole volume already moves with the player: no split, one system.
         var local = FogSettings.Defaults(2);
@@ -747,6 +752,58 @@ public class FogSettingsTests
         off.OuterEnabled = false;
         Assert.False(off.OuterHasFollow);
         Assert.False(off.OuterHasTrail);
+    }
+
+    [Fact]
+    public void OuterFollow_SmallerPuffsAndSlowOrbit()
+    {
+        // Round R ruling A3/A4: follow puffs 0.85 x OuterSize; they orbit at 0.15 m/s at the reference radius (0.65 x follow radius).
+        Assert.Equal(0.85f, FogSettings.OuterFollowSizeFactor, 5);
+        Assert.Equal(0.15f, FogSettings.OuterFollowTangentialSpeed, 5);
+        var s = FogSettings.Defaults(2);
+        Assert.Equal(4f * 0.85f, s.OuterFollowSize, 4);
+        var reference = s.OuterFollowRadius * FogSettings.OuterFollowOrbitRadiusFactor;
+        Assert.Equal(0.15f / reference, s.OuterFollowOrbitalRadPerSecond, 4);
+        Assert.Equal(0.15f, s.OuterFollowOrbitalRadPerSecond * reference, 4);
+        // OuterRotation adds on top (deg/s -> rad/s).
+        s.OuterRotation = 90f;
+        Assert.Equal(0.15f / reference + (float)Math.PI / 2f, s.OuterFollowOrbitalRadPerSecond, 4);
+        // A degenerate radius gives no drift instead of infinity.
+        s.OuterRotation = 0f; s.OuterRadius = 0f;
+        Assert.Equal(0f, s.OuterFollowOrbitalRadPerSecond);
+    }
+
+    [Fact]
+    public void FollowBurstPattern_EvenOverTheDiscAndTheBand()
+    {
+        // Round R ruling A2: deterministic golden-angle spiral, radius 0.3..1.0 x radius, heights over the band.
+        const int n = 42; const float radius = 2.8f, half = 0.98f;
+        var pts = new List<(float x, float y, float z)>();
+        for (var i = 0; i < n; i++) pts.Add(FogBurstPattern.Point(i, n, radius, half));
+        Assert.Equal(pts[5], FogBurstPattern.Point(5, n, radius, half));   // deterministic
+        foreach (var p in pts)
+        {
+            var r = (float)Math.Sqrt(p.x * p.x + p.z * p.z);
+            Assert.InRange(r, 0.3f * radius - 1e-4f, radius + 1e-4f);
+            Assert.InRange(p.y, -half - 1e-4f, half + 1e-4f);
+        }
+        // Every quadrant of the disc gets about a quarter of the puffs (a spotlight-like cluster would fail this).
+        var quadrants = new int[4];
+        foreach (var p in pts) quadrants[(p.x >= 0 ? 0 : 1) + (p.z >= 0 ? 0 : 2)]++;
+        foreach (var q in quadrants) Assert.InRange(q, n / 4 - 3, n / 4 + 3);
+        // Upper and lower half of the band are balanced too, and the heights are not tied to the side of the disc.
+        var upper = 0; var upperFront = 0; var front = 0;
+        foreach (var p in pts) { if (p.y > 0) upper++; if (p.z >= 0) { front++; if (p.y > 0) upperFront++; } }
+        Assert.InRange(upper, n / 2 - 2, n / 2 + 2);
+        Assert.InRange(upperFront, front / 2 - 4, front / 2 + 4);
+        // Inner and outer annulus of equal area hold about the same count (even over the area, not over the radius).
+        var midR = radius * (float)Math.Sqrt((0.09 + 1.0) / 2.0);
+        var inner = 0;
+        foreach (var p in pts) if (Math.Sqrt(p.x * p.x + p.z * p.z) < midR) inner++;
+        Assert.InRange(inner, n / 2 - 2, n / 2 + 2);
+        // Degenerate input.
+        Assert.Equal((0f, 0f, 0f), FogBurstPattern.Point(0, 0, radius, half));
+        Assert.Equal(0f, FogBurstPattern.Point(0, 1, 0f, 0f).x, 5);
     }
 
     [Fact]
@@ -972,7 +1029,7 @@ public class FloatListNonFiniteTests
     {
         // Round M ruling 2c (caps raised by the controller: 24 per anchor, volume 80): brightness is handled by alpha, not by starving.
         Assert.Equal(24, FogSettings.InnerParticleCap);
-        Assert.Equal(120, FogSettings.OuterVolumeParticleCap);
+        Assert.Equal(140, FogSettings.OuterVolumeParticleCap);
         var s = FogSettings.Defaults(2);   // inner 14/s x 2.5 s = 35 wanted
         Assert.Equal(24, s.InnerMaxParticles);
         s.Rate = 1f; s.Lifetime = 1f;     // small budgets stay below the cap (MaxParticles minimum 8)
@@ -986,7 +1043,7 @@ public class FloatListNonFiniteTests
         // Volume: 4/s + 2/m, 9 s -> capped at 40.
         var v = FogSettings.Defaults(2);
         v.OuterFollowShare = 0f;   // round Q: one system takes the whole cap
-        Assert.Equal(Math.Min(120, FogSettings.MaxParticles(v.OuterRate + v.OuterEffectiveRateDistance * FogSettings.GroundBudgetSpeed, v.OuterLifetime)), v.OuterMaxParticles);
+        Assert.Equal(Math.Min(140, FogSettings.MaxParticles(v.OuterRate + v.OuterEffectiveRateDistance * FogSettings.GroundBudgetSpeed, v.OuterLifetime)), v.OuterMaxParticles);
         v.OuterRate = 1f; v.OuterRateDistance = 0f; v.OuterLifetime = 2f;
         Assert.Equal(FogSettings.MaxParticles(1f, 2f), v.OuterMaxParticles);
         // Ring keeps the round J budget (rate x lifetime, hard cap only).

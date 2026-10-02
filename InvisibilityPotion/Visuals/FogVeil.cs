@@ -482,15 +482,20 @@ namespace InvisibilityPotion.Visuals
             // the same keys and material: Follow (local space, OuterFollowShare of rate/burst/cap, radius 0.7 x OuterRadius, so the
             // player is always inside fog) and Trail (world space as before, the rest, left behind). Without the split (Ring, or
             // OuterTrail false, or share 0) the trail system is the only one, exactly as in round P.
+            // Round R ruling A: both volume systems follow the bone by position only and keep world rotation (identity), so turning
+            // the player no longer swings the local-space follow puffs around like a spotlight. The follow part gets 60 % of the
+            // burst on an even pattern (FogBurstPattern), puffs 0.85 x OuterSize, and orbits slowly (0.15 m/s) around the player.
             if (outer == null || animator == null) return;
             var volume = s.OuterShape == FogOuterShape.Volume;
             FogLayer OuterLayer(bool follow)
             {
                 var l = new FogLayer
                 {
-                    Rate = follow ? s.OuterFollowRate : s.OuterTrailRate, Size = s.OuterSize, Lifetime = s.OuterLifetime, SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
+                    Rate = follow ? s.OuterFollowRate : s.OuterTrailRate, Size = follow ? s.OuterFollowSize : s.OuterSize, Lifetime = s.OuterLifetime,
+                    SpreadX = 1f, SpreadY = s.OuterSpreadY, SpreadZ = 1f,
                     Trail = follow ? FogTrailMode.Follow : s.OuterTrailMode, VertexAlpha = outerVertexAlpha, Material = outer, Horizontal = s.OuterHorizontal,
-                    Ring = !volume, Volume = volume, Orbital = s.OuterOrbitalRadPerSecond,
+                    Ring = !volume, Volume = volume, Orbital = follow ? s.OuterFollowOrbitalRadPerSecond : s.OuterOrbitalRadPerSecond,
+                    PositionOnly = volume, EvenBurst = follow,
                     RateDistance = follow ? 0f : s.OuterEffectiveRateDistance,
                     MaxParticles = follow ? s.OuterFollowMaxParticles : s.OuterTrailMaxParticles,
                 };
@@ -544,6 +549,10 @@ namespace InvisibilityPotion.Visuals
             public float Grow = 1f;     // size at death = start size x Grow (linear sizeOverLifetime); 1 = constant size
             public int MaxParticles;    // maxParticles; 0 = rate x lifetime budget (FogSettings.MaxParticles)
             public int Burst;           // particles emitted at once right after Play (outer volume, round P); 0 = none
+            // Round R ruling A1: the follower copies the bone position only and keeps world rotation identity (volume emitters).
+            public bool PositionOnly;
+            // Round R ruling A2: the burst goes on the even FogBurstPattern instead of random shape points (follow volume).
+            public bool EvenBurst;
             public Material Material;
         }
 
@@ -637,6 +646,7 @@ namespace InvisibilityPotion.Visuals
             follower.Bone = bone;
             follower.Root = root;
             follower.Offset = offset;
+            follower.PositionOnly = layer.PositionOnly;
             follower.SpawnedAt = Time.time;
             follower.Snap();
 
@@ -662,7 +672,7 @@ namespace InvisibilityPotion.Visuals
                 shape.shapeType = ParticleSystemShapeType.Sphere;
                 shape.radius = Mathf.Max(0.001f, radius);
                 shape.radiusThickness = 1f;
-                shape.scale = new Vector3(1f, layer.SpreadY, 1f);   // follower rotation = player rotation, so y is up
+                shape.scale = new Vector3(1f, layer.SpreadY, 1f);   // position-only follower (round R): world rotation, y is world up
                 shape.randomDirectionAmount = 1f;
             }
             else
@@ -675,7 +685,9 @@ namespace InvisibilityPotion.Visuals
             // Simulation space (Follow/Trail) is set in ConfigureSystem, before the system plays.
             go.SetActive(true);
             ps.Play();
-            var burst = layer.Volume && layer.Burst > 0 ? EmitBurst(ps, layer.Burst) : 0;
+            var burst = layer.Volume && layer.Burst > 0
+                ? EmitBurst(ps, layer.Burst, layer.EvenBurst && layer.Trail == FogTrailMode.Follow, radius, layer.SpreadY * radius)
+                : 0;
             return new FogEmitter { Go = go, Ps = ps, Anchor = anchor, Layer = kind, VertexAlpha = layer.VertexAlpha, Burst = burst };
         }
 
@@ -686,15 +698,24 @@ namespace InvisibilityPotion.Visuals
         /// rotation, colour, speed and start lifetime come from the system as for normal emission. Round Q ruling 1a: the new
         /// particles are then aged in place (GetParticles/SetParticles): remaining lifetime random 30..90 % of their start
         /// lifetime, so they are past the fade-in and at full alpha in the first frame, and they do not all fade out together.
+        /// Round R ruling A2: with <paramref name="even"/> (follow volume, local simulation space) the new particles are moved onto
+        /// the even FogBurstPattern (golden-angle spiral, 0.3..1 x <paramref name="radius"/>, heights over +-<paramref name="halfHeight"/>)
+        /// in the emitter's local space, so the instant cloud has neither holes nor clusters; the continuous rate stays random.
         /// Returns the number emitted.
         /// </summary>
-        private static int EmitBurst(ParticleSystem ps, int count)
+        private static int EmitBurst(ParticleSystem ps, int count, bool even, float radius, float halfHeight)
         {
             var before = ps.particleCount;
             ps.Emit(count);
             var n = ps.GetParticles(BurstBuf);
-            for (var i = Mathf.Min(before, n); i < n; i++)
+            var first = Mathf.Min(before, n);
+            for (var i = first; i < n; i++)
+            {
                 BurstBuf[i].remainingLifetime = FogSettings.OuterBurstRemainingLifetime(BurstBuf[i].startLifetime, UnityEngine.Random.value);
+                if (!even) continue;
+                var pt = FogBurstPattern.Point(i - first, n - first, radius, halfHeight);
+                BurstBuf[i].position = new Vector3(pt.x, pt.y, pt.z);
+            }
             ps.SetParticles(BurstBuf, n);
             return n - before;
         }
@@ -903,7 +924,9 @@ namespace InvisibilityPotion.Visuals
             var vel = ps.velocityOverLifetime;
             var drift = layer.Volume ? 0f : s.Drift;   // the inner Drift is not the volume's (it drifts by its start speed)
             vel.enabled = Mathf.Abs(drift) > 0.0001f || Mathf.Abs(layer.Orbital) > 0.0001f;
-            vel.space = ParticleSystemSimulationSpace.World;   // drift is vertical regardless of bone rotation
+            // Drift is vertical regardless of bone rotation (world). The follow volume (round R) orbits in local space; its emitter
+            // keeps world rotation (position-only follower) and has no drift, so local y is world up there too.
+            vel.space = layer.Volume && layer.Trail == FogTrailMode.Follow ? ParticleSystemSimulationSpace.Local : ParticleSystemSimulationSpace.World;
             vel.x = new ParticleSystem.MinMaxCurve(0f);
             vel.y = new ParticleSystem.MinMaxCurve(drift);
             vel.z = new ParticleSystem.MinMaxCurve(0f);
@@ -974,7 +997,11 @@ namespace InvisibilityPotion.Visuals
                 float rate, size, alpha;
                 switch (e.Layer)
                 {
-                    case FogLayerKind.Outer: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.OuterRate; size = s.OuterSize; alpha = s.OuterAlpha; break;
+                    case FogLayerKind.Outer:
+                        rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.OuterRate;
+                        size = e.Go != null && e.Go.name == OuterFollowObjectName ? s.OuterFollowSize : s.OuterSize;
+                        alpha = s.OuterAlpha;
+                        break;
                     case FogLayerKind.Ground when e.Anchor == GroundUpperAnchorName: rate = s.GroundUpperRate; size = s.GroundSize; alpha = s.GroundUpperAlpha; break;
                     case FogLayerKind.Ground: rate = s.GroundRate; size = s.GroundSize; alpha = s.GroundAlpha; break;
                     default: rate = e.Ps != null ? e.Ps.emission.rateOverTime.constant : s.Rate; size = s.Size; alpha = s.Alpha; break;
@@ -984,8 +1011,9 @@ namespace InvisibilityPotion.Visuals
                                                              $"height {F(upperGround ? s.GroundUpperHeight : s.GroundHeight)} m, max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}"
                           : e.Layer == FogLayerKind.Outer ? $", {s.OuterShape} radius {(e.Ps != null ? F(e.Ps.shape.radius) : "-")} m, height {F(s.OuterSpreadY)} x r, offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
                                                             $"space {(e.Ps != null ? e.Ps.main.simulationSpace.ToString() : "-")}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}, " +
-                                                            $"+ {(e.Ps != null ? F(e.Ps.emission.rateOverDistance.constant) : "-")}/m, burst {e.Burst} (follow share {F(s.OuterFollowShareEffective)}, fade-in {F(FogSettings.OuterVolumeFadeIn)}), " +
-                                                            $"alive at spawn {(e.Ps != null ? e.Ps.particleCount : 0)}" : "";
+                                                            $"+ {(e.Ps != null ? F(e.Ps.emission.rateOverDistance.constant) : "-")}/m, burst {e.Burst} (follow share {F(s.OuterFollowShareEffective)}, " +
+                                                            $"follow burst fraction {F(s.OuterFollowBurstFractionEffective)}, fade-in {F(FogSettings.OuterVolumeFadeIn)}), " +
+                                                            $"follower {FollowerMode(e.Go)}, alive at spawn {(e.Ps != null ? e.Ps.particleCount : 0)}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)}), " +
                           $"max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}");
             }
@@ -1047,6 +1075,13 @@ namespace InvisibilityPotion.Visuals
             }
         }
 
+        /// <summary>Round R: how the emitter follows its bone, for the spawn log and the fog dump.</summary>
+        private static string FollowerMode(GameObject go)
+        {
+            var f = go != null ? go.GetComponent<FogAnchorFollower>() : null;
+            return f == null ? "none" : f.Ground ? "ground (position, player rotation)" : f.PositionOnly ? "position only (world rotation)" : "position + player rotation";
+        }
+
         private static float Curve0(ParticleSystem.MinMaxCurve c) => c.mode == ParticleSystemCurveMode.Constant ? c.constant : c.constantMax;
 
         private static string MatFloat(Material m, int id) => m != null && m.HasProperty(id) ? F(m.GetFloat(id)) : "-";
@@ -1088,7 +1123,8 @@ namespace InvisibilityPotion.Visuals
                              (e.Layer == FogLayerKind.Outer
                                  ? $"; outer shape {Fog[snap.Tier].OuterShape}: {shape.shapeType} r {F(shape.radius)} thickness {F(shape.radiusThickness)} rotation {V(shape.rotation)} jitter {F(shape.randomPositionAmount)} " +
                                    $"random direction {F(shape.randomDirectionAmount)}, " +
-                                   $"orbital {Curve(ps.velocityOverLifetime.orbitalY)} rad/s ({F(Curve0(ps.velocityOverLifetime.orbitalY) * Mathf.Rad2Deg)} deg/s)"
+                                   $"orbital {Curve(ps.velocityOverLifetime.orbitalY)} rad/s ({F(Curve0(ps.velocityOverLifetime.orbitalY) * Mathf.Rad2Deg)} deg/s, velocity space {ps.velocityOverLifetime.space}), " +
+                                   $"follower {FollowerMode(e.Go)}, emitter rotation {V(e.Go.transform.rotation.eulerAngles)}"
                                  : ""));
                     into.Add(psr == null ? "    renderer: none" :
                              $"    renderer enabled {psr.enabled}, visible {psr.isVisible}, mode {psr.renderMode}, sortingFudge {F(psr.sortingFudge)}, maxParticleSize {F(psr.maxParticleSize)}, " +
@@ -1787,6 +1823,8 @@ namespace InvisibilityPotion.Visuals
     /// <summary>
     /// Keeps a fog emitter on its bone: bone position plus an offset in the player's frame, rotation of the player. Ground mode
     /// (ground fog field): the bone's x/z at the root's height plus GroundHeight, i.e. the bone projected to the feet.
+    /// PositionOnly (round R ruling A1, the outer fog volume): the same position, but world rotation identity, so the local-space
+    /// follow puffs do not swing around with every turn of the player.
     /// </summary>
     internal sealed class FogAnchorFollower : MonoBehaviour
     {
@@ -1795,6 +1833,7 @@ namespace InvisibilityPotion.Visuals
         public Vector3 Offset;
         public bool Ground;
         public float GroundHeight;
+        public bool PositionOnly;
         public float SpawnedAt;   // Time.time of the spawn; the Debug stray scan prints the age
 
         public void Snap()
@@ -1806,7 +1845,7 @@ namespace InvisibilityPotion.Visuals
                 transform.SetPositionAndRotation(new Vector3(b.x, Root.position.y + GroundHeight, b.z), Root.rotation);
                 return;
             }
-            transform.SetPositionAndRotation(Bone.position + Root.rotation * Offset, Root.rotation);
+            transform.SetPositionAndRotation(Bone.position + Root.rotation * Offset, PositionOnly ? Quaternion.identity : Root.rotation);
         }
 
         private void LateUpdate() => Snap();

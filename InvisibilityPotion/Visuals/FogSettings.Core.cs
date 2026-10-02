@@ -99,12 +99,14 @@ namespace InvisibilityPotion.Visuals
     /// Revision 10 (plan 5, round P): an instant (OuterBurst), wide and strong fog volume that reads by day; full reset.
     /// Revision 11 (plan 5, round Q): the wide fog is split into a part that moves with the player (OuterFollowShare) and the
     /// trail left behind, burst puffs start pre-aged, larger bursts (T1 40, T2 60); full reset.
+    /// Revision 12 (plan 5, round R): the volume emitters keep world rotation (position-only follower), the follow burst is an
+    /// even pattern with 60 % of the burst, smaller follow puffs that slowly orbit, bursts T1 50, T2 70, cap 140; full reset.
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 11;
-        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round Q: 11).</summary>
-        public const int FullResetRevision = 11;
+        public const int Revision = 12;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round R: 12).</summary>
+        public const int FullResetRevision = 12;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -185,8 +187,8 @@ namespace InvisibilityPotion.Visuals
         /// <see cref="GroundParticleBudget"/> (both ground layers together).
         /// </summary>
         public const int InnerParticleCap = 24;   // round M: 10 starved the enveloping cloud (rate 14 x 2.5 s = 35 wanted); brightness is handled by alpha, not by starving
-        /// <summary>Round Q ruling 1c: 120 (was 80), shared by the follow and the trail system of one outer anchor in the ratio of OuterFollowShare.</summary>
-        public const int OuterVolumeParticleCap = 120;
+        /// <summary>Round Q ruling 1c: 120 (was 80), shared by the follow and the trail system of one outer anchor in the ratio of OuterFollowShare; round R: 140.</summary>
+        public const int OuterVolumeParticleCap = 140;
         /// <summary>
         /// Round Q ruling 1a: burst particles are created already aged: their remaining lifetime is random in [min, max] x their
         /// start lifetime, so they are past the fade-in (<see cref="OuterVolumeFadeIn"/>) and at full alpha in the first frame,
@@ -196,6 +198,14 @@ namespace InvisibilityPotion.Visuals
         public const float OuterBurstRemainingMaxFactor = 0.9f;
         /// <summary>Round Q ruling 1b: radius of the follow part of the volume = this x OuterRadius, so the player is always inside fog.</summary>
         public const float OuterFollowRadiusFactor = 0.7f;
+        /// <summary>Round R ruling A3: share of OuterBurst the follow part gets while both parts exist (the trail gets the rest).</summary>
+        public const float OuterFollowBurstFraction = 0.6f;
+        /// <summary>Round R ruling A3: follow puffs are this x OuterSize, so more of them overlap smoothly.</summary>
+        public const float OuterFollowSizeFactor = 0.85f;
+        /// <summary>Round R ruling A4: tangential speed (m/s) of the follow puffs around the player, so the cloud never looks frozen.</summary>
+        public const float OuterFollowTangentialSpeed = 0.15f;
+        /// <summary>Radius (x OuterFollowRadius) at which the follow orbit has <see cref="OuterFollowTangentialSpeed"/>; the orbit is an angular speed.</summary>
+        public const float OuterFollowOrbitRadiusFactor = 0.65f;
         /// <summary>Clamp of OuterRotation (deg/s, either direction).</summary>
         public const float MaxOuterRotation = 180f;
         /// <summary>Default anchors of the outer layer (OuterAnchors) when a tier does not set its own.</summary>
@@ -342,7 +352,7 @@ namespace InvisibilityPotion.Visuals
             s.OuterSize = size; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f;
             s.OuterRate = rate; s.OuterRateDistance = rateDistance; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
             s.OuterBurst = burst;
-            s.OuterFollowShare = 0.4f;
+            s.OuterFollowShare = 0.4f;   // round R: unchanged; the follow part gets 60 % of the burst (OuterFollowBurstFraction)
         }
 
         /// <summary>Round M ruling 2a: mid grey, darker than the sky, so the fog reads as haze and never as light.</summary>
@@ -369,7 +379,8 @@ namespace InvisibilityPotion.Visuals
                     s.Trail = false;
                     // Round P (revision 10): the volume at 6 % effective alpha vanished by day; alpha 0.5, 3.5 m, instant (burst 30).
                     // Round Q (revision 11): burst 40, 40 % of the volume moves with the player (OuterFollowShare default 0.4).
-                    ApplyFogVolume(s, 0.5f, 3.5f, 3.6f, 8f, 3f, 40f);
+                    // Round R (revision 12): burst 50 (30 follow on an even pattern + 20 trail).
+                    ApplyFogVolume(s, 0.5f, 3.5f, 3.6f, 8f, 3f, 50f);
                     s.GroundEnabled = true;
                     s.GroundAlpha = 0.14f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
@@ -389,7 +400,8 @@ namespace InvisibilityPotion.Visuals
                     // round M: left behind in the world, alpha 0.06.
                     // Round P (revision 10): stronger and wider than tier I (alpha 0.7, 4 m), instant (burst 45).
                     // Round Q (revision 11): burst 60, 40 % follows the player.
-                    ApplyFogVolume(s, 0.7f, 4f, 4f, 10f, 4f, 60f);
+                    // Round R (revision 12): burst 70 (42 follow on an even pattern + 28 trail).
+                    ApplyFogVolume(s, 0.7f, 4f, 4f, 10f, 4f, 70f);
                     // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth); round M: alpha 0.12.
                     s.GroundEnabled = true;
                     s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.16f; s.GroundRadius = 0.9f;
@@ -562,6 +574,22 @@ namespace InvisibilityPotion.Visuals
         public float OuterFollowRate => Math.Max(0f, OuterRate) * OuterFollowShareEffective;
         public float OuterTrailRate => Math.Max(0f, OuterRate) * (1f - OuterFollowShareEffective);
         public float OuterFollowRadius => OuterRadius * OuterFollowRadiusFactor;
+        /// <summary>Round R ruling A3: size of one follow puff (the trail keeps OuterSize).</summary>
+        public float OuterFollowSize => OuterSize * OuterFollowSizeFactor;
+
+        /// <summary>
+        /// Round R ruling A4: orbital speed (rad/s around the follow emitter's up axis) of the follow puffs: OuterFollowTangentialSpeed
+        /// at OuterFollowOrbitRadiusFactor x the follow radius, plus OuterRotation. Only sound because the volume emitter keeps
+        /// world rotation (position-only follower): turning the player no longer turns the cloud. 0 drift for a zero radius.
+        /// </summary>
+        public float OuterFollowOrbitalRadPerSecond
+        {
+            get
+            {
+                var reference = OuterFollowRadius * OuterFollowOrbitRadiusFactor;
+                return OuterOrbitalRadPerSecond + (reference > 0.0001f ? OuterFollowTangentialSpeed / reference : 0f);
+            }
+        }
 
         /// <summary>The follow system's part of <see cref="OuterVolumeParticleCap"/> (at least 1 when it exists).</summary>
         private int OuterFollowCap
@@ -573,8 +601,13 @@ namespace InvisibilityPotion.Visuals
             }
         }
 
-        /// <summary>maxParticles of one follow emitter: its rate budget, capped at its share of the volume cap; 0 without a follow part.</summary>
-        public int OuterFollowMaxParticles => OuterFollowShareEffective > 0f ? Math.Min(OuterFollowCap, MaxParticles(OuterFollowRate, OuterLifetime)) : 0;
+        /// <summary>
+        /// maxParticles of one follow emitter: its rate budget plus its burst (round R: the burst must not starve the continuous
+        /// emission), capped at its share of the volume cap; 0 without a follow part.
+        /// </summary>
+        public int OuterFollowMaxParticles => OuterFollowShareEffective > 0f
+            ? Math.Min(OuterFollowCap, MaxParticles(OuterFollowRate, OuterLifetime) + OuterFollowBurstShare)
+            : 0;
 
         /// <summary>
         /// maxParticles of one trail (main) emitter. Volume: budget of its rate plus the distance rate at <see cref="GroundBudgetSpeed"/>,
@@ -595,7 +628,20 @@ namespace InvisibilityPotion.Visuals
             ? (int)Math.Round(Math.Max(0f, OuterBurst), MidpointRounding.AwayFromZero)
             : 0;
 
-        private int OuterFollowBurstShare => (int)Math.Round(OuterBurstTotal * OuterFollowShareEffective, MidpointRounding.AwayFromZero);
+        /// <summary>
+        /// Round R ruling A3: the follow part's fraction of OuterBurst: <see cref="OuterFollowBurstFraction"/> while both parts exist,
+        /// everything when everything follows, nothing without a follow part (independent of the rate/cap share).
+        /// </summary>
+        public float OuterFollowBurstFractionEffective
+        {
+            get
+            {
+                var eff = OuterFollowShareEffective;
+                return eff <= 0f ? 0f : eff >= 1f ? 1f : OuterFollowBurstFraction;
+            }
+        }
+
+        private int OuterFollowBurstShare => (int)Math.Round(OuterBurstTotal * OuterFollowBurstFractionEffective, MidpointRounding.AwayFromZero);
 
         /// <summary>Burst of one follow emitter: its share of OuterBurst, at most its maxParticles.</summary>
         public int OuterFollowBurstCount => Math.Min(OuterFollowMaxParticles, OuterFollowBurstShare);
@@ -691,7 +737,7 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("OuterRate", FogValueKind.Float, "Wide fog: new fog puffs per second while standing; higher = denser"),
                 new FogKey("OuterRateDistance", FogValueKind.Float, "Wide fog: extra puffs per metre walked, so the fog keeps up with a moving player (only with OuterTrail true)"),
                 new FogKey("OuterBurst", FogValueKind.Float, "Wide fog: puffs created at once when the effect starts, so the fog is there immediately instead of building up (Volume shape only; 0 = builds up over seconds)"),
-                new FogKey("OuterFollowShare", FogValueKind.Float, "Share of the wide fog that moves with you; the rest stays behind as a trail (0..1; 0.4 = 40 % moves with you, in a smaller ball of 0.7 x OuterRadius). Only with OuterTrail true and the Volume shape"),
+                new FogKey("OuterFollowShare", FogValueKind.Float, "Share of the wide fog that moves with you; the rest stays behind as a trail (0..1; 0.4 = 40 % of the puffs per second moves with you, in a smaller ball of 0.7 x OuterRadius, with slightly smaller puffs that drift slowly around you; 60 % of OuterBurst starts there). Only with OuterTrail true and the Volume shape"),
                 new FogKey("OuterSize", FogValueKind.Float, "Wide fog: size of one puff in metres"),
                 new FogKey("OuterSpreadY", FogValueKind.Float, "Wide fog: height as a fraction of OuterRadius; small = a flat layer, 1 = a round ball"),
                 new FogKey("OuterLifetime", FogValueKind.Float, "Wide fog: seconds a puff lingers before it fades; higher = the fog stays longer where you were"),
@@ -900,6 +946,42 @@ namespace InvisibilityPotion.Visuals
     /// Round M ruling 2d: checks the final fog material values against the configured colour. Overlapping lit sprites saturate,
     /// so _Color rgb must not be above the configured colour and _EmissionColor must be black unless Emission is configured.
     /// </summary>
+    /// <summary>
+    /// Round R ruling A2: even placement of the follow burst instead of random points, so the instant cloud around the player has
+    /// no holes and no clusters. Golden-angle spiral over the disc (equal area per puff between 0.3 and 1.0 x radius), heights
+    /// over the band from a base-2 van der Corput sequence (independent of the angle). Pure and deterministic.
+    /// </summary>
+    public static class FogBurstPattern
+    {
+        public const float MinRadiusFactor = 0.3f;
+        public const float MaxRadiusFactor = 1f;
+        /// <summary>pi x (3 - sqrt 5): the golden angle in radians.</summary>
+        public const double GoldenAngle = 2.39996322972865332;
+
+        /// <summary>
+        /// Point <paramref name="index"/> of <paramref name="count"/> in emitter space (x/z the disc, y up): horizontal distance in
+        /// [0.3, 1] x <paramref name="radius"/>, height in [-<paramref name="halfHeight"/>, +<paramref name="halfHeight"/>]. Zero for count 0.
+        /// </summary>
+        public static (float x, float y, float z) Point(int index, int count, float radius, float halfHeight)
+        {
+            if (count <= 0 || index < 0) return (0f, 0f, 0f);
+            var t = (index + 0.5) / count;
+            double min2 = MinRadiusFactor * MinRadiusFactor, max2 = MaxRadiusFactor * MaxRadiusFactor;
+            var r = Math.Sqrt(min2 + (max2 - min2) * t) * Math.Max(0f, radius);
+            var a = index * GoldenAngle;
+            var y = (2.0 * RadicalInverse2(index + 1) - 1.0) * Math.Max(0f, halfHeight);
+            return ((float)(r * Math.Cos(a)), (float)y, (float)(r * Math.Sin(a)));
+        }
+
+        /// <summary>Base-2 van der Corput value of <paramref name="n"/> (bits mirrored behind the binary point), in [0, 1).</summary>
+        private static double RadicalInverse2(int n)
+        {
+            double v = 0, f = 0.5;
+            for (; n > 0; n >>= 1, f *= 0.5) if ((n & 1) != 0) v += f;
+            return v;
+        }
+    }
+
     public static class FogMaterialCheck
     {
         /// <summary>Blend/alpha properties FogVeil logs when the shader declares them (never changed).</summary>
