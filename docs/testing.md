@@ -348,3 +348,60 @@ Sizes:
 Wind (assumption, `docs/assets.md`):
 - [ ] Huldra lichen strands and Baldr leaves/petals sway a little in the wind like vanilla bushes (stems stay); the fern (`Plant_T3`) does not sway. If nothing moves or the leaves tear away from the stems, note it
 - [ ] `ip_matdump Bush01`, `ip_matdump shrub_2`, `ip_matdump Pickable_Thistle` and `ip_matdump clutter grass`: paste the full output (shader names and the `_Ripple*` / wind values) so the next round can copy the real names and values; also `ip_matdump Plant_T2` to see what our foliage carries after Jötunn's shader swap
+
+## Plan 5 – hidden plants and veil goggles (first slice)
+
+Setup: `make build` (Debug, game closed), `make run`. Paste every `plants:`, `lichen:`, `cultivation:`, `goggles:` and `Config migration` line plus the output of the commands below. Wild Baldr's Tear and Hel's Ember Fern only appear in zones generated after this build (explored zones never get new vegetation); test them with `ip_spawn` in `testing` and in a new world.
+
+Config (`[Plants]`, `[Goggles]`, server-synced, admin only; user decisions 2026-10-02):
+- `LichenTreeChance = 0.025` (1 in 40 eligible Black Forest firs/pines), `LichenStageMinutes = 120` (S1 → S2 → S3; a pick resets to S1, ripe again after 240 min), `LichenRevealDistance = 40`
+- `BaldrZoneChance = 0.167` (1 in 6 new Mountains zones, groups of 1–2 within 4 m), `HelFernZoneChance = 0.0667` (1 in 15 new Ashlands zones, groups of 3–6 within 6 m); read at startup
+- `GroundRegrowMinutes = 240`
+- `YieldT1 = 1-2`, `YieldT2 = 1-1`, `YieldT3 = 2-4` (min-max, rolled per pick on the ZDO owner); ground plants then scale it: `round(roll × (0.75 + 0.5 × size position in the range))`, at least 1
+- Size per ground plant instance: Baldr's Tear 0.8–1.3×, Hel's Ember Fern 0.7–1.6× (wild: `VegetationConfig.ScaleMin/Max`; `ip_spawn`: rolled; stored as `IP_PlantScale`); model variants a/b/c mixed per instance by position (mixed prefabs `IP_BaldrsTear`, `IP_HelsEmberFern`; `_a/_b/_c` are fixed variants for `ip_spawn`)
+- `HuldraCultivable = true`; `[Goggles] RecipeT1..3`, `RevealHiddenPlayers = true`; `[TierN] Recipe` gains `VeilIngredient_TN:2`
+
+Startup log:
+- [ ] `goggles: material FlametalNew: m_name ...` (and `Flametal`): which one is the Ashlands bar (S2); `assets: goggles VeilGoggles_TN registered (... recipe ... at forge|blackforge)` for all three, no `[Goggles] RecipeTN ... unknown item` error
+- [ ] `plants: pick effects from Pickable_Thistle (...)`
+- [ ] `plants: lichen S1..S3: mesh bounds (...) (thin axis z), want vertical` – the rotation must be `none`; `plants: IP_Lichen template built`
+- [ ] `plants: IP_BaldrsTear_a/b/c`, `IP_BaldrsTear` (mixed), `IP_HelsEmberFern_a/b/c`, `IP_HelsEmberFern` built; `plants: vegetation IP_BaldrsTear: biome Mountain, max 0.167 per zone, group 1-2 r 4 m, ..., scale 0.8-1.3` and `IP_HelsEmberFern: biome AshLands, max 0.067, group 3-6 r 6 m, scale 0.7-1.6`
+- [ ] `plants: 21 Plant_* props gated: ...`
+- [ ] `plants: tree FirTree (eligible): TreeBase ..., LODGroup ..., children ...; colliders: ...` for each tree (S1: paste them all, also the `inspect only` ones); `lichen: TreeLichen on N tree prefabs: ...`
+- [ ] `cultivation: source sapling_carrot: ...`, `cultivation: sapling visuals replaced (...)`, `cultivation: IP_HuldraSapling cloned from ..., piece table _CultivatorPieceTable, added True, enabled True, grow 240 min ...`; `cultivation: S1 flat a: mesh bounds ... want flat` rotation line
+- [ ] After loading the world: `plants: 2 of N ZoneSystem vegetation entries are ours: ...`; on the first Black Forest tree `lichen: first tree start: world seed ..., biome ..., server ...` (S3)
+- [ ] `Config migration: [TierN] Recipe ... (old default) -> ...,VeilIngredient_TN:2` once for an old config file; a customised recipe gives `[TierN] Recipe '...' is customised and has no VeilIngredient_TN; kept as is`
+
+Goggles:
+- [ ] Forge: Watchman's Glass (Bronze 5, Resin 4, Troll hide 2); Mimir's Glass (Silver 5, Crystal 2, Wolf pelt 3, Watchman's Glass); Black forge: Allfather's Eye (Flametal 5, Black core 1, Obsidian 2, Mimir's Glass); II and III consume the previous goggles
+- [ ] Equip each: `goggles: level 0 -> N` in the log within 0.5 s; unequip → `-> 0`; `ip_state` shows `goggles: level N (helmet N, override off), zdo IP_Goggles=N`
+- [ ] After a relog with goggles worn: `goggles: first tick with a local player: helmet VeilGoggles_TN, level N` (S8)
+- [ ] `ip_goggles 2`, `ip_goggles off` fake and restore the level without items
+
+Huldra's Hair (lichen on trees):
+- [ ] In a Black Forest without goggles: trees look and hover exactly like vanilla (screenshot pair with/without goggles at the same tree); `ip_plants` lists lichen trees and `lichen trees within 64 m: X of Y eligible trees (~2.5 %)`
+- [ ] `ip_plants nearest`: a map pin `IP IP_Lichen` (or tree name) on the nearest plant; the line gives distance and compass direction; `ip_plants unpin` removes it
+- [ ] With goggles I (or `ip_goggles 1`): the patch is visible on the trunk within 40 m, flush with the bark (paste the `lichen: FirTree at ...: patch at r=... via ...` lines), hover shows `Huldra's Hair [E] Pick up`; pick → 1–2 Huldra's Hair drop, `plants: harvested $ip_plant_huldrashair T1 ...`, patch drops to S1 and hover shows `(growing)`
+- [ ] `ip_grow` on the patch: S1 → S2 → S3 visibly; `ip_grow 3` makes it ripe
+- [ ] `ip_lichen roll` / `force` / `off` / `clear` on a looked-at fir: patch appears/disappears at once; the `decision:` text matches
+- [ ] Beyond 40 m the patch is not drawn; distant billboard trees show no floating lichen (S5)
+- [ ] Restart the world: the same trees carry lichen (compare `ip_plants` positions)
+- [ ] Fell a lichen tree: the lichen goes with it, nothing extra drops
+
+Ground plants:
+- [ ] `ip_spawn IP_BaldrsTear_a` (b, c) and `ip_spawn IP_BaldrsTear 5`: invisible without goggles and with goggles I; visible and pickable with II; sizes differ (0.8–1.3×), mixed prefab shows different variants; `ip_plants` shows `scale`, `variant`
+- [ ] Pick: 1 Baldr's Tear (bigger plants may give 1 too), picked model stays, hover gone; `ip_grow` or `GroundRegrowMinutes` later ripe again
+- [ ] `ip_spawn IP_HelsEmberFern 5`: hidden below goggles III including the ember light; with III visible and pickable, yield 2–4 (scaled by size, up to 5)
+- [ ] `ip_spawn Plant_T2` (look-check prop): hidden below goggles II too
+- [ ] New world (or unexplored zones): `ip_veg` prints both entries; walk Mountains/Ashlands zones and sample with `ip_plants 200` (S6: about 1 in 6 Mountains zones with 1–2 Baldr's Tear, 1 in 15 Ashlands zones with 3–6 ferns)
+
+Cultivation:
+- [ ] With Huldra's Hair in the inventory the Cultivator lists `Huldra's Hair sprout` (Misc) costing 1 (S7: note when it became available)
+- [ ] Not placeable on raw ground, placeable on cultivated ground in any biome; the sprout is invisible without goggles; hover with goggles shows the vanilla plant status
+- [ ] `ip_grow` on the sprout: it grows within 10 s into `IP_HuldraGround_a/b/c` (S3 ripe); pick → 1–2, replays S1 → S2 → S3 (`ip_grow`)
+- [ ] Under forest canopy: status `no sun`? (S7 risk, note it)
+
+Meads:
+- [ ] Every mead base needs 2 of its tier's veil ingredient at the Mead ketill
+
+Two clients (pending, plan 3 server): goggles III wearer sees a tier-III-hidden player's nameplate and veiled body at the real position, a non-wearer does not; no map pin for either; a pick by client A updates client B within 5 s; a double pick yields once.
