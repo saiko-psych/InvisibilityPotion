@@ -251,10 +251,10 @@ def render_icon(ob):
     light("key", 'AREA', (0.6, -0.8, 0.7), 14, (1.0, 0.78, 0.55), 0.6, (0, 0, 0.13))
     light("fill", 'AREA', (-0.8, -0.6, 0.3), 4, (0.65, 0.75, 1.0), 1.0, (0, 0, 0.13))
     light("rim", 'AREA', (0.0, 0.9, 0.6), 16, (0.85, 0.7, 1.0), 0.6, (0, 0, 0.13))
-    camera((0, -0.95, 0.2), (0, 0, 0.128), 70)
+    camera((0, -0.62, 0.17), (0, 0, 0.13), 70)
     world((0.05, 0.05, 0.06, 1))
     bpy.context.scene.render.film_transparent = True
-    render("icon_raw.png", res=(ICON_SIZE, ICON_SIZE), volumetrics=(0.5, 1.5))
+    render("icon_raw.png", res=(ICON_SIZE, ICON_SIZE), volumetrics=(0.3, 1.0))
     img = bpy.data.images.load(os.path.join(OUT, "icon_raw.png"))
     w, h = img.size
     px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)

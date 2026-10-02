@@ -1,10 +1,10 @@
 {
   "name": "InvisibilityPotion",
-  "description": "Three tiers of invisibility potions. Enemies lose you, attacking reveals you.",
-  "version_number": "0.2.0",
+  "version_number": "0.3.0",
   "website_url": "",
+  "description": "Three veil meads that hide you from enemies (and, at tier III, from other players). Brew them from hidden plants that only veil goggles reveal. Attacking or using tools reveals you. Requires the mod on server and clients.",
   "dependencies": [
-    "denikson-BepInExPack_Valheim-5.4.2350",
+    "denikson-BepInExPack_Valheim-5.4.2351",
     "ValheimModding-Jotunn-2.30.2"
   ]
 }
