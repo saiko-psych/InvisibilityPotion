@@ -60,15 +60,15 @@ public class FogSettingsTests
         Assert.Equal(FogOuterShape.Volume, t1.OuterShape);
         Assert.Equal(new[] { "Hips" }, t1.OuterAnchors);
         // Round P: a strong, wide volume that exists the moment the effect starts (OuterBurst).
-        Assert.Equal(0.35f, t1.OuterAlpha, 5);   // round S: lighter (was 0.5)
-        Assert.Equal(3.5f, t1.OuterRadius, 5);
-        Assert.Equal(0.9f, t1.OuterHeightSigma, 5);   // round S: ground-heavy volume
-        Assert.Equal(3.6f, t1.OuterSize, 5);
+        Assert.Equal(0.3f, t1.OuterAlpha, 5);   // round T: subtle (round S 0.35)
+        Assert.Equal(7f, t1.OuterRadius, 5);   // round T: much wider (round S 3.5)
+        Assert.Equal(0.8f, t1.OuterHeightSigma, 5);   // round T (round S 0.9)
+        Assert.Equal(4.5f, t1.OuterSize, 5);   // round T: larger, softer puffs (round S 3.6)
         Assert.Equal(0.35f, t1.OuterSpreadY, 5);
         Assert.Equal(8f, t1.OuterRate, 5);
         Assert.Equal(3f, t1.OuterRateDistance, 5);
-        Assert.Equal(9f, t1.OuterLifetime, 5);
-        Assert.Equal(50f, t1.OuterBurst, 5);   // round R
+        Assert.Equal(12f, t1.OuterLifetime, 5);   // round T (was 9)
+        Assert.Equal(60f, t1.OuterBurst, 5);   // round T (round R 50)
         Assert.Equal(0.4f, t1.OuterFollowShare, 5);
         Assert.Equal(0f, t1.OuterRotation, 5);
         Assert.Equal(0f, t1.OuterOffsetY, 5);
@@ -130,14 +130,15 @@ public class FogSettingsTests
         Assert.Equal(new[] { "Hips" }, t2.OuterAnchors);
         // Round P: tier II stronger and wider than tier I.
         // Round S: lighter and wider at the ground (alpha 0.45, radius 4.5, size 3.6, burst 60).
-        Assert.Equal(4.5f, t2.OuterRadius, 5);
-        Assert.Equal(0.45f, t2.OuterAlpha, 5);
-        Assert.Equal(0.9f, t2.OuterHeightSigma, 5);
+        // Round T: much wider and subtle (radius 9, alpha 0.4, sigma 1, size 5.5, lifetime 14, burst 80).
+        Assert.Equal(9f, t2.OuterRadius, 5);
+        Assert.Equal(0.4f, t2.OuterAlpha, 5);
+        Assert.Equal(1f, t2.OuterHeightSigma, 5);
         Assert.Equal(10f, t2.OuterRate, 5);
         Assert.Equal(4f, t2.OuterRateDistance, 5);
-        Assert.Equal(3.6f, t2.OuterSize, 5);
-        Assert.Equal(9f, t2.OuterLifetime, 5);
-        Assert.Equal(60f, t2.OuterBurst, 5);   // round S
+        Assert.Equal(5.5f, t2.OuterSize, 5);
+        Assert.Equal(14f, t2.OuterLifetime, 5);
+        Assert.Equal(80f, t2.OuterBurst, 5);   // round T
         Assert.Equal(0.4f, t2.OuterFollowShare, 5);
         Assert.Equal(0.35f, t2.OuterSpreadY, 5);
         Assert.Equal(0f, t2.OuterOffsetY, 5);
@@ -473,10 +474,10 @@ public class FogSettingsTests
     [Fact]
     public void OuterParticleBudget_UsesOuterRateAndLifetime()
     {
-        var s = FogSettings.Defaults(2);   // outer rate 10, outer life 9
-        Assert.Equal(90f, s.LiveParticlesOuter, 3);
+        var s = FogSettings.Defaults(2);   // outer rate 10, outer life 14 (round T)
+        Assert.Equal(140f, s.LiveParticlesOuter, 3);
         s.Rate = 0f;   // independent of the inner rate
-        Assert.Equal(90f, s.LiveParticlesOuter, 3);
+        Assert.Equal(140f, s.LiveParticlesOuter, 3);
         Assert.Equal(FogSettings.MaxParticles(14f, 3f), (int)System.Math.Ceiling(14f * 3f * 1.3f + 4f));
         s.OuterEnabled = false;
         Assert.Equal(0f, s.LiveParticlesOuter);
@@ -615,12 +616,12 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void LookDefaults_Revision13_FullReset()
+    public void LookDefaults_Revision14_FullReset()
     {
-        Assert.Equal(13, LookDefaults.Revision);
+        Assert.Equal(14, LookDefaults.Revision);
         Assert.Equal(LookDefaults.Revision, LookDefaults.FullResetRevision);
-        Assert.True(LookDefaults.ResetsTiers(12));
-        Assert.False(LookDefaults.ResetsTiers(13));
+        Assert.True(LookDefaults.ResetsTiers(13));
+        Assert.False(LookDefaults.ResetsTiers(14));
     }
 
     [Fact]
@@ -630,7 +631,7 @@ public class FogSettingsTests
         Assert.NotNull(key);
         Assert.Equal(FogValueKind.Float, key.Kind);
         var s = FogSettings.Defaults(2);
-        Assert.Equal("60", s.Get("OuterBurst"));
+        Assert.Equal("80", s.Get("OuterBurst"));   // round T
         Assert.True(s.TrySet("OuterBurst", "-3")); Assert.Equal(0f, s.OuterBurst);
         Assert.True(s.TrySet("OuterBurst", "12")); Assert.Equal(12f, s.OuterBurst, 5);
         Assert.False(s.TrySet("OuterBurst", "lots"));
@@ -643,8 +644,8 @@ public class FogSettingsTests
     public void OuterBurstCount_RoundedCappedVolumeOnly()
     {
         var s = FogSettings.Defaults(2);
-        Assert.Equal(60, s.OuterBurstCount);
-        Assert.Equal(50, FogSettings.Defaults(1).OuterBurstCount);
+        Assert.Equal(80, s.OuterBurstCount);   // round T
+        Assert.Equal(60, FogSettings.Defaults(1).OuterBurstCount);
         Assert.Equal(0, FogSettings.Defaults(3).OuterBurstCount);
         s.OuterBurst = 12.6f;
         Assert.Equal(13, s.OuterBurstCount);
@@ -664,18 +665,18 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void OuterBurstRemaining_IsThirtyToNinetyPercentOfStartLifetime()
+    public void OuterBurstRemaining_IsThirtyToEightyFivePercentOfStartLifetime()
     {
         // Round Q ruling 1a: burst puffs start already aged, past the fade-in, so they are at full alpha in the first frame.
+        // Round T: the fade-in is 15 %, so the youngest burst puff has 85 % left (was 90 %).
         Assert.Equal(0.3f, FogSettings.OuterBurstRemainingMinFactor, 5);
-        Assert.Equal(0.9f, FogSettings.OuterBurstRemainingMaxFactor, 5);
+        Assert.Equal(0.85f, FogSettings.OuterBurstRemainingMaxFactor, 5);
         Assert.Equal(2.7f, FogSettings.OuterBurstRemainingLifetime(9f, 0f), 4);
-        Assert.Equal(8.1f, FogSettings.OuterBurstRemainingLifetime(9f, 1f), 4);
-        Assert.Equal(5.4f, FogSettings.OuterBurstRemainingLifetime(9f, 0.5f), 4);
+        Assert.Equal(7.65f, FogSettings.OuterBurstRemainingLifetime(9f, 1f), 4);
         Assert.Equal(2.7f, FogSettings.OuterBurstRemainingLifetime(9f, -2f), 4);   // clamped
-        Assert.Equal(8.1f, FogSettings.OuterBurstRemainingLifetime(9f, 7f), 4);
-        // The oldest burst puff (remaining 90 %) is already 10 % into its life, i.e. past the 8 % fade-in.
-        Assert.True(1f - FogSettings.OuterBurstRemainingMaxFactor > FogSettings.OuterVolumeFadeIn);
+        Assert.Equal(7.65f, FogSettings.OuterBurstRemainingLifetime(9f, 7f), 4);
+        // The youngest burst puff (remaining 85 %) is already 15 % into its life, i.e. at the end of the fade-in.
+        Assert.True(1f - FogSettings.OuterBurstRemainingMaxFactor >= FogSettings.OuterVolumeFadeIn - 1e-5f);
     }
 
     [Fact]
@@ -699,9 +700,9 @@ public class FogSettingsTests
     [Fact]
     public void OuterSplit_FollowAndTrailShareRateCapAndBurst()
     {
-        // Round Q ruling 1b/c, round R ruling A3: tier II defaults: rate 10, burst 60 (round S), share 0.4, cap 140 shared 56/84;
-        // the follow part gets 60 % of the burst (36) and holds its burst on top of its rate budget.
-        Assert.Equal(140, FogSettings.OuterVolumeParticleCap);
+        // Round Q ruling 1b/c, round R ruling A3: tier II defaults: rate 10, burst 80 (round T), share 0.4, cap 200 (round T)
+        // shared 80/120; the follow part gets 60 % of the burst (48) and holds its burst on top of its rate budget.
+        Assert.Equal(200, FogSettings.OuterVolumeParticleCap);
         Assert.Equal(0.7f, FogSettings.OuterFollowRadiusFactor, 5);
         Assert.Equal(0.6f, FogSettings.OuterFollowBurstFraction, 5);
         var s = FogSettings.Defaults(2);
@@ -710,18 +711,18 @@ public class FogSettingsTests
         Assert.True(s.OuterHasTrail);
         Assert.Equal(4f, s.OuterFollowRate, 4);
         Assert.Equal(6f, s.OuterTrailRate, 4);
-        Assert.Equal(3.15f, s.OuterFollowRadius, 4);
-        Assert.Equal(36, s.OuterFollowBurstCount);
-        Assert.Equal(24, s.OuterTrailBurstCount);
-        Assert.Equal(Math.Min(56, FogSettings.MaxParticles(4f, 9f) + 36), s.OuterFollowMaxParticles);
-        Assert.Equal(Math.Min(84, FogSettings.MaxParticles(6f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
+        Assert.Equal(6.3f, s.OuterFollowRadius, 4);
+        Assert.Equal(48, s.OuterFollowBurstCount);
+        Assert.Equal(32, s.OuterTrailBurstCount);
+        Assert.Equal(Math.Min(80, FogSettings.MaxParticles(4f, 14f) + 48), s.OuterFollowMaxParticles);
+        Assert.Equal(Math.Min(120, FogSettings.MaxParticles(6f + 4f * FogSettings.GroundBudgetSpeed, 14f)), s.OuterTrailMaxParticles);
         Assert.True(s.OuterFollowBurstCount <= s.OuterFollowMaxParticles);
         Assert.True(s.OuterFollowMaxParticles + s.OuterTrailMaxParticles <= FogSettings.OuterVolumeParticleCap);
         Assert.Equal(s.OuterFollowMaxParticles + s.OuterTrailMaxParticles, s.OuterMaxParticles);
-        // Tier I: burst 50 -> 30 follow + 20 trail.
+        // Tier I: burst 60 -> 36 follow + 24 trail.
         var t1 = FogSettings.Defaults(1);
-        Assert.Equal(30, t1.OuterFollowBurstCount);
-        Assert.Equal(20, t1.OuterTrailBurstCount);
+        Assert.Equal(36, t1.OuterFollowBurstCount);
+        Assert.Equal(24, t1.OuterTrailBurstCount);
         Assert.True(t1.OuterFollowBurstCount <= t1.OuterFollowMaxParticles);
         // Share 0: one trail system as in round P (whole rate, whole cap, whole burst).
         s.OuterFollowShare = 0f;
@@ -729,15 +730,15 @@ public class FogSettingsTests
         Assert.Equal(0, s.OuterFollowMaxParticles);
         Assert.Equal(0, s.OuterFollowBurstCount);
         Assert.Equal(10f, s.OuterTrailRate, 4);
-        Assert.Equal(Math.Min(140, FogSettings.MaxParticles(10f + 4f * FogSettings.GroundBudgetSpeed, 9f)), s.OuterTrailMaxParticles);
-        Assert.Equal(60, s.OuterTrailBurstCount);
+        Assert.Equal(Math.Min(200, FogSettings.MaxParticles(10f + 4f * FogSettings.GroundBudgetSpeed, 14f)), s.OuterTrailMaxParticles);
+        Assert.Equal(80, s.OuterTrailBurstCount);
         // Share 1: everything follows, no trail system.
         s.OuterFollowShare = 1f;
         Assert.True(s.OuterHasFollow);
         Assert.False(s.OuterHasTrail);
         Assert.Equal(0, s.OuterTrailMaxParticles);
         Assert.Equal(0, s.OuterTrailBurstCount);
-        Assert.Equal(60, s.OuterFollowBurstCount);   // the whole burst follows
+        Assert.Equal(80, s.OuterFollowBurstCount);   // the whole burst follows
         Assert.Equal(10f, s.OuterFollowRate, 4);
         // Without OuterTrail the whole volume already moves with the player: no split, one system.
         var local = FogSettings.Defaults(2);
@@ -764,7 +765,7 @@ public class FogSettingsTests
         Assert.Equal(0.85f, FogSettings.OuterFollowSizeFactor, 5);
         Assert.Equal(0.15f, FogSettings.OuterFollowTangentialSpeed, 5);
         var s = FogSettings.Defaults(2);
-        Assert.Equal(3.6f * 0.85f, s.OuterFollowSize, 4);
+        Assert.Equal(5.5f * 0.85f, s.OuterFollowSize, 4);
         var reference = s.OuterFollowRadius * FogSettings.OuterFollowOrbitRadiusFactor;
         Assert.Equal(0.15f / reference, s.OuterFollowOrbitalRadPerSecond, 4);
         Assert.Equal(0.15f, s.OuterFollowOrbitalRadPerSecond * reference, 4);
@@ -777,12 +778,33 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void VolumeShape_RadiusDensityFallsFromThePlayerToTheRim()
+    public void VolumeShape_RadiusDensityIsAGaussianAroundThePlayer()
     {
-        // Round S ruling 1: ground-area density proportional to (1 - r/R)^2 (a pyramid seen from the side), 0 at R.
-        const float radius = 4.5f;
+        // Round T ruling 2: ground-area density exp(-(r / sigma_r)^2 / 2) with sigma_r = 0.45 R (vanilla-like soft patch), cut at R.
+        const float radius = 7f;
+        Assert.Equal(0.45f, FogVolumeShape.RadialSigmaFactor, 5);
+        var sr = 0.45 * radius;
+        Assert.Equal(1f, FogVolumeShape.AreaDensity(0f, radius), 5);
+        Assert.Equal((float)Math.Exp(-0.5), FogVolumeShape.AreaDensity((float)sr, radius), 4);   // one sigma
+        Assert.Equal((float)Math.Exp(-0.5 / (0.45 * 0.45)), FogVolumeShape.AreaDensity(radius, radius), 4);   // 0.085 at R
+        Assert.Equal(0f, FogVolumeShape.AreaDensity(radius * 1.01f, radius), 5);
+        Assert.Equal(0f, FogVolumeShape.AreaDensity(1f, 0f), 5);
+        var prevDensity = 2f;
+        for (var i = 0; i <= 100; i++)
+        {
+            var d = FogVolumeShape.AreaDensity(radius * i / 100f, radius);
+            Assert.True(d < prevDensity, $"AreaDensity not falling at {i}");
+            prevDensity = d;
+        }
+        // Share within x = r/R: truncated Rayleigh, 0 at the player, 1 at R; RadiusAt inverts it.
+        Assert.Equal(0.0, FogVolumeShape.RadiusShare(0), 6);
+        Assert.Equal(1.0, FogVolumeShape.RadiusShare(1), 6);
+        var cut = 1 - Math.Exp(-0.5 / (0.45 * 0.45));
+        Assert.Equal((1 - Math.Exp(-0.5)) / cut, FogVolumeShape.RadiusShare(0.45), 5);
         Assert.Equal(0f, FogVolumeShape.RadiusAt(0f, radius), 5);
         Assert.Equal(radius, FogVolumeShape.RadiusAt(1f, radius), 3);
+        foreach (var u in new[] { 0.1f, 0.37f, 0.5f, 0.9f })
+            Assert.Equal(u, (float)FogVolumeShape.RadiusShare(FogVolumeShape.RadiusAt(u, radius) / radius), 4);
         var prev = -1f;
         for (var i = 0; i <= 100; i++)
         {
@@ -791,13 +813,9 @@ public class FogSettingsTests
             Assert.InRange(r, 0f, radius + 1e-4f);
             prev = r;
         }
-        // The relative density itself: 1 at the player, 0.25 at half the radius, 0 at and beyond the rim.
-        Assert.Equal(1f, FogVolumeShape.AreaDensity(0f, radius), 5);
-        Assert.Equal(0.25f, FogVolumeShape.AreaDensity(radius / 2f, radius), 5);
-        Assert.Equal(0f, FogVolumeShape.AreaDensity(radius, radius), 5);
-        Assert.Equal(0f, FogVolumeShape.AreaDensity(radius * 2f, radius), 5);
-        // A stratified sample: puffs per square metre fall ring by ring from the player to the rim.
-        const int n = 20000; const int rings = 6;
+        // A stratified sample: puffs per square metre fall ring by ring from the player to the rim, and the outer ring keeps a
+        // thin share (the cloud thins out instead of ending), unlike the round S (1 - r/R)^2 profile that reached 0.
+        const int n = 20000; const int rings = 7;
         var counts = new int[rings];
         for (var i = 0; i < n; i++)
         {
@@ -805,18 +823,19 @@ public class FogSettingsTests
             counts[Math.Min(rings - 1, (int)(r / radius * rings))]++;
         }
         var lastDensity = double.MaxValue;
+        var densities = new double[rings];
         for (var k = 0; k < rings; k++)
         {
             double r0 = radius * k / rings, r1 = radius * (k + 1) / rings;
-            var density = counts[k] / (Math.PI * (r1 * r1 - r0 * r0));
-            Assert.True(density < lastDensity, $"ring {k}: {density} per m2 is not below {lastDensity}");
-            lastDensity = density;
+            densities[k] = counts[k] / (Math.PI * (r1 * r1 - r0 * r0));
+            Assert.True(densities[k] < lastDensity, $"ring {k}: {densities[k]} per m2 is not below {lastDensity}");
+            lastDensity = densities[k];
         }
-        // More than half of the puffs lie in the inner half of the radius (a quarter of the area).
+        Assert.InRange(densities[rings - 1] / densities[0], 0.08, 0.2);
+        // Wider than round S: the inner half of the radius (a quarter of the area) holds about half of the puffs (round S: 69 %).
         var innerHalf = 0;
         for (var i = 0; i < n; i++) if (FogVolumeShape.RadiusAt((i + 0.5f) / n, radius) < radius / 2f) innerHalf++;
-        Assert.InRange(innerHalf / (double)n, 0.6, 0.75);
-        // Degenerate radius.
+        Assert.InRange(innerHalf / (double)n, 0.45, 0.6);
         Assert.Equal(0f, FogVolumeShape.RadiusAt(0.7f, 0f));
     }
 
@@ -858,30 +877,124 @@ public class FogSettingsTests
     }
 
     [Fact]
-    public void VolumeShape_SizeGrowsWithHeight_AlphaFallsWithDistance()
+    public void VolumeShape_SizeGrowsWithHeightAndDistance_AlphaFallsLikeAGaussian()
     {
-        const float sigma = 0.9f, radius = 4.5f;
-        // Size: 0.7 x at the ground, 1.0 x from two sigma up, linear in between.
+        const float sigma = 0.8f, radius = 7f;
+        // Height: 0.7 x at the ground, 1.0 x from two sigma up, linear in between (round S, kept).
         Assert.Equal(0.7f, FogVolumeShape.SizeFactor(0f, sigma), 5);
         Assert.Equal(0.85f, FogVolumeShape.SizeFactor(sigma, sigma), 5);
         Assert.Equal(1f, FogVolumeShape.SizeFactor(2f * sigma, sigma), 5);
         Assert.Equal(1f, FogVolumeShape.SizeFactor(5f, sigma), 5);
-        Assert.True(FogVolumeShape.SizeFactor(0.5f, sigma) < FogVolumeShape.SizeFactor(1f, sigma));
-        // Alpha: 1.0 at the player, 0.35 at the rim, linear in between, clamped outside.
+        // Round T ruling 2: distance: 0.8 x at the player (smaller, denser) to 1.2 x at R (larger, fainter), monotonic.
+        Assert.Equal(0.8f, FogVolumeShape.RadialSizeFactor(0f, radius), 5);
+        Assert.Equal(1.2f, FogVolumeShape.RadialSizeFactor(radius, radius), 5);
+        Assert.Equal(1f, FogVolumeShape.RadialSizeFactor(radius / 2f, radius), 5);
+        Assert.Equal(1.2f, FogVolumeShape.RadialSizeFactor(radius * 2f, radius), 5);
+        Assert.Equal(1f, FogVolumeShape.RadialSizeFactor(1f, 0f), 5);
+        // Alpha: alpha0 x exp(-(r / sigma_r)^2 / 2), lifted so it is exactly the 0.15 floor at R (dissolves, never ends at 0).
+        Assert.Equal(0.15f, FogVolumeShape.AlphaAtRim, 5);
         Assert.Equal(1f, FogVolumeShape.AlphaFactor(0f, radius), 5);
-        Assert.Equal(0.35f, FogVolumeShape.AlphaFactor(radius, radius), 5);
-        Assert.Equal(0.675f, FogVolumeShape.AlphaFactor(radius / 2f, radius), 5);
-        Assert.Equal(0.35f, FogVolumeShape.AlphaFactor(radius * 3f, radius), 5);
-        Assert.True(FogVolumeShape.AlphaFactor(1f, radius) > FogVolumeShape.AlphaFactor(2f, radius));
+        Assert.Equal(0.15f, FogVolumeShape.AlphaFactor(radius, radius), 4);
+        Assert.Equal(0.15f, FogVolumeShape.AlphaFactor(radius * 3f, radius), 4);
         Assert.Equal(1f, FogVolumeShape.AlphaFactor(1f, 0f), 5);
-        // A sample carries all of it.
+        var gR = Math.Exp(-0.5 / (0.45 * 0.45));
+        var atSigma = 0.15 + 0.85 * (Math.Exp(-0.5) - gR) / (1 - gR);
+        Assert.Equal((float)atSigma, FogVolumeShape.AlphaFactor(0.45f * radius, radius), 4);
+        float prevAlpha = 2f, prevSize = 0f;
+        for (var i = 0; i <= 100; i++)
+        {
+            var r = radius * i / 100f;
+            var a = FogVolumeShape.AlphaFactor(r, radius);
+            var sz = FogVolumeShape.RadialSizeFactor(r, radius);
+            Assert.True(a < prevAlpha, $"alpha not falling at {i}");
+            Assert.True(a >= 0.15f - 1e-5f);
+            Assert.True(sz > prevSize, $"size not growing at {i}");
+            prevAlpha = a; prevSize = sz;
+        }
+        // Gaussian-like: flat near the player (most of alpha kept at 0.2 R), steepest around sigma_r.
+        Assert.True(FogVolumeShape.AlphaFactor(0.2f * radius, radius) > 0.85f);
+        // A sample carries all of it (no overlap cap given).
         var p = FogVolumeShape.Sample(0.5f, 0.25f, 0.5f, radius, sigma);
         var d = (float)Math.Sqrt(p.X * p.X + p.Z * p.Z);
         Assert.Equal(FogVolumeShape.RadiusAt(0.5f, radius), d, 3);
         Assert.Equal(FogVolumeShape.HeightAt(0.5f, sigma), p.Height, 4);
-        Assert.Equal(FogVolumeShape.SizeFactor(p.Height, sigma), p.SizeFactor, 5);
+        Assert.Equal(FogVolumeShape.SizeFactor(p.Height, sigma) * FogVolumeShape.RadialSizeFactor(d, radius), p.SizeFactor, 4);
         Assert.Equal(FogVolumeShape.AlphaFactor(d, radius), p.AlphaFactor, 3);
         Assert.True(p.X < 0.01f && p.Z > 0f);   // u angle 0.25 = a quarter turn
+    }
+
+    [Fact]
+    public void OverlapCap_KeepsTheCentreBelowTheTargetOpacity()
+    {
+        // Round T ruling 4: many overlapping puffs near the player must not blow out. Expected column opacity at distance r:
+        // 1 - (1 - p x factor)^k(r), k(r) = centre overlap x AreaDensity(r). The cap lowers the factor only where that would
+        // exceed MaxOpacity, so the Gaussian alpha profile still rules the outer part.
+        const float radius = 7f;
+        var cap = new FogOverlapCap(40f, 0.04f, 0.5f);
+        Assert.True(cap.Active);
+        Assert.False(default(FogOverlapCap).Active);
+        Assert.Equal(1f, default(FogOverlapCap).FactorLimit(0f, radius), 5);
+        float prevOpacity = 1f;
+        for (var i = 0; i <= 100; i++)
+        {
+            var r = radius * i / 100f;
+            var factor = FogVolumeShape.CappedAlphaFactor(r, radius, cap);
+            Assert.True(factor <= FogVolumeShape.AlphaFactor(r, radius) + 1e-6f);
+            Assert.True(factor > 0f);
+            var opacity = cap.ColumnOpacity(r, radius, factor);
+            Assert.True(opacity <= 0.5f + 1e-4f, $"column opacity {opacity} at {r} m");
+            Assert.True(opacity <= prevOpacity + 1e-4f, $"column opacity rises at {r} m");
+            prevOpacity = opacity;
+        }
+        // The centre is capped (uncapped it would be 1 - 0.96^40 = 0.80), the rim keeps its Gaussian alpha.
+        Assert.True(FogVolumeShape.CappedAlphaFactor(0f, radius, cap) < 0.5f);
+        Assert.Equal(0.5f, cap.ColumnOpacity(0f, radius, FogVolumeShape.CappedAlphaFactor(0f, radius, cap)), 3);
+        Assert.Equal(FogVolumeShape.AlphaFactor(radius, radius), FogVolumeShape.CappedAlphaFactor(radius, radius, cap), 5);
+        // A thin cloud is not capped at all.
+        var thin = new FogOverlapCap(3f, 0.04f, 0.5f);
+        Assert.Equal(FogVolumeShape.AlphaFactor(0f, radius), FogVolumeShape.CappedAlphaFactor(0f, radius, thin), 5);
+        // Sample and burst pattern apply the cap.
+        var p = FogVolumeShape.Sample(0f, 0f, 0.5f, radius, 0.8f, cap);
+        Assert.Equal(FogVolumeShape.CappedAlphaFactor(0f, radius, cap), p.AlphaFactor, 4);
+        var b = FogBurstPattern.Point(0, 60, radius, 0.8f, cap);
+        var bd = (float)Math.Sqrt(b.X * b.X + b.Z * b.Z);
+        Assert.Equal(FogVolumeShape.CappedAlphaFactor(bd, radius, cap), b.AlphaFactor, 4);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void OverlapCap_DefaultsAreCappedButNotStarved(int tier)
+    {
+        // Round T ruling 4 on the real defaults: several puffs overlap at the player (cap active), the centre column stays at
+        // MaxOpacity, and a puff at the player still keeps a visible part of OuterAlpha.
+        var s = FogSettings.Defaults(tier);
+        Assert.Equal(0.5f, FogSettings.OuterMaxColumnOpacity, 5);
+        Assert.True(s.OuterCentreOverlap > 5f, $"centre overlap {s.OuterCentreOverlap}");
+        var cap = s.OuterOverlapCap;
+        Assert.True(cap.Active);
+        Assert.Equal(s.OuterAlpha * FogSettings.OuterVolumeLifetimeMeanAlpha * FogSprite.MeanDiscAlpha, cap.PuffOpacity, 5);
+        var centre = FogVolumeShape.CappedAlphaFactor(0f, s.OuterRadius, cap);
+        Assert.InRange(centre, 0.2f, 1f);
+        Assert.True(cap.ColumnOpacity(0f, s.OuterRadius, centre) <= FogSettings.OuterMaxColumnOpacity + 1e-4f);
+        // Inactive layers have no cap.
+        var off = FogSettings.Defaults(tier);
+        off.OuterEnabled = false;
+        Assert.False(off.OuterOverlapCap.Active);
+    }
+
+    [Fact]
+    public void FogSprite_MeanDiscAlphaMatchesTheFalloff()
+    {
+        // Mean of the soft sprite's falloff over its disc (used by the overlap estimate), checked by numeric integration.
+        double sum = 0; const int steps = 20000;
+        for (var i = 0; i < steps; i++)
+        {
+            var r = (i + 0.5) / steps;
+            sum += FogSprite.Falloff((float)r) * 2 * r / steps;
+        }
+        Assert.Equal((float)sum, FogSprite.MeanDiscAlpha, 3);
+        Assert.InRange(FogSprite.MeanDiscAlpha, 0.15f, 0.25f);
     }
 
     [Fact]
@@ -889,7 +1002,7 @@ public class FogSettingsTests
     {
         // Round S: the burst follows the same distribution, deterministic: radius by stratified quantiles, angle on the golden
         // spiral, height from a van der Corput sequence.
-        const int n = 60; const float radius = 4.5f, sigma = 0.9f;
+        const int n = 60; const float radius = 7f, sigma = 0.8f;
         var pts = new List<FogVolumePoint>();
         for (var i = 0; i < n; i++) pts.Add(FogBurstPattern.Point(i, n, radius, sigma));
         Assert.Equal(pts[5], FogBurstPattern.Point(5, n, radius, sigma));   // deterministic
@@ -903,7 +1016,7 @@ public class FogSettingsTests
             if (r < radius / 2f) innerHalf++;
         }
         Assert.True(low > n / 2, $"{low} of {n} below one sigma");
-        Assert.True(innerHalf > n / 2, $"{innerHalf} of {n} in the inner half radius");
+        Assert.True(innerHalf >= n * 0.45, $"{innerHalf} of {n} in the inner half radius");   // round T: Gaussian, about half
         // Every quadrant of the disc gets about a quarter of the puffs (no spotlight cluster).
         var quadrants = new int[4];
         foreach (var p in pts) quadrants[(p.X >= 0 ? 0 : 1) + (p.Z >= 0 ? 0 : 2)]++;
@@ -921,7 +1034,7 @@ public class FogSettingsTests
         Assert.Equal(FogValueKind.Float, key.Kind);
         Assert.Contains("ground", key.Description, StringComparison.OrdinalIgnoreCase);
         var s = FogSettings.Defaults(2);
-        Assert.Equal("0.9", s.Get("OuterHeightSigma"));
+        Assert.Equal("1", s.Get("OuterHeightSigma"));   // round T: tier II sigma 1
         Assert.True(s.TrySet("OuterHeightSigma", "0")); Assert.Equal(FogVolumeShape.HeightFloor, s.OuterHeightSigma, 5);
         Assert.True(s.TrySet("OuterHeightSigma", "9")); Assert.Equal(FogVolumeShape.MaxHeightSigma, s.OuterHeightSigma, 5);
         Assert.True(s.TrySet("OuterHeightSigma", "1.2")); Assert.Equal(1.2f, s.OuterHeightSigma, 5);
@@ -943,6 +1056,11 @@ public class FogSettingsTests
         Assert.Contains("at once", Find("OuterBurst").Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("lingers", Find("OuterLifetime").Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("metres", Find("OuterSize").Description, StringComparison.OrdinalIgnoreCase);
+        // Round T: the changed keys say what the new profile does.
+        Assert.Contains("fades out", Find("OuterRadius").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("15 %", Find("OuterAlpha").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("larger", Find("OuterSize").Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("grows", Find("OuterLifetime").Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("body cloud", Find("Alpha").Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("body cloud", Find("Size").Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("body cloud", Find("Rate").Description, StringComparison.OrdinalIgnoreCase);
@@ -1060,12 +1178,27 @@ public class FloatListNonFiniteTests
     {
         Assert.Equal(0.8f, FogSettings.OuterVolumeSizeMinFactor, 5);
         Assert.Equal(1.2f, FogSettings.OuterVolumeSizeMaxFactor, 5);
-        Assert.Equal(0.03f, FogSettings.OuterVolumeSpeed, 5);
-        Assert.Equal(0.08f, FogSettings.OuterVolumeFadeIn, 5);   // round Q: peak at 8 % of the lifetime (round M: 25 %)
-        Assert.Equal(4.5f, 3.2f * FogSettings.OuterVolumeGrow, 4);   // round M: 3.2 m grows to 4.5 m
+        // Round T ruling 3 (vanilla-like mist): slow horizontal drift 0.05 m/s, size 1.0 -> 1.35 over the life, alpha in over
+        // 15 % and out over the last 35 %, random rotation with a slow spin of up to 4 deg/s either way.
+        Assert.Equal(0.05f, FogSettings.OuterVolumeSpeed, 5);
+        Assert.Equal(0.15f, FogSettings.OuterVolumeFadeIn, 5);
+        Assert.Equal(0.35f, FogSettings.OuterVolumeFadeOut, 5);
+        Assert.Equal(1.35f, FogSettings.OuterVolumeGrow, 5);
+        Assert.Equal(4f, FogSettings.OuterVolumeSpinDegPerSecond, 5);
+        // Mean of the alpha-over-life curve (0 -> 1 over 15 %, flat, 1 -> 0 over 35 %): 0.075 + 0.5 + 0.175.
+        Assert.Equal(0.75f, FogSettings.OuterVolumeLifetimeMeanAlpha, 5);
+        // Mean of the size-over-life growth (linear 1 -> 1.35).
+        Assert.Equal(1.175f, FogSettings.OuterVolumeMeanGrow, 5);
+        // Drift: horizontal, 0.05 m/s, in the direction of the angle fraction.
+        FogSettings.OuterVolumeDrift(0.25f, out var dx, out var dz);
+        Assert.Equal(0f, dx, 4); Assert.Equal(0.05f, dz, 4);
+        FogSettings.OuterVolumeDrift(0f, out dx, out dz);
+        Assert.Equal(0.05f, dx, 4); Assert.Equal(0f, dz, 4);
         // Round S: the volume is ground-heavy; its height comes from OuterHeightSigma (OuterSpreadY is the ring's band only).
+        // Round T: per tier (T1 0.8, T2 1.0).
         var t2 = FogSettings.Defaults(2);
-        Assert.Equal(FogVolumeShape.DefaultHeightSigma, t2.OuterHeightSigma, 5);
+        Assert.Equal(1f, t2.OuterHeightSigma, 5);
+        Assert.Equal(0.8f, FogSettings.Defaults(1).OuterHeightSigma, 5);
         Assert.False(t2.ExceedsParticleBudget);
         Assert.False(FogSettings.Defaults(1).ExceedsParticleBudget);
     }
@@ -1153,7 +1286,8 @@ public class FloatListNonFiniteTests
     {
         // Round M ruling 2c (caps raised by the controller: 24 per anchor, volume 80): brightness is handled by alpha, not by starving.
         Assert.Equal(24, FogSettings.InnerParticleCap);
-        Assert.Equal(140, FogSettings.OuterVolumeParticleCap);
+        Assert.Equal(200, FogSettings.OuterVolumeParticleCap);   // round T (round R 140)
+        Assert.Equal(300, FogSettings.ParticleHardCap);
         var s = FogSettings.Defaults(2);   // inner 14/s x 2.5 s = 35 wanted
         Assert.Equal(24, s.InnerMaxParticles);
         s.Rate = 1f; s.Lifetime = 1f;     // small budgets stay below the cap (MaxParticles minimum 8)
@@ -1167,7 +1301,7 @@ public class FloatListNonFiniteTests
         // Volume: 4/s + 2/m, 9 s -> capped at 40.
         var v = FogSettings.Defaults(2);
         v.OuterFollowShare = 0f;   // round Q: one system takes the whole cap
-        Assert.Equal(Math.Min(140, FogSettings.MaxParticles(v.OuterRate + v.OuterEffectiveRateDistance * FogSettings.GroundBudgetSpeed, v.OuterLifetime)), v.OuterMaxParticles);
+        Assert.Equal(Math.Min(200, FogSettings.MaxParticles(v.OuterRate + v.OuterEffectiveRateDistance * FogSettings.GroundBudgetSpeed, v.OuterLifetime)), v.OuterMaxParticles);
         v.OuterRate = 1f; v.OuterRateDistance = 0f; v.OuterLifetime = 2f;
         Assert.Equal(FogSettings.MaxParticles(1f, 2f), v.OuterMaxParticles);
         // Ring keeps the round J budget (rate x lifetime, hard cap only).
@@ -1223,6 +1357,7 @@ public class FloatListNonFiniteTests
         // Round O: alphas halfway between rounds L and M; round S: lighter, the body stays visible through the fog.
         Assert.InRange(s.Alpha, 0.1f, 0.16f);
         // Round P: the wide fog must read by day; tier II stronger than tier I. Round S: never concealing (at most 0.5).
+        // Round T: subtle, 0.3 / 0.4.
         Assert.InRange(s.OuterAlpha, 0.3f, 0.5f);
         Assert.True(FogSettings.Defaults(2).OuterAlpha >= 0.4f);
         Assert.True(FogSettings.Defaults(2).OuterAlpha > FogSettings.Defaults(1).OuterAlpha);
@@ -1233,7 +1368,7 @@ public class FloatListNonFiniteTests
         Assert.Equal(tier == 1 ? 1.1f : 1.2f, s.Size, 5);
         Assert.Equal(tier == 1 ? 2.4f : 2.6f, s.Lifetime, 5);
         Assert.Equal(tier == 1 ? 0.12f : 0.14f, s.Alpha, 5);
-        Assert.Equal(tier == 1 ? 0.35f : 0.45f, s.OuterAlpha, 5);
+        Assert.Equal(tier == 1 ? 0.3f : 0.4f, s.OuterAlpha, 5);
         Assert.Equal(tier == 1 ? 0.14f : 0.16f, s.GroundAlpha, 5);
     }
 }

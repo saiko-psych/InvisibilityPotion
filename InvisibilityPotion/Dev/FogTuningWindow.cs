@@ -374,7 +374,7 @@ namespace InvisibilityPotion.Dev
             DrawOuterShape(s, saved);
             var solo = GUILayout.Toggle(FogVeil.SoloOuter, "Solo outer (inner and ground off; not saved, all tiers)", GUILayout.Height(22f));
             if (solo != FogVeil.SoloOuter) { FogVeil.SoloOuter = solo; MarkDirty(); }
-            Row("Radius m", ref s.OuterRadius, 0.1f, 6f, 0.1f, def.OuterRadius, saved.OuterRadius);
+            Row("Radius m", ref s.OuterRadius, 0.1f, 14f, 0.1f, def.OuterRadius, saved.OuterRadius);
             if (s.OuterShape == FogOuterShape.Volume)
                 Row("Height sigma m (ground-heavy)", ref s.OuterHeightSigma, FogVolumeShape.HeightFloor, 3f, 0.05f, def.OuterHeightSigma, saved.OuterHeightSigma);
             else
@@ -384,9 +384,9 @@ namespace InvisibilityPotion.Dev
             Row("Alpha", ref s.OuterAlpha, 0f, 1f, 0.005f, def.OuterAlpha, saved.OuterAlpha);
             Row("Rate /s per anchor", ref s.OuterRate, 0f, 40f, 1f, def.OuterRate, saved.OuterRate);
             Row("Rate /m walked (trail only)", ref s.OuterRateDistance, 0f, 10f, 0.5f, def.OuterRateDistance, saved.OuterRateDistance);
-            Row("Burst at start (volume)", ref s.OuterBurst, 0f, 80f, 1f, def.OuterBurst, saved.OuterBurst);
-            Row("Size m", ref s.OuterSize, 0.1f, 6f, 0.1f, def.OuterSize, saved.OuterSize);
-            Row("Lifetime s", ref s.OuterLifetime, 0.2f, 10f, 0.25f, def.OuterLifetime, saved.OuterLifetime);
+            Row("Burst at start (volume)", ref s.OuterBurst, 0f, 150f, 1f, def.OuterBurst, saved.OuterBurst);
+            Row("Size m", ref s.OuterSize, 0.1f, 9f, 0.1f, def.OuterSize, saved.OuterSize);
+            Row("Lifetime s", ref s.OuterLifetime, 0.2f, 20f, 0.25f, def.OuterLifetime, saved.OuterLifetime);
             var anchorsChanged = s.Get("OuterAnchors") != saved.Get("OuterAnchors");
             var c = GUI.color;
             if (anchorsChanged) GUI.color = ChangedColor;

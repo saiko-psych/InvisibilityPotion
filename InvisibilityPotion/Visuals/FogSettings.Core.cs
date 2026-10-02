@@ -104,12 +104,15 @@ namespace InvisibilityPotion.Visuals
     /// Revision 13 (plan 5, round S): the volume is ground-heavy (<see cref="FogVolumeShape"/>, OuterHeightSigma 0.9) and lighter so
     /// the player stays visible: T1 outer alpha 0.35, body cloud 0.12; T2 outer alpha 0.45, radius 4.5, size 3.6, burst 60, body
     /// cloud 0.14; full reset.
+    /// Revision 14 (plan 5, round T): a much wider, vanilla-like soft fog patch (Gaussian ground density and alpha, overlap cap):
+    /// T1 radius 7, sigma 0.8, size 4.5, lifetime 12, burst 60, alpha 0.3; T2 radius 9, sigma 1.0, size 5.5, lifetime 14, burst
+    /// 80, alpha 0.4; full reset.
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 13;
-        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round S: 13).</summary>
-        public const int FullResetRevision = 13;
+        public const int Revision = 14;
+        /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round T: 14).</summary>
+        public const int FullResetRevision = 14;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -178,27 +181,54 @@ namespace InvisibilityPotion.Visuals
         /// <summary>Outer volume (round L): start size random in [min, max] x OuterSize.</summary>
         public const float OuterVolumeSizeMinFactor = 0.8f;
         public const float OuterVolumeSizeMaxFactor = 1.2f;
-        /// <summary>Outer volume: start speed in m/s, random direction (slow drift of the fog).</summary>
-        public const float OuterVolumeSpeed = 0.03f;
-        /// <summary>Outer volume: alpha over the lifetime rises 0 to 1 until this fraction, then falls to 0 at the end (round M: 25 %; round Q: 8 %, so new puffs show at once).</summary>
-        public const float OuterVolumeFadeIn = 0.08f;
-        /// <summary>Outer volume (round M): size at death = start size x this factor (3.2 m grows to 4.5 m), linear over the lifetime.</summary>
-        public const float OuterVolumeGrow = 4.5f / 3.2f;
+        /// <summary>Outer volume: drift speed in m/s, random horizontal direction (round T ruling 3: 0.05, vanilla-like slow mist; was 0.03 in any direction).</summary>
+        public const float OuterVolumeSpeed = 0.05f;
+        /// <summary>
+        /// Outer volume: alpha over the lifetime rises 0 to 1 until this fraction (round M: 25 %; round Q: 8 %; round T ruling 3: 15 %,
+        /// a soft vanilla-like fade-in), stays at 1, and falls to 0 over the last <see cref="OuterVolumeFadeOut"/>.
+        /// </summary>
+        public const float OuterVolumeFadeIn = 0.15f;
+        /// <summary>Round T ruling 3: the alpha falls to 0 over this last fraction of the lifetime (before round T: linear from the fade-in on).</summary>
+        public const float OuterVolumeFadeOut = 0.35f;
+        /// <summary>Outer volume: size at death = start size x this factor, linear over the lifetime (round M: 1.41; round T ruling 3: 1.35, slow growth like vanilla mist).</summary>
+        public const float OuterVolumeGrow = 1.35f;
+        /// <summary>Round T ruling 3: slow spin of each puff, random between -this and +this deg/s (on top of the random start rotation).</summary>
+        public const float OuterVolumeSpinDegPerSecond = 4f;
+        /// <summary>Mean of the alpha-over-life curve: half the fade-in + the plateau + half the fade-out (0.75).</summary>
+        public const float OuterVolumeLifetimeMeanAlpha = OuterVolumeFadeIn * 0.5f + (1f - OuterVolumeFadeIn - OuterVolumeFadeOut) + OuterVolumeFadeOut * 0.5f;
+        /// <summary>Mean size multiplier over the life (linear growth 1 to <see cref="OuterVolumeGrow"/>).</summary>
+        public const float OuterVolumeMeanGrow = (1f + OuterVolumeGrow) * 0.5f;
+        /// <summary>
+        /// Round T ruling 4: highest expected opacity of the fog column at the player (see <see cref="FogOverlapCap"/>), so the
+        /// overlapping puffs of the wide fog do not blow out and the player stays visible.
+        /// </summary>
+        public const float OuterMaxColumnOpacity = 0.5f;
+
+        /// <summary>Round T ruling 3: horizontal drift velocity (x, z) of a volume puff for the angle fraction <paramref name="uAngle"/> (0..1) at <see cref="OuterVolumeSpeed"/>.</summary>
+        public static void OuterVolumeDrift(float uAngle, out float x, out float z) => OuterVolumeDrift(uAngle, OuterVolumeSpeed, out x, out z);
+
+        /// <summary>Horizontal drift velocity (x, z) for the angle fraction <paramref name="uAngle"/> at <paramref name="speed"/> m/s.</summary>
+        public static void OuterVolumeDrift(float uAngle, float speed, out float x, out float z)
+        {
+            var a = uAngle * 2.0 * Math.PI;
+            x = (float)(Math.Cos(a) * speed);
+            z = (float)(Math.Sin(a) * speed);
+        }
         /// <summary>
         /// Round M ruling 2c: caps on simultaneously alive particles, so overlapping lit sprites cannot saturate into a white blob.
         /// Inner: per anchor (the Mesh emitter gets this x enabled anchors); outer volume: per emitter. The ground cap is
         /// <see cref="GroundParticleBudget"/> (both ground layers together).
         /// </summary>
         public const int InnerParticleCap = 24;   // round M: 10 starved the enveloping cloud (rate 14 x 2.5 s = 35 wanted); brightness is handled by alpha, not by starving
-        /// <summary>Round Q ruling 1c: 120 (was 80), shared by the follow and the trail system of one outer anchor in the ratio of OuterFollowShare; round R: 140.</summary>
-        public const int OuterVolumeParticleCap = 140;
+        /// <summary>Round Q ruling 1c: 120 (was 80), shared by the follow and the trail system of one outer anchor in the ratio of OuterFollowShare; round R: 140; round T: 200 (wider, longer-lived fog).</summary>
+        public const int OuterVolumeParticleCap = 200;
         /// <summary>
         /// Round Q ruling 1a: burst particles are created already aged: their remaining lifetime is random in [min, max] x their
         /// start lifetime, so they are past the fade-in (<see cref="OuterVolumeFadeIn"/>) and at full alpha in the first frame,
         /// and the instant field does not fade out all at the same moment.
         /// </summary>
         public const float OuterBurstRemainingMinFactor = 0.3f;
-        public const float OuterBurstRemainingMaxFactor = 0.9f;
+        public const float OuterBurstRemainingMaxFactor = 0.85f;   // round T: 1 - 0.85 = the 15 % fade-in (was 0.9 with an 8 % fade-in)
         /// <summary>Round Q ruling 1b: radius of the follow part of the volume = this x OuterRadius, so the player is always inside fog.</summary>
         public const float OuterFollowRadiusFactor = 0.7f;
         /// <summary>Round R ruling A3: share of OuterBurst the follow part gets while both parts exist (the trail gets the rest).</summary>
@@ -351,14 +381,14 @@ namespace InvisibilityPotion.Visuals
         /// walked, 9 s lifetime, so a walking player lays fog along the path and a standing one slowly fills the spot.
         /// Round P ruling 2: strong enough to read by day and instant: OuterBurst fills the volume the moment the effect starts.
         /// </summary>
-        private static void ApplyFogVolume(FogSettings s, float alpha, float radius, float size, float rate, float rateDistance, float burst)
+        private static void ApplyFogVolume(FogSettings s, float alpha, float radius, float heightSigma, float size, float lifetime, float rate, float rateDistance, float burst)
         {
             s.OuterEnabled = true;
             s.OuterShape = FogOuterShape.Volume;
             s.OuterAnchors = new List<string> { "Hips" };
             s.OuterHorizontal = false;
-            s.OuterSize = size; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f; s.OuterHeightSigma = FogVolumeShape.DefaultHeightSigma;
-            s.OuterRate = rate; s.OuterRateDistance = rateDistance; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
+            s.OuterSize = size; s.OuterAlpha = alpha; s.OuterRadius = radius; s.OuterSpreadY = 0.35f; s.OuterHeightSigma = heightSigma;
+            s.OuterRate = rate; s.OuterRateDistance = rateDistance; s.OuterLifetime = lifetime; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
             s.OuterBurst = burst;
             s.OuterFollowShare = 0.4f;   // round R: unchanged; the follow part gets 60 % of the burst (OuterFollowBurstFraction)
         }
@@ -390,7 +420,9 @@ namespace InvisibilityPotion.Visuals
                     // Round Q (revision 11): burst 40, 40 % of the volume moves with the player (OuterFollowShare default 0.4).
                     // Round R (revision 12): burst 50 (30 follow on an even pattern + 20 trail).
                     // Round S (revision 13): ground-heavy volume, alpha 0.35.
-                    ApplyFogVolume(s, 0.35f, 3.5f, 3.6f, 8f, 3f, 50f);
+                    // Round T (revision 14): a much wider, vanilla-like soft patch: radius 7, sigma 0.8, puffs 4.5 m living 12 s,
+                    // burst 60 (36 follow + 24 trail), alpha 0.3 (the overlap cap keeps the centre subtle).
+                    ApplyFogVolume(s, 0.3f, 7f, 0.8f, 4.5f, 12f, 8f, 3f, 60f);
                     s.GroundEnabled = true;
                     s.GroundAlpha = 0.14f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
@@ -413,7 +445,8 @@ namespace InvisibilityPotion.Visuals
                     // Round Q (revision 11): burst 60, 40 % follows the player.
                     // Round R (revision 12): burst 70 (42 follow on an even pattern + 28 trail).
                     // Round S (revision 13): lighter and wider at the ground: alpha 0.45, radius 4.5, size 3.6, burst 60 (36 + 24).
-                    ApplyFogVolume(s, 0.45f, 4.5f, 3.6f, 10f, 4f, 60f);
+                    // Round T (revision 14): much wider: radius 9, sigma 1.0, puffs 5.5 m living 14 s, burst 80 (48 + 32), alpha 0.4.
+                    ApplyFogVolume(s, 0.4f, 9f, 1f, 5.5f, 14f, 10f, 4f, 80f);
                     // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth); round M: alpha 0.12.
                     s.GroundEnabled = true;
                     s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.16f; s.GroundRadius = 0.9f;
@@ -667,7 +700,55 @@ namespace InvisibilityPotion.Visuals
         /// </summary>
         public int OuterBurstCount => OuterFollowBurstCount + OuterTrailBurstCount;
 
-        /// <summary>Remaining lifetime of one pre-aged burst particle (round Q ruling 1a): 30..90 % of <paramref name="startLifetime"/> for a random <paramref name="random01"/> (clamped).</summary>
+        // ---- round T ruling 4: overlap cap of the wide fog ----
+
+        /// <summary>
+        /// Expected number of puffs of one volume system over the ground point at its centre: <paramref name="live"/> puffs times
+        /// the share of them within half a puff diameter of the centre (<see cref="FogVolumeShape.RadiusShare"/>). The diameter is
+        /// <paramref name="size"/> x the size factor at the player (0.8) x the mean growth over the life (1.175); the height factor
+        /// (0.7..1) is left out, which overestimates the overlap a little (a stricter cap).
+        /// </summary>
+        public static float VolumeCentreOverlap(float live, float radius, float size)
+        {
+            if (!(radius > 0f) || !(live > 0f) || !(size > 0f)) return 0f;
+            var half = 0.5f * size * FogVolumeShape.RadialSizeAtCentre * OuterVolumeMeanGrow;
+            return live * (float)FogVolumeShape.RadiusShare(half / radius);
+        }
+
+        /// <summary>
+        /// Expected puffs over the player's ground point from both volume systems of one outer anchor while standing (rate x
+        /// lifetime plus the burst, at most each system's maxParticles); 0 for the Ring shape and an inactive layer.
+        /// </summary>
+        public float OuterCentreOverlap
+        {
+            get
+            {
+                if (!OuterActive || OuterShape != FogOuterShape.Volume) return 0f;
+                var life = Math.Max(0f, OuterLifetime);
+                var k = 0f;
+                if (OuterHasFollow)
+                    k += VolumeCentreOverlap(Math.Min(OuterFollowMaxParticles, OuterFollowRate * life + OuterFollowBurstCount), OuterFollowRadius, OuterFollowSize);
+                if (OuterHasTrail)
+                    k += VolumeCentreOverlap(Math.Min(OuterTrailMaxParticles, OuterTrailRate * life + OuterTrailBurstCount), OuterRadius, OuterSize);
+                return k;
+            }
+        }
+
+        /// <summary>
+        /// The overlap cap of the wide fog (<see cref="FogOverlapCap"/>): centre overlap <see cref="OuterCentreOverlap"/>, one puff's
+        /// mean opacity OuterAlpha x <see cref="OuterVolumeLifetimeMeanAlpha"/> x <see cref="FogSprite.MeanDiscAlpha"/> (the soft
+        /// sprite), at most <see cref="OuterMaxColumnOpacity"/>. Default (no cap) when the volume does not exist.
+        /// </summary>
+        public FogOverlapCap OuterOverlapCap
+        {
+            get
+            {
+                var k = OuterCentreOverlap;
+                return k > 0f ? new FogOverlapCap(k, OuterAlpha * OuterVolumeLifetimeMeanAlpha * FogSprite.MeanDiscAlpha, OuterMaxColumnOpacity) : default;
+            }
+        }
+
+        /// <summary>Remaining lifetime of one pre-aged burst particle (round Q ruling 1a): 30..85 % (round T; was 90 %) of <paramref name="startLifetime"/> for a random <paramref name="random01"/> (clamped).</summary>
         public static float OuterBurstRemainingLifetime(float startLifetime, float random01)
         {
             var t = random01 < 0f ? 0f : random01 > 1f ? 1f : random01;
@@ -716,7 +797,7 @@ namespace InvisibilityPotion.Visuals
         public const string Readme =
             "How the fog of a hidden player is built (each tier has its own [Fog.TierN] section):\n" +
             "Body cloud (keys without a prefix: Rate, Size, Alpha, ...): fog sitting directly on the body. It moves with you and hides your outline.\n" +
-            "Wide fog (Outer* keys): large, light fog puffs filling a few metres around you, thickest near the ground and close to you, thinning upwards and outwards. OuterBurst creates it the moment the effect starts; part of it moves with you (OuterFollowShare), the rest stays behind as a trail.\n" +
+            "Wide fog (Outer* keys): large, soft, light fog puffs spreading far around you (7 to 9 metres) like the game's own mist patches, thickest near the ground and close to you, slowly dissolving upwards and outwards. OuterBurst creates it the moment the effect starts; part of it moves with you (OuterFollowShare), the rest stays behind as a trail.\n" +
             "Ground fog (Ground* keys): flat fog patches at your feet. They stay where they appeared and spread, so your path fills with low fog.\n" +
             "Alpha keys say how visible a layer is (0 = invisible, 1 = solid); Rate keys how many puffs appear; Lifetime keys how long a puff lingers.";
 
@@ -744,16 +825,16 @@ namespace InvisibilityPotion.Visuals
                 new FogKey("MeshRate", FogValueKind.Float, "Body cloud with FogEmitterMode Mesh: puffs per second on the whole body surface; 0 = Rate x active body parts"),
                 new FogKey("OuterEnabled", FogValueKind.Bool, "Wide fog on or off: the large, light fog around the player"),
                 new FogKey("OuterAnchors", FogValueKind.Text, "Wide fog: body parts it is centred on, as a comma list (Head, Chest, Hips, LeftShoulder, RightShoulder, LeftHand, RightHand, LeftUpperLeg, RightUpperLeg, LeftLowerLeg, RightLowerLeg, LeftFoot, RightFoot); one fog source each"),
-                new FogKey("OuterRadius", FogValueKind.Float, "How far the wide fog reaches around you along the ground, in metres; most puffs sit close to you, fewer towards this edge"),
-                new FogKey("OuterAlpha", FogValueKind.Float, "How visible the wide fog around you is (0 = invisible, 1 = solid); puffs far from you are fainter (35 % at the edge). Tier II default 0.45"),
+                new FogKey("OuterRadius", FogValueKind.Float, "How far the wide fog reaches around you along the ground, in metres; most puffs sit close to you and the fog gets thinner and fainter towards this edge, where it fades out softly instead of ending in a line. Tier I default 7, tier II 9"),
+                new FogKey("OuterAlpha", FogValueKind.Float, "How visible the wide fog around you is (0 = invisible, 1 = solid); puffs far from you are fainter (15 % at the edge). Close to you many puffs overlap, so there each puff is made fainter on its own; the fog right around you never gets thicker than about half see-through. Tier I default 0.3, tier II 0.4"),
                 new FogKey("OuterRate", FogValueKind.Float, "Wide fog: new fog puffs per second while standing; higher = denser"),
                 new FogKey("OuterRateDistance", FogValueKind.Float, "Wide fog: extra puffs per metre walked, so the fog keeps up with a moving player (only with OuterTrail true)"),
-                new FogKey("OuterBurst", FogValueKind.Float, "Wide fog: puffs created at once when the effect starts, so the fog is there immediately instead of building up (Volume shape only; 0 = builds up over seconds)"),
+                new FogKey("OuterBurst", FogValueKind.Float, "Wide fog: puffs created at once when the effect starts, so the fog is there immediately instead of building up (Volume shape only; 0 = builds up over seconds). Tier I default 60, tier II 80"),
                 new FogKey("OuterFollowShare", FogValueKind.Float, "Share of the wide fog that moves with you; the rest stays behind as a trail (0..1; 0.4 = 40 % of the puffs per second moves with you, within 0.7 x OuterRadius, with slightly smaller puffs that drift slowly around you; 60 % of OuterBurst starts there). Only with OuterTrail true and the Volume shape"),
-                new FogKey("OuterSize", FogValueKind.Float, "Wide fog: size of one puff in metres"),
+                new FogKey("OuterSize", FogValueKind.Float, "Wide fog: size of one puff in metres. Puffs close to you are a bit smaller, puffs far out are larger and softer, and every puff grows slowly while it lives. Tier I default 4.5, tier II 5.5"),
                 new FogKey("OuterSpreadY", FogValueKind.Float, "Wide fog with the Ring shape: band height as a fraction of OuterRadius (the Volume shape uses OuterHeightSigma instead)"),
-                new FogKey("OuterHeightSigma", FogValueKind.Float, "Wide fog (Volume shape): how high it rises above the ground, in metres. Most puffs stay below this height, only a few rise to twice of it; puffs near the ground are smaller. Small = a low ground fog, large = a tall cloud (0.1..5)"),
-                new FogKey("OuterLifetime", FogValueKind.Float, "Wide fog: seconds a puff lingers before it fades; higher = the fog stays longer where you were"),
+                new FogKey("OuterHeightSigma", FogValueKind.Float, "Wide fog (Volume shape): how high it rises above the ground, in metres. Most puffs stay below this height, only a few rise to twice of it; puffs near the ground are smaller. Small = a low ground fog, large = a tall cloud (0.1..5). Tier I default 0.8, tier II 1"),
+                new FogKey("OuterLifetime", FogValueKind.Float, "Wide fog: seconds a puff lingers before it fades; higher = the fog stays longer where you were. Each puff fades in slowly, drifts and grows a little, then fades out slowly. Tier I default 12, tier II 14"),
                 new FogKey("OuterTrail", FogValueKind.Bool, "Wide fog: true = puffs stay where they appeared (you leave fog behind); false = the fog moves with you"),
                 new FogKey("OuterRotation", FogValueKind.Float, "Wide fog: how fast it turns around you in degrees per second (negative = the other way, 0 = still)"),
                 new FogKey("OuterOffsetY", FogValueKind.Float, "Wide fog: moves its centre up (positive) or down (negative), in metres"),
@@ -969,14 +1050,18 @@ namespace InvisibilityPotion.Visuals
     }
 
     /// <summary>
-    /// Round S ruling 1 (user, 2026-10-02 23:45: "a normal-distribution pyramid"): where the outer fog volume puts its puffs. Densest
-    /// on the ground next to the player, spreading wide along the ground, thinning with height and with distance:
-    /// - horizontal distance r: density per square metre of ground proportional to (1 - r/R)^2 (1 at the player, a quarter at
-    ///   half the radius, 0 at R), so seen from the side the cloud is a soft pyramid. Sampled by inverting its cumulative share
-    ///   F(x) = 6x^2 - 8x^3 + 3x^4 (x = r/R; the radial density is 12 x (1 - x)^2);
+    /// Round S ruling 1 (user, 2026-10-02 23:45: "a normal-distribution pyramid"), round T ruling 2 (2026-10-03: "much wider,
+    /// a more realistic falloff like Valheim's own mist patches"): where the outer fog volume puts its puffs. Densest on the
+    /// ground next to the player, spreading far along the ground and dissolving towards the edge instead of ending there:
+    /// - horizontal distance r: density per square metre of ground proportional to exp(-(r / sigma_r)^2 / 2) with
+    ///   sigma_r = <see cref="RadialSigmaFactor"/> x R (a soft Gaussian patch), cut at R (where it is down to 8.5 %). Sampled by
+    ///   inverting its cumulative share, a Rayleigh distribution truncated at R (closed form);
     /// - height h above the ground: half-Gaussian with sigma (OuterHeightSigma), at least <see cref="HeightFloor"/>, at most
     ///   <see cref="MaxHeightSigmas"/> sigma (puffs near the ground frequent, high puffs rare);
-    /// - size factor 0.7 at the ground to 1.0 at 2 sigma (linear, then flat); alpha factor 1.0 at the player to 0.35 at R (linear).
+    /// - size factor: by height 0.7 at the ground to 1.0 at 2 sigma (round S), times by distance 0.8 at the player to 1.2 at R
+    ///   (round T: small, dense puffs close, large, faint ones far out);
+    /// - alpha factor: the same Gaussian, lifted so it is 1 at the player and exactly <see cref="AlphaAtRim"/> at R (round T), and
+    ///   optionally limited by a <see cref="FogOverlapCap"/> so the many overlapping puffs near the player do not blow out.
     /// Pure; the erf approximation is Abramowitz and Stegun 7.1.26 (a published formula, max error 1.5e-7).
     /// </summary>
     public static class FogVolumeShape
@@ -991,30 +1076,39 @@ namespace InvisibilityPotion.Visuals
         public const float SizeAtGround = 0.7f;
         /// <summary>Height (in sigma) from which a puff has its full size.</summary>
         public const float FullSizeSigmas = 2f;
-        public const float AlphaAtRim = 0.35f;
+        /// <summary>Round T ruling 2: sigma of the Gaussian ground density as a fraction of the radius R.</summary>
+        public const float RadialSigmaFactor = 0.45f;
+        /// <summary>Round T ruling 2: alpha factor at R (the floor; round S: 0.35 on a linear falloff).</summary>
+        public const float AlphaAtRim = 0.15f;
+        /// <summary>Round T ruling 2: size factor by distance, at the player and at R (linear in between).</summary>
+        public const float RadialSizeAtCentre = 0.8f;
+        public const float RadialSizeAtRim = 1.2f;
 
-        /// <summary>Relative density per square metre of ground at distance <paramref name="r"/>: (1 - r/R)^2, 0 at and beyond R.</summary>
+        /// <summary>exp(-x^2 / 2 s^2) for x = r/R, the Gaussian of the ground density.</summary>
+        private static double Gauss(double x) => Math.Exp(-x * x / (2.0 * RadialSigmaFactor * RadialSigmaFactor));
+
+        /// <summary>Share of the untruncated Rayleigh distribution below R: 1 - Gauss(1) (0.915).</summary>
+        private static readonly double TruncatedShare = 1.0 - Gauss(1.0);
+
+        /// <summary>Relative density per square metre of ground at distance <paramref name="r"/>: the Gaussian, 1 at the player, 0 beyond R.</summary>
         public static float AreaDensity(float r, float radius)
         {
             if (!(radius > 0f)) return 0f;
-            var x = Clamp01(r / radius);
-            return (1f - x) * (1f - x);
+            var x = Math.Abs(r) / radius;
+            return x > 1f ? 0f : (float)Gauss(x);
         }
 
-        /// <summary>Share of the puffs within x = r/R: 6x^2 - 8x^3 + 3x^4.</summary>
-        public static double RadiusShare(double x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (6 - 8 * x + 3 * x * x);
+        /// <summary>Share of the puffs within x = r/R: (1 - Gauss(x)) / (1 - Gauss(1)), the truncated Rayleigh distribution.</summary>
+        public static double RadiusShare(double x) => x <= 0 ? 0 : x >= 1 ? 1 : (1.0 - Gauss(x)) / TruncatedShare;
 
         /// <summary>Horizontal distance for the uniform value <paramref name="u"/> (0..1): the inverse of <see cref="RadiusShare"/> x radius.</summary>
         public static float RadiusAt(float u, float radius)
         {
             if (!(radius > 0f)) return 0f;
-            double target = Clamp01(u), lo = 0, hi = 1;
-            for (var i = 0; i < 40; i++)
-            {
-                var mid = 0.5 * (lo + hi);
-                if (RadiusShare(mid) < target) lo = mid; else hi = mid;
-            }
-            return (float)(0.5 * (lo + hi)) * radius;
+            var target = (double)Clamp01(u);
+            var inner = 1.0 - target * TruncatedShare;   // Gauss(x) for the wanted x
+            var x = inner <= 0 ? 1.0 : RadialSigmaFactor * Math.Sqrt(Math.Max(0.0, -2.0 * Math.Log(inner)));
+            return (float)Math.Min(1.0, x) * radius;
         }
 
         /// <summary>Relative half-Gaussian density at height <paramref name="h"/>: exp(-h^2 / 2 sigma^2), 1 at the ground.</summary>
@@ -1046,19 +1140,35 @@ namespace InvisibilityPotion.Visuals
             return SizeAtGround + (1f - SizeAtGround) * Clamp01(h / full);
         }
 
-        /// <summary>Alpha factor of a puff at horizontal distance <paramref name="r"/>: 1.0 at the player, 0.35 at R.</summary>
+        /// <summary>Round T: size factor of a puff at horizontal distance <paramref name="r"/>: 0.8 at the player, 1.2 at and beyond R.</summary>
+        public static float RadialSizeFactor(float r, float radius)
+        {
+            if (!(radius > 0f)) return 1f;
+            return RadialSizeAtCentre + (RadialSizeAtRim - RadialSizeAtCentre) * Clamp01(r / radius);
+        }
+
+        /// <summary>
+        /// Round T: alpha factor of a puff at horizontal distance <paramref name="r"/>: the ground Gaussian lifted to end at the
+        /// floor, AlphaAtRim + (1 - AlphaAtRim) x (Gauss(x) - Gauss(1)) / (1 - Gauss(1)); 1 at the player, 0.15 at and beyond R.
+        /// </summary>
         public static float AlphaFactor(float r, float radius)
         {
             if (!(radius > 0f)) return 1f;
-            return 1f - (1f - AlphaAtRim) * Clamp01(r / radius);
+            var x = Clamp01(Math.Abs(r) / radius);
+            return AlphaAtRim + (1f - AlphaAtRim) * (float)((Gauss(x) - Gauss(1.0)) / TruncatedShare);
         }
 
-        /// <summary>The point for three uniform values (distance, angle as a fraction of a turn, height).</summary>
-        public static FogVolumePoint Sample(float uRadius, float uAngle, float uHeight, float radius, float sigma) =>
-            At(RadiusAt(uRadius, radius), uAngle * 2.0 * Math.PI, HeightAt(uHeight, sigma), radius, sigma);
+        /// <summary>Round T ruling 4: <see cref="AlphaFactor"/>, lowered where the overlap cap demands it.</summary>
+        public static float CappedAlphaFactor(float r, float radius, FogOverlapCap cap) =>
+            Math.Min(AlphaFactor(r, radius), cap.FactorLimit(r, radius));
 
-        internal static FogVolumePoint At(float r, double angle, float h, float radius, float sigma) =>
-            new FogVolumePoint((float)(r * Math.Cos(angle)), h, (float)(r * Math.Sin(angle)), SizeFactor(h, sigma), AlphaFactor(r, radius));
+        /// <summary>The point for three uniform values (distance, angle as a fraction of a turn, height), with an optional overlap cap.</summary>
+        public static FogVolumePoint Sample(float uRadius, float uAngle, float uHeight, float radius, float sigma, FogOverlapCap cap = default) =>
+            At(RadiusAt(uRadius, radius), uAngle * 2.0 * Math.PI, HeightAt(uHeight, sigma), radius, sigma, cap);
+
+        internal static FogVolumePoint At(float r, double angle, float h, float radius, float sigma, FogOverlapCap cap) =>
+            new FogVolumePoint((float)(r * Math.Cos(angle)), h, (float)(r * Math.Sin(angle)),
+                               SizeFactor(h, sigma) * RadialSizeFactor(r, radius), CappedAlphaFactor(r, radius, cap));
 
         /// <summary>Share of a unit half-normal below <paramref name="z"/> sigma: erf(z / sqrt 2).</summary>
         private static double HalfNormalShare(double z) => Erf(z / Math.Sqrt(2.0));
@@ -1076,8 +1186,48 @@ namespace InvisibilityPotion.Visuals
     }
 
     /// <summary>
+    /// Round T ruling 4: keeps the centre of the wide fog from blowing out. Near the player many puffs overlap; seen through a
+    /// column of k puffs of opacity a each, the fog's opacity is 1 - (1 - a)^k. The expected overlap falls with the ground
+    /// Gaussian: k(r) = CentreOverlap x <see cref="FogVolumeShape.AreaDensity"/>(r). Where 1 - (1 - PuffOpacity x factor)^k(r) would
+    /// exceed MaxOpacity, the puff's alpha factor is limited to the value that reaches exactly MaxOpacity; elsewhere (the outer
+    /// part, few overlaps) the Gaussian alpha profile is untouched. PuffOpacity is the mean opacity of one puff at factor 1
+    /// (alpha x mean over its life x mean over its sprite). An estimate for a column seen from above; a camera looking across the
+    /// cloud sees more puffs. Default = no cap.
+    /// </summary>
+    public readonly struct FogOverlapCap
+    {
+        public readonly float CentreOverlap, PuffOpacity, MaxOpacity;
+
+        public FogOverlapCap(float centreOverlap, float puffOpacity, float maxOpacity)
+        {
+            CentreOverlap = centreOverlap; PuffOpacity = puffOpacity; MaxOpacity = maxOpacity;
+        }
+
+        public bool Active => CentreOverlap > 0f && PuffOpacity > 0f && MaxOpacity > 0f && MaxOpacity < 1f;
+
+        /// <summary>Expected number of puffs over the ground point at distance <paramref name="r"/>.</summary>
+        public float Overlap(float r, float radius) => Active ? CentreOverlap * FogVolumeShape.AreaDensity(r, radius) : 0f;
+
+        /// <summary>Highest alpha factor (0..1) at distance <paramref name="r"/> that keeps the column at or below MaxOpacity; 1 without a cap.</summary>
+        public float FactorLimit(float r, float radius)
+        {
+            if (!Active) return 1f;
+            var k = Math.Max(1f, Overlap(r, radius));
+            var perPuff = 1.0 - Math.Pow(1.0 - MaxOpacity, 1.0 / k);
+            return (float)Math.Min(1.0, perPuff / PuffOpacity);
+        }
+
+        /// <summary>Expected opacity of the column at distance <paramref name="r"/> when every puff there has alpha factor <paramref name="factor"/>.</summary>
+        public float ColumnOpacity(float r, float radius, float factor)
+        {
+            var a = Math.Min(1f, Math.Max(0f, PuffOpacity * factor));
+            return (float)(1.0 - Math.Pow(1.0 - a, Overlap(r, radius)));
+        }
+    }
+
+    /// <summary>
     /// Round R ruling A2, round S: even placement of the volume burst instead of random points, so the instant cloud has no holes
-    /// and no clusters, on the ground-heavy distribution of <see cref="FogVolumeShape"/>: distances at stratified quantiles
+    /// and no clusters, on the distribution of <see cref="FogVolumeShape"/>: distances at stratified quantiles
     /// ((i + 0.5) / count), angles on the golden-angle spiral, heights from a base-2 van der Corput sequence (independent of the
     /// angle). Pure and deterministic.
     /// </summary>
@@ -1087,12 +1237,12 @@ namespace InvisibilityPotion.Visuals
         public const double GoldenAngle = 2.39996322972865332;
 
         /// <summary>Point <paramref name="index"/> of <paramref name="count"/> (x/z around the centre, height above the ground); default for count 0.</summary>
-        public static FogVolumePoint Point(int index, int count, float radius, float sigma)
+        public static FogVolumePoint Point(int index, int count, float radius, float sigma, FogOverlapCap cap = default)
         {
             if (count <= 0 || index < 0) return default;
             var u = (float)((index + 0.5) / count);
             return FogVolumeShape.At(FogVolumeShape.RadiusAt(u, radius), index * GoldenAngle,
-                                     FogVolumeShape.HeightAt((float)RadicalInverse2(index + 1), sigma), radius, sigma);
+                                     FogVolumeShape.HeightAt((float)RadicalInverse2(index + 1), sigma), radius, sigma, cap);
         }
 
         /// <summary>Base-2 van der Corput value of <paramref name="n"/> (bits mirrored behind the binary point), in [0, 1).</summary>
@@ -1142,6 +1292,12 @@ namespace InvisibilityPotion.Visuals
         public const float NoiseAmount = 0.1f;
         public const int NoiseCells = 6;
         private const int Seed = 7919;
+
+        /// <summary>
+        /// Round T: mean of <see cref="Falloff"/> over the unit disc (noise averages out), i.e. the average opacity a puff adds
+        /// where it covers: CentreAlpha x ((1 - e^-k) / k - e^-k) / (1 - e^-k), about 0.185. Used by the overlap estimate.
+        /// </summary>
+        public static readonly float MeanDiscAlpha = (float)(CentreAlpha * ((1.0 - Math.Exp(-Sharpness)) / Sharpness - Math.Exp(-Sharpness)) / (1.0 - Math.Exp(-Sharpness)));
 
         public static float Falloff(float r)
         {

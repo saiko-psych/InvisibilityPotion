@@ -489,7 +489,11 @@ namespace InvisibilityPotion.Visuals
             // from the follower's LateUpdate) on the ground-heavy FogVolumeShape distribution: dense at the ground and near the
             // player, thinning with height (half-Gaussian, OuterHeightSigma) and distance ((1 - r/R)^2 per square metre), smaller
             // puffs low, fainter puffs far out. The burst uses the same distribution (follow: even FogBurstPattern; trail: random).
+            // Round T: a much wider, vanilla-like soft patch: Gaussian ground density and alpha (sigma_r 0.45 R, 15 % alpha at R),
+            // puffs 0.8x near the player to 1.2x at R, an overlap cap (FogOverlapCap, shared by both systems) so the centre stays
+            // below OuterMaxColumnOpacity, slow horizontal drift, growth 1 -> 1.35, alpha in 15 % / out 35 %, slow random spin.
             if (outer == null || animator == null) return;
+            var overlapCap = s.OuterOverlapCap;
             var volume = s.OuterShape == FogOuterShape.Volume;
             FogLayer OuterLayer(bool follow)
             {
@@ -512,6 +516,7 @@ namespace InvisibilityPotion.Visuals
                     l.Burst = follow ? s.OuterFollowBurstCount : s.OuterTrailBurstCount;
                     l.HeightSigma = s.OuterHeightSigma;
                     l.GroundOffsetY = s.OuterOffsetY;
+                    l.Cap = overlapCap;
                 }
                 return l;
             }
@@ -562,6 +567,8 @@ namespace InvisibilityPotion.Visuals
             // Round S ruling 1 (volume): sigma of the half-Gaussian height above the ground (OuterHeightSigma) and the ground offset (OuterOffsetY).
             public float HeightSigma = FogVolumeShape.DefaultHeightSigma;
             public float GroundOffsetY;
+            // Round T ruling 4 (volume): the overlap cap of the puff alpha near the player.
+            public FogOverlapCap Cap;
             public Material Material;
         }
 
@@ -690,6 +697,7 @@ namespace InvisibilityPotion.Visuals
                     Radius = Mathf.Max(0f, radius), Sigma = layer.HeightSigma, OffsetY = layer.GroundOffsetY,
                     Size = layer.Size, SizeMinFactor = layer.SizeMinFactor, SizeMaxFactor = layer.SizeMaxFactor,
                     Speed = float.IsNaN(layer.Speed) ? s.Speed : layer.Speed, World = layer.Trail == FogTrailMode.Trail,
+                    Cap = layer.Cap,
                 };
             }
             else
@@ -726,8 +734,8 @@ namespace InvisibilityPotion.Visuals
             var before = ps.particleCount;
             for (var i = 0; i < count; i++)
                 volume.Emit(ps, emitter, root, even
-                    ? FogBurstPattern.Point(i, count, volume.Radius, volume.Sigma)
-                    : FogVolumeShape.Sample(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, volume.Radius, volume.Sigma));
+                    ? FogBurstPattern.Point(i, count, volume.Radius, volume.Sigma, volume.Cap)
+                    : FogVolumeShape.Sample(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, volume.Radius, volume.Sigma, volume.Cap));
             var n = ps.GetParticles(BurstBuf);
             var first = Mathf.Min(before, n);
             for (var i = first; i < n; i++)
@@ -938,6 +946,17 @@ namespace InvisibilityPotion.Visuals
                 sol.size = new ParticleSystem.MinMaxCurve(layer.Grow, new AnimationCurve(new Keyframe(0f, 1f / layer.Grow), new Keyframe(1f, 1f)));
             }
 
+            if (layer.Volume)
+            {
+                // Round T ruling 3: a slow spin per puff, random between -4 and +4 deg/s (TwoConstants = one random value per
+                // particle), on top of the random start rotation; vanilla mist turns about this slowly.
+                var rol = ps.rotationOverLifetime;
+                rol.enabled = true;
+                rol.separateAxes = false;
+                var spin = FogSettings.OuterVolumeSpinDegPerSecond * Mathf.Deg2Rad;
+                rol.z = new ParticleSystem.MinMaxCurve(-spin, spin);
+            }
+
             var vel = ps.velocityOverLifetime;
             var drift = layer.Volume ? 0f : s.Drift;   // the inner Drift is not the volume's (it drifts by its start speed)
             vel.enabled = Mathf.Abs(drift) > 0.0001f || Mathf.Abs(layer.Orbital) > 0.0001f;
@@ -959,7 +978,12 @@ namespace InvisibilityPotion.Visuals
             gradient.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
                 layer.Volume
-                    ? new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, FogSettings.OuterVolumeFadeIn), new GradientAlphaKey(0f, 1f) }
+                    ? new[]
+                    {
+                        // Round T ruling 3: in over 15 %, full, out over the last 35 % (vanilla-like slow fades).
+                        new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, FogSettings.OuterVolumeFadeIn),
+                        new GradientAlphaKey(1f, 1f - FogSettings.OuterVolumeFadeOut), new GradientAlphaKey(0f, 1f),
+                    }
                     : new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.3f), new GradientAlphaKey(1f, 0.6f), new GradientAlphaKey(0f, 1f) });
             col.color = new ParticleSystem.MinMaxGradient(gradient);
 
@@ -1031,7 +1055,8 @@ namespace InvisibilityPotion.Visuals
                                                             $", offset y {F(s.OuterOffsetY)} m, rotation {F(s.OuterRotation)} deg/s, " +
                                                             $"space {(e.Ps != null ? e.Ps.main.simulationSpace.ToString() : "-")}, {(s.OuterHorizontal ? "horizontal" : "camera-facing")}, " +
                                                             $"+ {(VolumeOf(e.Go) != null ? F(VolumeOf(e.Go).RateDistance) : e.Ps != null ? F(e.Ps.emission.rateOverDistance.constant) : "-")}/m, burst {e.Burst} (follow share {F(s.OuterFollowShareEffective)}, " +
-                                                            $"follow burst fraction {F(s.OuterFollowBurstFractionEffective)}, fade-in {F(FogSettings.OuterVolumeFadeIn)}), " +
+                                                            $"follow burst fraction {F(s.OuterFollowBurstFractionEffective)}, fade in {F(FogSettings.OuterVolumeFadeIn)} / out {F(FogSettings.OuterVolumeFadeOut)}, " +
+                                                            $"grow x{F(FogSettings.OuterVolumeGrow)}, spin +-{F(FogSettings.OuterVolumeSpinDegPerSecond)} deg/s), " +
                                                             $"follower {FollowerMode(e.Go)}, alive at spawn {(e.Ps != null ? e.Ps.particleCount : 0)}" : "";
                 lines.Add($"  {(e.Go != null ? e.Go.name : "<destroyed>")} [{e.Layer}] {e.Anchor}: rate {F(rate)}/s{extra}, size {F(size)} m, alpha {F(alpha)} (vertex {F(e.VertexAlpha)}), " +
                           $"max {(e.Ps != null ? e.Ps.main.maxParticles : 0)}");
@@ -1898,7 +1923,8 @@ namespace InvisibilityPotion.Visuals
     /// frame adds Rate x dt plus, in world space (trail), RateDistance x metres the emitter moved horizontally to a budget, and
     /// emits that many puffs (at most <see cref="MaxPerFrame"/>) with ParticleSystem.Emit(EmitParams, 1) at points of the
     /// ground-heavy <see cref="FogVolumeShape"/> distribution around the emitter (x/z) above the player's feet (Root y +
-    /// OffsetY + height): size x the height factor, alpha x the distance factor, slow drift in a random direction. The emitter
+    /// OffsetY + height): size x the height and distance factors, alpha x the distance factor (round T: Gaussian, limited by the
+    /// overlap <see cref="Cap"/>), slow horizontal drift in a random direction (round T). The emitter
     /// keeps world rotation identity (position-only follower), so a local-space position is the world offset from the emitter.
     /// </summary>
     internal sealed class FogVolumeEmission
@@ -1910,6 +1936,8 @@ namespace InvisibilityPotion.Visuals
 
         public float Rate, RateDistance, Radius, Sigma, OffsetY, Size, SizeMinFactor, SizeMaxFactor, Speed;
         public bool World;
+        /// <summary>Round T ruling 4: overlap cap of the puff alpha (default = none).</summary>
+        public FogOverlapCap Cap;
         public int Emitted;   // puffs emitted so far (burst included), for the fog dump
 
         private float _budget;
@@ -1935,7 +1963,7 @@ namespace InvisibilityPotion.Visuals
             if (n <= 0) return;
             _budget = Mathf.Min(_budget - n, MaxPerFrame);
             for (var i = 0; i < n; i++)
-                Emit(ps, emitter, root, FogVolumeShape.Sample(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, Radius, Sigma));
+                Emit(ps, emitter, root, FogVolumeShape.Sample(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, Radius, Sigma, Cap));
         }
 
         public void Emit(ParticleSystem ps, Transform emitter, Transform root, FogVolumePoint p)
@@ -1944,10 +1972,12 @@ namespace InvisibilityPotion.Visuals
             var world = new Vector3(centre.x + p.X, root.position.y + OffsetY + p.Height, centre.z + p.Z);
             var color = ps.main.startColor.color;   // read each time: the dynamic colour may have changed it
             color.a *= p.AlphaFactor;
+            // Round T ruling 3: slow horizontal drift in a random direction (vanilla mist does not rise or sink).
+            FogSettings.OuterVolumeDrift(UnityEngine.Random.value, Speed, out var vx, out var vz);
             var ep = new ParticleSystem.EmitParams
             {
                 position = World ? world : world - centre,
-                velocity = UnityEngine.Random.onUnitSphere * Speed,
+                velocity = new Vector3(vx, 0f, vz),
                 startSize = Size * UnityEngine.Random.Range(SizeMinFactor, SizeMaxFactor) * p.SizeFactor,
                 startColor = color,
             };
@@ -1959,10 +1989,16 @@ namespace InvisibilityPotion.Visuals
         public string Describe()
         {
             string F(float v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-            return $"rate {F(Rate)}/s + {F(RateDistance)}/m ({(World ? "world" : "local")}), ground spread {F(Radius)} m with density (1 - r/R)^2 per m2, " +
+            var cap = Cap.Active
+                ? $"overlap cap: ~{F(Cap.CentreOverlap)} puffs over the player, puff opacity {F(Cap.PuffOpacity)}, centre alpha x{F(FogVolumeShape.CappedAlphaFactor(0f, Radius, Cap))}, " +
+                  $"column opacity <= {F(Cap.MaxOpacity)}"
+                : "no overlap cap";
+            return $"rate {F(Rate)}/s + {F(RateDistance)}/m ({(World ? "world" : "local")}), ground spread {F(Radius)} m with Gaussian density per m2 " +
+                   $"(sigma_r {F(FogVolumeShape.RadialSigmaFactor * Radius)} m, cut at R), " +
                    $"height half-Gaussian sigma {F(Sigma)} m (floor {F(FogVolumeShape.HeightFloor)} m, cap {F(FogVolumeShape.MaxHeightSigmas)} sigma) above the feet + {F(OffsetY)} m, " +
-                   $"size x{F(FogVolumeShape.SizeAtGround)} at the ground .. x1 at {F(FogVolumeShape.FullSizeSigmas)} sigma (base {F(Size)} m), " +
-                   $"alpha x1 at the player .. x{F(FogVolumeShape.AlphaAtRim)} at R";
+                   $"size x{F(FogVolumeShape.SizeAtGround)} at the ground .. x1 at {F(FogVolumeShape.FullSizeSigmas)} sigma, x{F(FogVolumeShape.RadialSizeAtCentre)} at the player .. " +
+                   $"x{F(FogVolumeShape.RadialSizeAtRim)} at R (base {F(Size)} m), drift {F(Speed)} m/s horizontal, " +
+                   $"alpha x1 at the player .. x{F(FogVolumeShape.AlphaAtRim)} at R (Gaussian), {cap}";
         }
     }
 }
