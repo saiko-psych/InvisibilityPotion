@@ -266,8 +266,11 @@ class Builder:
             self.box((p0 + p1)/2 + n*height/2, d*(L + width*0.6), s*width, n*height, m)
 
     def finish(self, name, collection=None, recalc=True):
-        """recalc=False keeps the winding as built (needed for double-sided cards made of two opposite faces)."""
-        if recalc: bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
+        """recalc=False keeps the winding as built (needed for double-sided cards made of two opposite faces).
+        Faces listed in self.keep (e.g. card pairs) keep their winding even when the rest is recalculated."""
+        if recalc:
+            keep = set(getattr(self, "keep", ()))
+            bmesh.ops.recalc_face_normals(self.bm, faces=[f for f in self.bm.faces if f not in keep])
         me = bpy.data.meshes.new(name); self.bm.to_mesh(me); self.bm.free()
         for f in me.polygons: f.use_smooth = False
         for s in self.slots: me.materials.append(mat_from(s, self.mats[s]))

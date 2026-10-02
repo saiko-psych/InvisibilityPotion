@@ -10,6 +10,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | `make_bottle.py` (v5) | `bottle_t1..3.fbx`, `bottles.blend`, `bottles.log` | `preview-bottles-v5.png` | base | `MistAnchor`, `attach` (neck) |
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v5) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3_a/b/c`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v5.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
+| `make_ingredients.py` (v1) | `ingredient_t1..3.fbx`, `ingredients.blend`, `ingredients.log` | `preview-ingredients-v1.png` | base centre (lying as dropped) | `attach` (bounding-box centre) |
 | `make_goggles.py` (v2) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v2.png` | head centre | `attach` (head centre) |
 
 ## Shared conventions (`common.py`)
@@ -147,6 +148,23 @@ Knobs at the top of `make_plants.py`:
    `embers`, `young` (the two fronds of the picked state), `scale` (horizontal, vertical). `SEED` for all.
 5. `VARIANTS`: seed offsets and overrides per variant (lichen: `scale`, `density`; others: any knob, nested dicts merge).
 Preview-only placement (`X1`, `DX1`, `Y2`, `DX2`, `Y3`, `DX3`, `PATCH_Z`, `on_trunk`), cameras and lights near the end.
+
+# Ingredient items (v1): harvested pickups
+
+What the player carries after harvesting a plant. Each item lies on the ground as dropped: pivot at the base centre
+(lowest point at 0), `attach` empty at the bounding-box centre. Materials are prefixed `ingr_`. Strands, petals and
+leaflets are double-sided (two opposite faces, kept out of the normal recalculation via `Builder.keep`); closed parts
+are normal single-sided meshes. The preview has a 0.1 m ruler in 0.02 m bands.
+
+| File | Name | Size | Look | Tris |
+|---|---|---|---|---|
+| `ingredient_t1.fbx` | Huldra's Hair tuft | 0.10 x 0.07 x 0.02 m | 14 grey-green lichen strands in two shades fanning out from two twine wraps, pale tips, cut tops behind the knot, a loose twine end | 345 |
+| `ingredient_t2.fbx` | Baldr's Tear | 0.11 x 0.04 x 0.05 m | one white bell blossom lying on its side, faint blue glowing cup and teardrop, short stem, two white berries on a twig | 258 |
+| `ingredient_t3.fbx` | Hel's Ember spore | 0.09 x 0.08 x 0.02 m | black frond fragment curled into a flat spiral with sawtooth leaflets around three glowing ember spore capsules | 173 |
+
+Knobs at the top of `make_ingredients.py`: `SEED`, `MATS`, `T1` (`strands`, `length`, `width`, `knot_x`, `tail`),
+`T2` (`bell_len`, `bell_r`, `petals`, `stem_len`, `berry_r`), `T3` (`curl_r`, `turns`, `leaflets`, `leaflet_len`,
+`leaflet_base`, `capsule_r`). Preview placement, camera and lights at the end.
 
 # Veil goggles (v2)
 
