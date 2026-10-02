@@ -10,6 +10,7 @@ public class ModelScaleTests
         Assert.Equal(2.4f, ModelScale.Bowl);
         Assert.Equal(1.5f, ModelScale.Plant);
         Assert.Equal(1f, ModelScale.Goggles);
+        Assert.Equal(1.5f, ModelScale.Ingredient);
     }
 
     [Theory]
@@ -20,6 +21,8 @@ public class ModelScaleTests
     [InlineData("Plant_T1_Flat_a", 1.5f)]
     [InlineData("Plant_T3_picked", 1.5f)]
     [InlineData("Goggles_T2", 1f)]
+    [InlineData("Ingredient_T1", 1.5f)]
+    [InlineData("Ingredient_T3", 1.5f)]
     [InlineData("Something", 1f)]
     [InlineData("", 1f)]
     [InlineData(null, 1f)]
@@ -34,5 +37,6 @@ public class ModelScaleTests
         Assert.Equal("attach", ModelScale.ScaledChild("MeadBottle_T1"));
         Assert.Equal("attach", ModelScale.ScaledChild("Goggles_T1"));
         Assert.Equal("model", ModelScale.ScaledChild("Plant_T2_a"));
+        Assert.Equal("attach", ModelScale.ScaledChild("Ingredient_T2"));
     }
 }
