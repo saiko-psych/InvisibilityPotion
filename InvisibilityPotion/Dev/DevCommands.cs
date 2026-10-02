@@ -312,7 +312,7 @@ namespace InvisibilityPotion.Dev
         private class SpawnCommand : ConsoleCommand
         {
             public override string Name => "ip_spawn";
-            public override string Help => "ip_spawn <prefab> [count] [level]: spawn creatures 5 m in front of you";
+            public override string Help => "ip_spawn <prefab> [count] [level]: spawn any prefab (creature, item, Plant_*, VeilGoggles_*) on the ground 5 m in front of you, facing you, 1 m apart";
 
             public override void Run(string[] args)
             {
@@ -324,8 +324,10 @@ namespace InvisibilityPotion.Dev
                 var level = args.Length > 2 && int.TryParse(args[2], out var l) ? l : 1;
                 for (var i = 0; i < count; i++)
                 {
-                    var pos = p.transform.position + p.transform.forward * 5f + Vector3.right * i;
-                    var go = Object.Instantiate(prefab, pos, Quaternion.identity);
+                    var pos = p.transform.position + p.transform.forward * 5f + p.transform.right * i;
+                    if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(pos, out var ground)) pos.y = ground;
+                    var facing = Vector3.ProjectOnPlane(-p.transform.forward, Vector3.up);
+                    var go = Object.Instantiate(prefab, pos, facing.sqrMagnitude > 0.001f ? Quaternion.LookRotation(facing) : Quaternion.identity);
                     var ch = go.GetComponent<Character>();
                     if (ch != null && level > 1) ch.SetLevel(level);
                 }
@@ -378,12 +380,21 @@ namespace InvisibilityPotion.Dev
         private class GiveCommand : ConsoleCommand
         {
             public override string Name => "ip_give";
-            public override string Help => "ip_give <1|2|3>: apply the invisibility tier effect to yourself";
+            public override string Help => "ip_give <1|2|3>: apply the invisibility tier effect to yourself | ip_give goggles <1|2|3>: put the veil goggles of that tier into your inventory";
 
             public override void Run(string[] args)
             {
                 var p = Player.m_localPlayer;
                 if (p == null) { Say("no local player"); return; }
+                if (args.Length >= 2 && args[0].ToLowerInvariant() == "goggles")
+                {
+                    if (!int.TryParse(args[1], out var gt) || gt < 1 || gt > 3) { Say(Help); return; }
+                    var name = Items.GoggleItems.ItemName(gt);
+                    var prefab = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(name) : null;
+                    if (prefab == null) { Say($"{name} is not registered (see the assets: lines in the log)"); return; }
+                    Say(p.GetInventory().AddItem(prefab, 1) ? $"added {name}" : $"{name} not added (inventory full?)");
+                    return;
+                }
                 if (args.Length < 1 || !int.TryParse(args[0], out var tier) || tier < 1 || tier > 3) { Say(Help); return; }
                 var se = p.GetSEMan().AddStatusEffect(Effects.StatusEffects.NameHash(tier), resetTime: true);
                 Say(se != null ? $"applied T{tier}" : $"T{tier} not applied (already active or not registered)");

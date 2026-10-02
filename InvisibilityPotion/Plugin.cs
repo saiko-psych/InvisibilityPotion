@@ -127,6 +127,14 @@ namespace InvisibilityPotion
             {
                 Log.LogError($"Item registration failed: {e}");
             }
+            try
+            {
+                Items.ModelItems.Register();
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Model registration failed: {e}");
+            }
         }
 
         private void OnDestroy()

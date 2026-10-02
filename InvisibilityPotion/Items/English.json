@@ -21,5 +21,11 @@
   "ip_se_stop": "The veil fades",
   "ip_se_revealed_name": "Revealed",
   "ip_se_revealed_tooltip": "Stamina regenerates slowly.",
-  "ip_msg_lower_tier": "A stronger veil is already active"
+  "ip_msg_lower_tier": "A stronger veil is already active",
+  "item_veilgoggles_t1": "Watchman's Glass",
+  "item_veilgoggles_t1_description": "Crude resin lenses in bronze rims. Their sight is not yet awake.",
+  "item_veilgoggles_t2": "Mimir's Glass",
+  "item_veilgoggles_t2_description": "Pale crystal lenses in silver. Their sight is not yet awake.",
+  "item_veilgoggles_t3": "Allfather's Eye",
+  "item_veilgoggles_t3_description": "Obsidian lenses in a flametal mask. Their sight is not yet awake."
 }
