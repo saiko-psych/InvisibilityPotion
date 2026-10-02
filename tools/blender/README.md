@@ -22,14 +22,14 @@ Run from the repo root: `blender -b --python tools/blender/make_plants.py` (abou
 (gitignored): `plant_t1/t2/t3.fbx` (Y-up, 1 unit = 1 m, pivot at ground level), `preview-plants.png`, `plants.blend`.
 The preview is copied to `tools/blender/preview-plants-v2.png` (1280x720, Eevee, 0.5 m ruler in 0.1 m bands).
 Each FBX is one mesh with named materials plus an empty `PickAnchor` (where a hand grabs it); tier 3 also has
-`EmberAnchor` (0.30 m above the centre) for a spark particle system. Stones and the snow mound sink about 1 cm below 0.
+`EmberAnchor` (0.40 m above the centre) for a spark particle system. Stones and the snow mound sink about 1 cm below 0.
 Leaf cards and strands are single-sided quads: they need a double-sided (cull off) shader in Unity.
 
 | Tier | Name | Biome | Height | Look | Tris |
 |---|---|---|---|---|---|
 | 1 | Huldra's Hair (Huldrelokk) | Black Forest | 0.31 m | dense lichen beard: 38 flat ribbon clumps (half of them crossed pairs) wrapping over a stout dead branch, strips spilling over a mossy stone, moss tufts, 4 faint tip glints | 654 |
 | 2 | Baldr's Tear (Baldrsgrat) | Mountains | 0.44 m | nodding white snowdrop-like bell with a glowing blue cup and teardrop, closed bud, frosted leaves, 3 white mistletoe berries, snow mound | 484 |
-| 3 | Hel's Ember Fern (Helfern) | Ashlands | 0.25 m (about 1 m across) | 6 charcoal fronds arching outwards (none upright), sawtooth leaflets, small ember spore patches on the outer leaflet undersides, ember dots, hex basalt columns over glowing cracks | 592 |
+| 3 | Hel's Ember Fern (Helfern) | Ashlands | 0.46 m (0.71 m across) | 6 charcoal fronds rising steeply (76-86 deg) and arching outwards to 15 deg at the tips, none upright, sawtooth leaflets, small ember spore patches on the outer leaflet undersides, ember dots, hex basalt columns over glowing cracks | 592 |
 
 Knobs at the top of `make_plants.py`:
 1. `MATS`: colour, roughness, metallic, emission per material (`huldra_*`, `baldr_*`, `helfern_*`).

@@ -63,11 +63,11 @@ T2 = dict(  # Baldr's Tear, ~0.45 m
     berries=3, berry_r=0.013,
 )
 T3 = dict(  # Hel's Ember Fern, ~0.5 m
-    columns=6, fronds=6, frond_len=(0.50, 0.58), frond_angle=(64, -18),  # start/end elevation (deg); no upright frond
+    columns=6, fronds=6, frond_len=(0.54, 0.60), frond_angle=(86, 15),  # start/end elevation (deg); no upright frond
     leaflets=11, leaflet_len=0.11,      # leaflets per side; length of the longest one
     leaflet_fwd=0.45, leaflet_droop=0.3,
     spore_scale=0.32, spore_drop=0.002, spore_from=3, embers=6,   # spores only from leaflet spore_from on
-    ember_anchor_h=0.30,
+    ember_anchor_h=0.40,
 )
 # =============================================================================
 
@@ -400,7 +400,8 @@ def tris(ob):
     me = ob.data; me.calc_loop_triangles(); return len(me.loop_triangles)
 
 for k, (ob, kids) in plants.items():
-    print(f"TRIS plant_{k}: {tris(ob)}  height {max((ob.matrix_world @ v.co).z for v in ob.data.vertices):.3f} m")
+    xs = [v.co.x for v in ob.data.vertices]; ys = [v.co.y for v in ob.data.vertices]
+    print(f"TRIS plant_{k}: {tris(ob)}  height {max(v.co.z for v in ob.data.vertices):.3f} m  spread {max(xs)-min(xs):.2f} x {max(ys)-min(ys):.2f} m")
     for a in kids: a.name = a.name.rsplit("_", 1)[0]  # PickAnchor / EmberAnchor exactly
     bpy.ops.object.select_all(action='DESELECT')
     for o in [ob] + kids: o.select_set(True)
