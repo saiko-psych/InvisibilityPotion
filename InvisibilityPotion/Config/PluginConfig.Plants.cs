@@ -22,7 +22,7 @@ namespace InvisibilityPotion.Config
             _plantEntries["LichenTreeChance"] = Bind(PlantsSection, "LichenTreeChance", 0.025f,
                 "Chance that an eligible Black Forest fir/pine carries Huldra's Hair (deterministic per tree position and world seed)", new AcceptableValueRange<float>(0f, 1f));
             _plantEntries["LichenStageMinutes"] = Bind(PlantsSection, "LichenStageMinutes", 120f,
-                "In-game minutes per growth stage of Huldra's Hair (S1 -> S2 -> S3); a pick resets to S1, so regrowth takes twice this", new AcceptableValueRange<float>(0f, 100000f));
+                "Minutes of world time (vanilla thistle: 240) per growth stage of Huldra's Hair (S1 -> S2 -> S3); a pick resets to S1, so regrowth takes twice this", new AcceptableValueRange<float>(0f, 100000f));
             _plantEntries["LichenRevealDistance"] = Bind(PlantsSection, "LichenRevealDistance", 40f,
                 "Metres within which goggles show the lichen on a tree (the tree's distant LOD does not carry it); 0 = no limit", new AcceptableValueRange<float>(0f, 1000f));
             _plantEntries["HuldraCultivable"] = Bind(PlantsSection, "HuldraCultivable", true,
@@ -32,7 +32,7 @@ namespace InvisibilityPotion.Config
             _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", 0.0667f,
                 "Chance per newly generated Ashlands zone to get a Hel's Ember Fern group (3-6 plants within 6 m, variants mixed). Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
             _plantEntries["GroundRegrowMinutes"] = Bind(PlantsSection, "GroundRegrowMinutes", 240f,
-                "In-game minutes until a picked Baldr's Tear or Hel's Ember Fern is ripe again", new AcceptableValueRange<float>(0f, 100000f));
+                "Minutes of world time (vanilla thistle: 240) until a picked Baldr's Tear or Hel's Ember Fern is ripe again", new AcceptableValueRange<float>(0f, 100000f));
             for (var t = 1; t <= 3; t++)
                 _plantEntries[$"YieldT{t}"] = Bind(PlantsSection, $"YieldT{t}", PlantYield.DefaultYieldText(t),
                     $"Items per pick of the tier {t} plant as min-max, rolled per pick" + (t == 1 ? "" : "; bigger plants give up to 25 % more, smaller up to 25 % less"));
@@ -51,7 +51,7 @@ namespace InvisibilityPotion.Config
         public static float LichenRevealDistance => PlantValue("LichenRevealDistance", 40f);
         public static bool HuldraCultivable => PlantValue("HuldraCultivable", true);
         public static float BaldrZoneChance => PlantValue("BaldrZoneChance", 0.167f);
-        public static float HelFernZoneChance => PlantValue("HelFernZoneChance", 0.167f);
+        public static float HelFernZoneChance => PlantValue("HelFernZoneChance", 0.0667f);
         public static float GroundRegrowMinutes => PlantValue("GroundRegrowMinutes", 240f);
         /// <summary>[Plants] YieldTN as (min, max); a malformed value falls back to the default with one warning per text.</summary>
         public static (int min, int max) Yield(int tier)

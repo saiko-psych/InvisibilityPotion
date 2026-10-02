@@ -149,6 +149,12 @@ namespace InvisibilityPotion.Plants
 
         public void UpdateStage()
         {
+            try { UpdateStageUnsafe(); }
+            catch (Exception e) { LogOnce("stage" + e.GetType().Name, $"plants: {name}: stage update failed: {e}"); }
+        }
+
+        private void UpdateStageUnsafe()
+        {
             if (_nview == null || !_nview.IsValid()) return;
             if (!OnTree && Mathf.Approximately(PlantScale, 1f)) ApplyScale();
             var stage = ZdoStage();
@@ -240,6 +246,7 @@ namespace InvisibilityPotion.Plants
             return total;
         }
 
+#if DEBUG
         /// <summary>Debug (ip_grow): take ownership, write base stage and time = now, re-evaluate.</summary>
         public void DevSetStage(int stage)
         {
@@ -251,6 +258,7 @@ namespace InvisibilityPotion.Plants
             _pickedLocallyUntil = 0f;
             UpdateStage();
         }
+#endif
 
         private static void LogOnce(string key, string message)
         {

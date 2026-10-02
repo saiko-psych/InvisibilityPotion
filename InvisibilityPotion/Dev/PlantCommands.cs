@@ -43,11 +43,32 @@ namespace InvisibilityPotion.Dev
             return o == ZDOMan.GetSessionID() ? "local" : o.ToString();
         }
 
+        /// <summary>
+        /// First non-trigger collider under the crosshair that does not belong to the local player (RaycastAll sorted by distance;
+        /// the camera ray starts behind the player in third person).
+        /// </summary>
+        private static bool CrosshairHit(float range, out RaycastHit hit)
+        {
+            hit = default;
+            var cam = GameCamera.instance;
+            if (cam == null) return false;
+            var me = Player.m_localPlayer;
+            var hits = Physics.RaycastAll(cam.transform.position, cam.transform.forward, range, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            foreach (var h in hits)
+            {
+                if (h.collider == null) continue;
+                if (me != null && h.collider.transform.IsChildOf(me.transform)) continue;
+                hit = h;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>The VeilHarvest under the crosshair (any collider of the plant or its tree), else the nearest within 10 m.</summary>
         private static VeilHarvest LookedAtOrNearest(Player p)
         {
-            var cam = GameCamera.instance;
-            if (cam != null && Physics.Raycast(cam.transform.position, cam.transform.forward, out var hit, 50f, ~0, QueryTriggerInteraction.Collide))
+            if (CrosshairHit(50f, out var hit))
             {
                 var h = hit.collider.GetComponentInParent<VeilHarvest>();
                 if (h == null) h = hit.collider.GetComponentInParent<TreeLichen>()?.Lichen?.GetComponent<VeilHarvest>();
@@ -144,8 +165,7 @@ namespace InvisibilityPotion.Dev
 
             private static Plant LookedAtSapling(Player p)
             {
-                var cam = GameCamera.instance;
-                if (cam != null && Physics.Raycast(cam.transform.position, cam.transform.forward, out var hit, 10f, ~0, QueryTriggerInteraction.Collide))
+                if (CrosshairHit(10f, out var hit))
                 {
                     var plant = hit.collider.GetComponentInParent<Plant>();
                     if (plant != null && plant.name.StartsWith(Cultivation.SaplingName, StringComparison.Ordinal)) return plant;
@@ -162,8 +182,7 @@ namespace InvisibilityPotion.Dev
             public override void Run(string[] args)
             {
                 if (args.Length < 1) { Say(Help); return; }
-                var cam = GameCamera.instance;
-                if (cam == null || !Physics.Raycast(cam.transform.position, cam.transform.forward, out var hit, 50f, ~0, QueryTriggerInteraction.Collide))
+                if (!CrosshairHit(50f, out var hit))
                 { Say("look at a tree (nothing under the crosshair within 50 m)"); return; }
                 var tree = hit.collider.GetComponentInParent<TreeLichen>();
                 if (tree == null)

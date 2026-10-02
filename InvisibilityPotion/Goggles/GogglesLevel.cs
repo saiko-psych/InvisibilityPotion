@@ -16,8 +16,12 @@ namespace InvisibilityPotion.Goggles
         /// <summary>Current level 0..3 of the local player (0 without a player).</summary>
         public static int Local { get; private set; }
 
+#if DEBUG
         /// <summary>Debug override (ip_goggles); null = read the helmet slot.</summary>
         public static int? DevOverride { get; set; }
+#else
+        private static int? DevOverride => null;
+#endif
 
         /// <summary>The helmet-slot level before the override (for ip_state).</summary>
         public static int FromHelmet { get; private set; }
@@ -35,6 +39,7 @@ namespace InvisibilityPotion.Goggles
             var helmet = p != null ? p.m_helmetItem : null;
             FromHelmet = GoggleLevel.LevelOf(helmet?.m_dropPrefab != null ? helmet.m_dropPrefab.name : null);
             var level = p == null ? 0 : GoggleLevel.Clamp(DevOverride ?? FromHelmet);
+            if (p == null) _loggedFirst = false;   // log again after the next spawn/login
             if (p != null && !_loggedFirst)
             {
                 _loggedFirst = true;
