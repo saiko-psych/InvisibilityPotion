@@ -9,13 +9,13 @@ Lore: docs/ideas/2026-10-01-norse-lore-research.md section 2.
 Frame: Blender Z-up, the wearer faces -Y (Blender front view), wearer's right eye is at -X.
 Pivot = head centre so Unity can parent the model to the head bone. FBX is exported Y-up, 1 unit = 1 m.
 """
-import bpy, bmesh, math, os, random, shutil
+import bpy, math, os, random, sys
 from mathutils import Vector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import OUT, HERE, Builder as _Builder, mat, export_fbx, tri_count, write_log, reset, \
+    ground, light, camera, world, render
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "out")            # FBX, raw render, .blend (gitignored)
 PREVIEW = os.path.join(HERE, "preview-goggles-v1.png")
-os.makedirs(OUT, exist_ok=True)
 
 # ==== KNOBS (metres) =========================================================
 SEED = 5
@@ -55,125 +55,10 @@ T3 = dict(mask_a=0.125, mask_b=0.142, mask_span=(-152, -28), mask_z=(-0.032, 0.0
           lens_r=0.030, socket_r=0.026, strap_w=0.02, strap_th=0.004, links=3)
 # =============================================================================
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
-scene = bpy.context.scene
+scene = reset()
 
-def mat(name, color, alpha=1.0, rough=0.55, metal=0.0, emit=0.0):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    b = m.node_tree.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = color
-    b.inputs["Roughness"].default_value = rough
-    b.inputs["Metallic"].default_value = metal
-    b.inputs["Alpha"].default_value = alpha
-    if emit:
-        b.inputs["Emission Color"].default_value = color
-        b.inputs["Emission Strength"].default_value = emit
-    m.diffuse_color = color
-    m.use_backface_culling = False
-    if alpha < 1: m.surface_render_method = 'BLENDED'
-    return m
-
-def basis(axis):
-    ax = Vector(axis).normalized()
-    ref = Vector((0, 0, 1)) if abs(ax.z) < 0.9 else Vector((1, 0, 0))
-    u = (ref - ax*ref.dot(ax)).normalized()
-    return ax, u, ax.cross(u)
-
-class Builder:
-    def __init__(self, rng=None):
-        self.bm = bmesh.new(); self.slots = []; self.rng = rng
-    def mi(self, name):
-        if name not in self.slots: self.slots.append(name)
-        return self.slots.index(name)
-    def v(self, co): return self.bm.verts.new(co)
-    def face(self, vs, m):
-        try:
-            f = self.bm.faces.new([x if isinstance(x, bmesh.types.BMVert) else self.v(x) for x in vs])
-            f.material_index = self.mi(m); return f
-        except ValueError: return None
-    def bridge(self, a, b, m, closed=True):
-        n = len(a)
-        for k in range(n if closed else n-1):
-            j = (k+1) % n
-            self.face([a[k], a[j], b[j], b[k]], m)
-    def ring(self, c, axis, r_in, r_out, depth, segs, m, jitter=0.0, rot=0.0):
-        """Rim: annulus extruded along axis (front at c + axis*depth/2). Rectangular cross-section."""
-        ax, u, w = basis(axis); c = Vector(c)
-        corners = ((r_out, -0.5), (r_out, 0.5), (r_in, 0.5), (r_in, -0.5))   # cross-section
-        loops = [[] for _ in corners]
-        for k in range(segs):
-            a = rot + 2*math.pi*k/segs
-            jit = 1 + (self.rng.uniform(-jitter, jitter) if jitter and self.rng else 0)
-            dirv = math.cos(a)*u + math.sin(a)*w
-            for li, (r, d) in enumerate(corners):
-                loops[li].append(self.v(c + dirv*r*jit + ax*depth*d))
-        for a_, b_ in zip(loops, loops[1:] + loops[:1]):
-            self.bridge(a_, b_, m)
-    def disc(self, c, axis, r, segs, m, dome=0.0, rot=0.0):
-        ax, u, w = basis(axis); c = Vector(c)
-        rim = [self.v(c + r*(math.cos(rot+2*math.pi*k/segs)*u + math.sin(rot+2*math.pi*k/segs)*w)) for k in range(segs)]
-        mid = self.v(c + ax*dome)
-        for k in range(segs): self.face([rim[k], rim[(k+1) % segs], mid], m)
-    def box(self, c, x, y, z, m):
-        """Axis vectors x, y, z are full edge vectors."""
-        c = Vector(c); x, y, z = Vector(x)/2, Vector(y)/2, Vector(z)/2
-        P = [self.v(c + sx*x + sy*y + sz*z) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
-        for q in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
-            self.face([P[i] for i in q], m)
-    def tube(self, pts, radii, sides, m):
-        pts = [Vector(p) for p in pts]; n = None; rings = []
-        for i, p in enumerate(pts):
-            t = (pts[min(i+1, len(pts)-1)] - pts[max(i-1, 0)]).normalized()
-            if n is None:
-                ref = Vector((0, 0, 1)) if abs(t.z) < 0.9 else Vector((1, 0, 0))
-                n = (ref - t*ref.dot(t)).normalized()
-            else: n = (n - t*n.dot(t)).normalized()
-            b = t.cross(n); r = radii[i]
-            rings.append([self.v(p)] if r <= 0 else
-                         [self.v(p + r*(math.cos(2*math.pi*k/sides)*n + math.sin(2*math.pi*k/sides)*b)) for k in range(sides)])
-        for a, c in zip(rings, rings[1:]):
-            if len(c) == 1:
-                for k in range(sides): self.face([a[k], a[(k+1) % sides], c[0]], m)
-            else: self.bridge(a, c, m)
-    def ribbon(self, pts, width, th, m, jitter=0.0):
-        """Strap with a rectangular cross-section, width along Z, thickness horizontal."""
-        rows = []
-        for i, p in enumerate(pts):
-            t = (pts[min(i+1, len(pts)-1)] - pts[max(i-1, 0)]).normalized()
-            out = t.cross(Vector((0, 0, 1))).normalized()
-            if out.dot(Vector((p.x, p.y, 0))) < 0: out = -out
-            wj = width*(1 + (self.rng.uniform(-jitter, jitter) if jitter and self.rng else 0))/2
-            up = Vector((0, 0, 1))
-            rows.append([self.v(p + out*th/2 + up*wj), self.v(p + out*th/2 - up*wj),
-                         self.v(p - out*th/2 - up*wj), self.v(p - out*th/2 + up*wj)])
-        for a, b in zip(rows, rows[1:]): self.bridge(a, b, m)
-        self.face(rows[0], m); self.face(rows[-1], m)
-        return rows
-    def bipyramid(self, c, axis, r, h1, h2, sides, m):
-        ax, u, w = basis(axis); c = Vector(c)
-        ring = [self.v(c + r*(math.cos(2*math.pi*k/sides)*u + math.sin(2*math.pi*k/sides)*w)) for k in range(sides)]
-        tip, bot = self.v(c + ax*h1), self.v(c - ax*h2)
-        for k in range(sides):
-            j = (k+1) % sides
-            self.face([ring[k], ring[j], tip], m); self.face([ring[j], ring[k], bot], m)
-    def torus(self, c, axis, R, r, segs, sides, m, stretch=1.0):
-        ax, u, w = basis(axis); c = Vector(c); rings = []
-        for k in range(segs):
-            a = 2*math.pi*k/segs
-            cen = c + R*(math.cos(a)*u*stretch + math.sin(a)*w)
-            d = (math.cos(a)*u + math.sin(a)*w)
-            rings.append([self.v(cen + r*(math.cos(2*math.pi*s/sides)*d + math.sin(2*math.pi*s/sides)*ax)) for s in range(sides)])
-        for k in range(segs): self.bridge(rings[k], rings[(k+1) % segs], m)
-    def finish(self, name):
-        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
-        me = bpy.data.meshes.new(name); self.bm.to_mesh(me); self.bm.free()
-        for f in me.polygons: f.use_smooth = False
-        for s in self.slots:
-            c, ro, mt, em, al = MATS[s]
-            me.materials.append(bpy.data.materials.get(s) or mat(s, c, al, ro, mt, em))
-        ob = bpy.data.objects.new(name, me); scene.collection.objects.link(ob)
-        return ob
+def Builder(rng=None):
+    return _Builder(MATS, rng)
 
 def ell(theta, a=STRAP_A, b=STRAP_B, z=EYE_Z):
     """Point on the strap ellipse. theta in degrees, -90 = front centre, 90 = back."""
@@ -330,16 +215,11 @@ models = {}
 for i, (k, fn) in enumerate((("t1", watchman), ("t2", mimir), ("t3", allfather))):
     models[k] = fn(random.Random(SEED + i))
 
+log = []
 for k, ob in models.items():
-    ob.data.calc_loop_triangles()
-    print(f"TRIS goggles_{k}: {len(ob.data.loop_triangles)}")
-    bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-    bpy.ops.export_scene.fbx(filepath=os.path.join(OUT, f"goggles_{k}.fbx"),
-        use_selection=True, axis_forward='-Z', axis_up='Y',
-        global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE',
-        bake_space_transform=True, mesh_smooth_type='FACE', add_leaf_bones=False,
-        object_types={'MESH', 'EMPTY'}, use_mesh_modifiers=True)
+    log.append(f"TRIS goggles_{k}: {tri_count(ob)}")
+    export_fbx(os.path.join(OUT, f"goggles_{k}.fbx"), ob)
+write_log("goggles", log)
 
 # ---- preview scene: each pair on a grey head ellipsoid on a neck stub ----
 HEAD_Z = 0.30
@@ -354,39 +234,11 @@ for i, (k, ob) in enumerate(models.items()):
     bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.055, depth=HEAD_Z - 0.05, location=(x, 0.01, (HEAD_Z - 0.05)/2))
     n = bpy.context.active_object; n.name = f"neck_ref_{k}"; n.data.materials.append(head_mat)
 
-g = bpy.data.objects.new("ground", bpy.data.meshes.new("ground"))
-bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=20.0)
-bm.to_mesh(g.data); bm.free(); scene.collection.objects.link(g)
-g.data.materials.append(mat("ground", (0.20, 0.19, 0.17, 1), rough=0.9))
-
-def light(name, kind, loc, energy, color, size=1.0, target=(0, 0, HEAD_Z)):
-    l = bpy.data.lights.new(name, kind); l.energy = energy; l.color = color
-    if kind == 'AREA': l.size = size
-    o = bpy.data.objects.new(name, l); o.location = loc
-    scene.collection.objects.link(o)
-    o.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
-light("key", 'AREA', (-1.0, -1.6, 1.4), 55, (1.0, 0.88, 0.75), 1.2)
-light("fill", 'AREA', (1.6, -1.2, 0.6), 15, (0.75, 0.82, 1.0), 1.5)
-light("rim", 'AREA', (0.3, 1.6, 1.2), 40, (1.0, 0.9, 0.8), 1.2)
-light("sky", 'SUN', (0.0, 0.0, 5.0), 0.6, (0.9, 0.92, 1.0))
-
-cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
-cam.data.lens = 35; scene.collection.objects.link(cam)
-cam.location = (0.0, -1.06, 0.38)
-cam.rotation_euler = (Vector((0.0, 0, HEAD_Z - 0.01)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
-scene.camera = cam
-
-w = bpy.data.worlds.new("w"); w.use_nodes = True
-w.node_tree.nodes["Background"].inputs[0].default_value = (0.16, 0.155, 0.15, 1)
-scene.world = w
-
-scene.view_settings.view_transform = "Standard"
-scene.render.resolution_x, scene.render.resolution_y = 1280, 720
-scene.render.filepath = os.path.join(OUT, "preview-goggles.png")
-scene.render.image_settings.file_format = 'PNG'
-for eng in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT', 'BLENDER_WORKBENCH'):
-    try: scene.render.engine = eng; break
-    except TypeError: continue
-bpy.ops.render.render(write_still=True)
-shutil.copyfile(scene.render.filepath, PREVIEW)
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, "goggles.blend"))
+ground()
+light("key", 'AREA', (-1.0, -1.6, 1.4), 55, (1.0, 0.88, 0.75), 1.2, target=(0, 0, HEAD_Z))
+light("fill", 'AREA', (1.6, -1.2, 0.6), 15, (0.75, 0.82, 1.0), 1.5, target=(0, 0, HEAD_Z))
+light("rim", 'AREA', (0.3, 1.6, 1.2), 40, (1.0, 0.9, 0.8), 1.2, target=(0, 0, HEAD_Z))
+light("sky", 'SUN', (0.0, 0.0, 5.0), 0.6, (0.9, 0.92, 1.0), target=(0, 0, HEAD_Z))
+camera((0.0, -1.06, 0.38), (0.0, 0, HEAD_Z - 0.01), 35)
+world((0.16, 0.155, 0.15, 1))
+render("preview-goggles.png", PREVIEW, "goggles.blend")

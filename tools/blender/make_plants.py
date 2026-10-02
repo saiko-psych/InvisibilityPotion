@@ -5,14 +5,14 @@ Tier II  Mountains     Baldr's Tear (Baldrsgrat)    nodding white-blue snow flow
 Tier III Ashlands      Hel's Ember Fern (Helfern)   black fern with ember spore dust on cracked basalt
 Lore: docs/ideas/2026-10-01-norse-lore-research.md section 3.
 """
-import bpy, bmesh, math, os, random, shutil
-from mathutils import Vector, Matrix
+import math, os, random, sys
+from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import OUT, HERE, Builder as _Builder, bezier, empty, export_fbx, tri_count, write_log, reset, \
+    ground, ruler, light, camera, world, render
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "out")            # FBX, raw render, .blend (gitignored)
 PREVIEW = os.path.join(HERE, "preview-plants-v2.png")
-os.makedirs(OUT, exist_ok=True)
 
 # ==== KNOBS (lengths in metres; Blender Z-up, FBX exported Y-up, 1 unit = 1 m, pivot at ground) ====
 SEED = 11                # deterministic; each plant uses SEED + tier index
@@ -71,117 +71,10 @@ T3 = dict(  # Hel's Ember Fern, ~0.5 m
 )
 # =============================================================================
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
-scene = bpy.context.scene
+scene = reset()
 
-def mat(name, color, alpha=1.0, rough=0.55, metal=0.0, emit=0.0):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    b = m.node_tree.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = color
-    b.inputs["Roughness"].default_value = rough
-    b.inputs["Metallic"].default_value = metal
-    b.inputs["Alpha"].default_value = alpha
-    if emit:
-        b.inputs["Emission Color"].default_value = color
-        b.inputs["Emission Strength"].default_value = emit
-    m.diffuse_color = color
-    m.use_backface_culling = False
-    if alpha < 1: m.surface_render_method = 'BLENDED'
-    return m
-
-class Builder:
-    """One mesh with named material slots."""
-    def __init__(self):
-        self.bm = bmesh.new(); self.slots = []
-    def mi(self, name):
-        if name not in self.slots: self.slots.append(name)
-        return self.slots.index(name)
-    def face(self, vs, m):
-        try:
-            f = self.bm.faces.new([self.bm.verts.new(v) if not isinstance(v, bmesh.types.BMVert) else v for v in vs])
-            f.material_index = self.mi(m); return f
-        except ValueError: return None
-    def tube(self, pts, radii, sides, mats, cap=False):
-        """Tube along pts. radii 0 -> single tip vertex. mats: name or one name per segment."""
-        pts = [Vector(p) for p in pts]
-        if isinstance(mats, str): mats = [mats]*(len(pts)-1)
-        n = None; rings = []
-        for i, p in enumerate(pts):
-            t = (pts[min(i+1, len(pts)-1)] - pts[max(i-1, 0)]).normalized()
-            if n is None:
-                ref = Vector((0, 0, 1)) if abs(t.z) < 0.9 else Vector((1, 0, 0))
-                n = (ref - t*ref.dot(t)).normalized()
-            else:
-                n = (n - t*n.dot(t)).normalized()
-            b = t.cross(n)
-            r = radii[i]
-            if r <= 0: rings.append([self.bm.verts.new(p)])
-            else: rings.append([self.bm.verts.new(p + r*(math.cos(2*math.pi*k/sides)*n + math.sin(2*math.pi*k/sides)*b))
-                                for k in range(sides)])
-        for s, (a, c) in enumerate(zip(rings, rings[1:])):
-            for k in range(sides):
-                j = (k+1) % sides
-                if len(c) == 1: vs = [a[k], a[j], c[0]]
-                elif len(a) == 1: vs = [a[0], c[j], c[k]]
-                else: vs = [a[k], a[j], c[j], c[k]]
-                self.face(vs, mats[s])
-        if cap and len(rings[-1]) > 2: self.face(rings[-1], mats[-1])
-        return rings
-    def ico(self, center, scale, m, subdiv=1, jitter=0.0, rng=None, top_mat=None, top_dot=0.5):
-        res = bmesh.ops.create_icosphere(self.bm, subdivisions=subdiv, radius=1.0)
-        vs = res["verts"]
-        for v in vs:
-            k = 1 + (rng.uniform(-jitter, jitter) if rng else 0)
-            v.co = Vector((v.co.x*scale[0]*k, v.co.y*scale[1]*k, v.co.z*scale[2]*k)) + Vector(center)
-        faces = {f for v in vs for f in v.link_faces}
-        for f in faces:
-            f.material_index = self.mi(m)
-            f.normal_update()
-            if top_mat and f.normal.z > top_dot: f.material_index = self.mi(top_mat)
-        return vs
-    def prism(self, center, r, h, sides, m, top_mat=None, rot=0.0, z0=0.0):
-        c = Vector(center)
-        bot = [self.bm.verts.new(c + Vector((r*math.cos(rot+2*math.pi*k/sides), r*math.sin(rot+2*math.pi*k/sides), z0)))
-               for k in range(sides)]
-        top = [self.bm.verts.new(v.co + Vector((0, 0, h - z0))) for v in bot]
-        for k in range(sides):
-            j = (k+1) % sides
-            self.face([bot[k], bot[j], top[j], top[k]], m)
-        self.face(top, top_mat or m)
-    def octa(self, center, r, m):
-        c = Vector(center)
-        ax = [Vector((r, 0, 0)), Vector((0, r, 0)), Vector((-r, 0, 0)), Vector((0, -r, 0))]
-        top = self.bm.verts.new(c + Vector((0, 0, r*1.2))); bot = self.bm.verts.new(c - Vector((0, 0, r*1.2)))
-        ring = [self.bm.verts.new(c + a) for a in ax]
-        for k in range(4):
-            j = (k+1) % 4
-            self.face([ring[k], ring[j], top], m); self.face([ring[j], ring[k], bot], m)
-    def finish(self, name):
-        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
-        me = bpy.data.meshes.new(name); self.bm.to_mesh(me); self.bm.free()
-        for f in me.polygons: f.use_smooth = False
-        for s in self.slots:
-            c, ro, mt, em = MATS[s]
-            me.materials.append(bpy.data.materials.get(s) or mat(s, c, 1.0, ro, mt, em))
-        ob = bpy.data.objects.new(name, me); scene.collection.objects.link(ob)
-        return ob
-
-def empty(name, loc, parent):
-    a = bpy.data.objects.new(name, None); scene.collection.objects.link(a)
-    a.empty_display_type = 'PLAIN_AXES'; a.empty_display_size = 0.03
-    a.location = loc; a.parent = parent
-    return a
-
-def bezier(pts, n):
-    """Catmull-Rom through pts, n samples."""
-    P = [Vector(p) for p in pts]; P = [P[0]] + P + [P[-1]]
-    out = []
-    for i in range(n):
-        u = i/(n-1)*(len(P)-3); s = min(int(u), len(P)-4); t = u - s
-        p0, p1, p2, p3 = P[s:s+4]
-        out.append(0.5*((2*p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t*t + (-p0+3*p1-3*p2+p3)*t**3))
-    return out
+def Builder():
+    return _Builder(MATS)
 
 # ---------------------------------------------------------------- Tier I
 def strip(B, pts, widths, side, mats):
@@ -392,26 +285,14 @@ def helfern(rng):
 # ---------------------------------------------------------------- build + export
 plants = {}
 for i, (k, fn) in enumerate((("t1", huldra), ("t2", baldr), ("t3", helfern))):
-    ob, kids = fn(random.Random(SEED + i))
-    for a in kids: a.name = f"{a.name}_{k}"          # unique in the .blend; renamed exactly on export
-    plants[k] = (ob, kids)
+    plants[k] = fn(random.Random(SEED + i))
 
-def tris(ob):
-    me = ob.data; me.calc_loop_triangles(); return len(me.loop_triangles)
-
+log = []
 for k, (ob, kids) in plants.items():
     xs = [v.co.x for v in ob.data.vertices]; ys = [v.co.y for v in ob.data.vertices]
-    print(f"TRIS plant_{k}: {tris(ob)}  height {max(v.co.z for v in ob.data.vertices):.3f} m  spread {max(xs)-min(xs):.2f} x {max(ys)-min(ys):.2f} m")
-    for a in kids: a.name = a.name.rsplit("_", 1)[0]  # PickAnchor / EmberAnchor exactly
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in [ob] + kids: o.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-    bpy.ops.export_scene.fbx(filepath=os.path.join(OUT, f"plant_{k}.fbx"),
-        use_selection=True, axis_forward='-Z', axis_up='Y',
-        global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE',
-        bake_space_transform=True, mesh_smooth_type='FACE', add_leaf_bones=False,
-        object_types={'MESH', 'EMPTY'}, use_mesh_modifiers=True)
-    for a in kids: a.name = f"{a.name}_{k}"
+    log.append(f"TRIS plant_{k}: {tri_count(ob)}  height {max(v.co.z for v in ob.data.vertices):.3f} m  spread {max(xs)-min(xs):.2f} x {max(ys)-min(ys):.2f} m")
+    export_fbx(os.path.join(OUT, f"plant_{k}.fbx"), ob)
+write_log("plants", log)
 
 POS = {"t1": (-0.64, 0.0), "t2": (0.0, 0.0), "t3": (0.70, 0.1)}
 ROT = {"t1": 0.0, "t2": -1.0, "t3": 0.75}      # preview only (export happened above)
@@ -419,46 +300,12 @@ for k, (ob, kids) in plants.items():
     ob.location = POS[k] + (0,); ob.rotation_euler.z = ROT[k]
 
 # ---- preview scene ----
-g = bpy.data.objects.new("ground", bpy.data.meshes.new("ground"))
-bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=20.0)
-bm.to_mesh(g.data); bm.free(); scene.collection.objects.link(g)
-g.data.materials.append(mat("ground", (0.20, 0.19, 0.17, 1), rough=0.9))
-
-# 0.5 m ruler, alternating 0.1 m bands
-R = Builder()
-for i in range(5):
-    R.prism((0, 0, 0), 0.012, 0.1*(i+1), 4, "ruler_a" if i % 2 == 0 else "ruler_b", rot=math.pi/4, z0=0.1*i)
-MATS["ruler_a"] = ((0.85, 0.85, 0.82, 1), 0.6, 0.0, 0.0); MATS["ruler_b"] = ((0.05, 0.05, 0.05, 1), 0.6, 0.0, 0.0)
-ruler = R.finish("ruler_0.5m"); ruler.location = (-0.32, 0.12, 0)
-
-def light(name, kind, loc, energy, color, size=1.0, target=(0, 0, 0.2)):
-    l = bpy.data.lights.new(name, kind); l.energy = energy; l.color = color
-    if kind == 'AREA': l.size = size
-    o = bpy.data.objects.new(name, l); o.location = loc
-    scene.collection.objects.link(o)
-    o.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+ground()
+ruler((-0.32, 0.12, 0))                         # 0.5 m in 0.1 m bands
 light("key", 'AREA', (1.5, -2.0, 2.0), 160, (1.0, 0.85, 0.7), 1.5)
 light("fill", 'AREA', (-2.2, -1.5, 1.0), 40, (0.7, 0.8, 1.0), 2.0)
 light("rim", 'AREA', (0.0, 2.0, 1.6), 80, (1.0, 0.9, 0.8), 1.5)
 light("sky", 'SUN', (0.0, 0.0, 5.0), 1.2, (0.9, 0.92, 1.0))
-
-cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
-cam.data.lens = 42; scene.collection.objects.link(cam)
-cam.location = (0.06, -2.3, 0.75)
-cam.rotation_euler = (Vector((0.06, 0, 0.21)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
-scene.camera = cam
-
-w = bpy.data.worlds.new("w"); w.use_nodes = True
-w.node_tree.nodes["Background"].inputs[0].default_value = (0.16, 0.155, 0.15, 1)
-scene.world = w
-
-scene.view_settings.view_transform = "Standard"
-scene.render.resolution_x, scene.render.resolution_y = 1280, 720
-scene.render.filepath = os.path.join(OUT, "preview-plants.png")
-scene.render.image_settings.file_format = 'PNG'
-for eng in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT', 'BLENDER_WORKBENCH'):
-    try: scene.render.engine = eng; break
-    except TypeError: continue
-bpy.ops.render.render(write_still=True)
-shutil.copyfile(scene.render.filepath, PREVIEW)
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, "plants.blend"))
+camera((0.06, -2.3, 0.75), (0.06, 0, 0.21), 42)
+world((0.16, 0.155, 0.15, 1))
+render("preview-plants.png", PREVIEW, "plants.blend")
