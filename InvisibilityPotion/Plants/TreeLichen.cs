@@ -160,6 +160,7 @@ namespace InvisibilityPotion.Plants
             }
         }
 
+#if DEBUG
         /// <summary>Debug (ip_lichen): writes IP_LichenForce (1 on, -1 off, 0 roll) as the ZDO owner and re-evaluates at once.</summary>
         public void DevForce(int value)
         {
@@ -169,6 +170,7 @@ namespace InvisibilityPotion.Plants
             if (value == 0 && _lichen != null) { Destroy(_lichen); _lichen = null; }
             Evaluate();
         }
+#endif
 
         private static void LogOnce(string key, string message)
         {
@@ -177,27 +179,38 @@ namespace InvisibilityPotion.Plants
 
         // ---------- registration ----------
 
-        /// <summary>Adds the component to the eligible tree prefabs and dumps their hierarchy (S1 facts) once at startup.</summary>
-        public static void AttachToTrees()
+        private static bool _dumped;
+
+        /// <summary>
+        /// Adds the component to the eligible tree prefabs (idempotent). Called at OnVanillaPrefabsAvailable and again on every
+        /// PrefabManager.OnPrefabsRegistered (ZNetScene.Awake, every world load), looking the prefab up in ZNetScene first, so a
+        /// world entered after a logout still gets lichen. The hierarchy dump (S1) runs once.
+        /// </summary>
+        public static void AttachToTrees(string context)
         {
-            if (PlantPrefabs.LichenTemplate == null) { Plugin.Log.LogWarning("lichen: no template; trees stay vanilla"); return; }
+            if (PlantPrefabs.LichenTemplate == null) { Plugin.Log.LogWarning($"lichen ({context}): no template; trees stay vanilla"); return; }
             var attached = new List<string>();
+            var added = 0;
             foreach (var name in EligibleTrees)
             {
-                var prefab = PrefabManager.Instance.GetPrefab(name);
-                if (prefab == null) { Plugin.Log.LogWarning($"lichen: tree prefab {name} not found; skipped"); continue; }
-                Dump(prefab, true);
-                if (prefab.GetComponent<ZNetView>() == null) { Plugin.Log.LogWarning($"lichen: {name} has no ZNetView; skipped"); continue; }
-                if (prefab.GetComponent<TreeLichen>() == null) prefab.AddComponent<TreeLichen>();
+                var prefab = (ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(name) : null) ?? PrefabManager.Instance.GetPrefab(name);
+                if (prefab == null) { if (!_dumped) Plugin.Log.LogWarning($"lichen: tree prefab {name} not found; skipped"); continue; }
+                if (!_dumped) Dump(prefab, true);
+                if (prefab.GetComponent<ZNetView>() == null) { if (!_dumped) Plugin.Log.LogWarning($"lichen: {name} has no ZNetView; skipped"); continue; }
+                if (prefab.GetComponent<TreeLichen>() == null) { prefab.AddComponent<TreeLichen>(); added++; }
                 attached.Add(name);
             }
-            foreach (var name in InspectOnly)
-            {
-                var prefab = PrefabManager.Instance.GetPrefab(name);
-                if (prefab != null) Dump(prefab, false);
-                else Plugin.Log.LogInfo($"plants: tree {name}: not found");
-            }
-            Plugin.Log.LogInfo($"lichen: TreeLichen on {attached.Count} tree prefabs: {string.Join(", ", attached)}");
+            if (!_dumped)
+                foreach (var name in InspectOnly)
+                {
+                    var prefab = PrefabManager.Instance.GetPrefab(name);
+                    if (prefab != null) Dump(prefab, false);
+                    else Plugin.Log.LogInfo($"plants: tree {name}: not found");
+                }
+            _dumped = true;
+            var check = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab("FirTree") : null;
+            Plugin.Log.LogInfo($"lichen ({context}): TreeLichen on {attached.Count} tree prefabs ({added} newly added): {string.Join(", ", attached)}; " +
+                               $"ZNetScene FirTree has TreeLichen: {(check == null ? "no ZNetScene/FirTree" : (check.GetComponent<TreeLichen>() != null).ToString())}");
         }
 
         private static void Dump(GameObject prefab, bool eligible)
