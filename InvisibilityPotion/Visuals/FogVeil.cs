@@ -649,6 +649,7 @@ namespace InvisibilityPotion.Visuals
             var psr = go.GetComponent<ParticleSystemRenderer>();
             psr.sharedMaterial = material;
             psr.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+            psr.maxParticleSize = 10f;   // viewport fraction; the default 0.5 clips a grown 3 m patch when the camera is close
             psr.shadowCastingMode = ShadowCastingMode.Off;
             psr.receiveShadows = false;
             psr.lightProbeUsage = LightProbeUsage.Off;
@@ -869,49 +870,56 @@ namespace InvisibilityPotion.Visuals
             foreach (var e in snap.Fog)
             {
                 if (e.Go == null || e.Ps == null) { into.Add($"  [{e.Layer}] {e.Anchor}: destroyed"); continue; }
-                var ps = e.Ps;
-                var main = ps.main;
-                var em = ps.emission;
-                var shape = ps.shape;
-                var psr = e.Go.GetComponent<ParticleSystemRenderer>();
-                var mat = psr != null ? psr.sharedMaterial : null;
-                var pos = e.Go.transform.position;
-                into.Add($"  {e.Go.name} [{e.Layer}] {e.Anchor}: active {e.Go.activeInHierarchy}, playing {ps.isPlaying}, emitting {ps.isEmitting}, particles {ps.particleCount}/{main.maxParticles}, " +
-                         $"rate {Curve(em.rateOverTime)}/s + {Curve(em.rateOverDistance)}/m (emission {em.enabled}), startSize {Curve(main.startSize)}, lifetime {Curve(main.startLifetime)}, " +
-                         $"speed {Curve(main.startSpeed)}, space {main.simulationSpace}, scaling {main.scalingMode}, shape {shape.shapeType} r {F(shape.radius)} scale {V(shape.scale)}, " +
-                         $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}");
-                into.Add(psr == null ? "    renderer: none" :
-                         $"    renderer enabled {psr.enabled}, visible {psr.isVisible}, mode {psr.renderMode}, sortingFudge {F(psr.sortingFudge)}, maxParticleSize {F(psr.maxParticleSize)}, " +
-                         $"minParticleSize {F(psr.minParticleSize)}, layer {LayerMask.LayerToName(e.Go.layer)} ({e.Go.layer}), culling mask has layer {(cam != null ? ((cam.cullingMask & (1 << e.Go.layer)) != 0).ToString() : "-")}; " +
-                         $"material '{(mat != null ? mat.name : "-")}' shader '{(mat != null && mat.shader != null ? mat.shader.name : "-")}' queue {(mat != null ? mat.renderQueue.ToString() : "-")}, " +
-                         $"_Color {MatColor(mat, ColorId)}, _EmissionColor {MatColor(mat, EmissionColorId)}, _ZFadeDistance {MatFloat(mat, ZFadeDistanceId)}, " +
-                         $"_CameraFadeDistanceMin/Max {MatFloat(mat, CameraFadeMinId)}/{MatFloat(mat, CameraFadeMaxId)}, _CameraYFadeDistance {MatFloat(mat, CameraYFadeId)}, _Billboard {MatFloat(mat, BillboardId)}");
-                var line = $"    bounds centre {(psr != null ? V(psr.bounds.center) : "-")} size {(psr != null ? V(psr.bounds.size) : "-")}; emitter {V(pos)} = player + {V(pos - playerPos)}" +
-                           (cam != null ? $", {F(Vector3.Distance(camPos, pos))} m from the camera" : "");
-                var n = ps.GetParticles(ParticleBuf);
-                if (n > 0)
+                try
                 {
-                    float alphaSum = 0f, sizeSum = 0f, minCam = float.MaxValue, maxCam = 0f, ySum = 0f;
-                    var local = main.simulationSpace == ParticleSystemSimulationSpace.Local;
-                    for (var i = 0; i < n; i++)
+                    var ps = e.Ps;
+                    var main = ps.main;
+                    var em = ps.emission;
+                    var shape = ps.shape;
+                    var psr = e.Go.GetComponent<ParticleSystemRenderer>();
+                    var mat = psr != null ? psr.sharedMaterial : null;
+                    var pos = e.Go.transform.position;
+                    into.Add($"  {e.Go.name} [{e.Layer}] {e.Anchor}: active {e.Go.activeInHierarchy}, playing {ps.isPlaying}, emitting {ps.isEmitting}, particles {ps.particleCount}/{main.maxParticles}, " +
+                             $"rate {Curve(em.rateOverTime)}/s + {Curve(em.rateOverDistance)}/m (emission {em.enabled}), startSize {Curve(main.startSize)}, lifetime {Curve(main.startLifetime)}, " +
+                             $"speed {Curve(main.startSpeed)}, space {main.simulationSpace}, scaling {main.scalingMode}, shape {shape.shapeType} r {F(shape.radius)} scale {V(shape.scale)}, " +
+                             $"startColor {C(main.startColor.color)} (vertex alpha {F(e.VertexAlpha)}), size over life {ps.sizeOverLifetime.enabled}, velocity {ps.velocityOverLifetime.enabled}");
+                    into.Add(psr == null ? "    renderer: none" :
+                             $"    renderer enabled {psr.enabled}, visible {psr.isVisible}, mode {psr.renderMode}, sortingFudge {F(psr.sortingFudge)}, maxParticleSize {F(psr.maxParticleSize)}, " +
+                             $"minParticleSize {F(psr.minParticleSize)}, layer {LayerMask.LayerToName(e.Go.layer)} ({e.Go.layer}), culling mask has layer {(cam != null ? ((cam.cullingMask & (1 << e.Go.layer)) != 0).ToString() : "-")}; " +
+                             $"material '{(mat != null ? mat.name : "-")}' shader '{(mat != null && mat.shader != null ? mat.shader.name : "-")}' queue {(mat != null ? mat.renderQueue.ToString() : "-")}, " +
+                             $"_Color {MatColor(mat, ColorId)}, _EmissionColor {MatColor(mat, EmissionColorId)}, _ZFadeDistance {MatFloat(mat, ZFadeDistanceId)}, " +
+                             $"_CameraFadeDistanceMin/Max {MatFloat(mat, CameraFadeMinId)}/{MatFloat(mat, CameraFadeMaxId)}, _CameraYFadeDistance {MatFloat(mat, CameraYFadeId)}, _Billboard {MatFloat(mat, BillboardId)}");
+                    var line = $"    bounds centre {(psr != null ? V(psr.bounds.center) : "-")} size {(psr != null ? V(psr.bounds.size) : "-")}; emitter {V(pos)} = player + {V(pos - playerPos)}" +
+                               (cam != null ? $", {F(Vector3.Distance(camPos, pos))} m from the camera" : "");
+                    var n = ps.GetParticles(ParticleBuf);
+                    if (n > 0)
                     {
-                        var pt = ParticleBuf[i];
-                        alphaSum += pt.GetCurrentColor(ps).a / 255f;
-                        sizeSum += pt.GetCurrentSize(ps);
-                        var wp = local ? e.Go.transform.TransformPoint(pt.position) : pt.position;
-                        ySum += wp.y - playerPos.y;
-                        if (cam == null) continue;
-                        var d = Vector3.Distance(camPos, wp);
-                        if (d < minCam) minCam = d;
-                        if (d > maxCam) maxCam = d;
+                        float alphaSum = 0f, sizeSum = 0f, minCam = float.MaxValue, maxCam = 0f, ySum = 0f;
+                        var local = main.simulationSpace == ParticleSystemSimulationSpace.Local;
+                        for (var i = 0; i < n; i++)
+                        {
+                            var pt = ParticleBuf[i];
+                            alphaSum += pt.GetCurrentColor(ps).a / 255f;
+                            sizeSum += pt.GetCurrentSize(ps);
+                            var wp = local ? e.Go.transform.TransformPoint(pt.position) : pt.position;
+                            ySum += wp.y - playerPos.y;
+                            if (cam == null) continue;
+                            var d = Vector3.Distance(camPos, wp);
+                            if (d < minCam) minCam = d;
+                            if (d > maxCam) maxCam = d;
+                        }
+                        var matAlpha = mat != null && mat.HasProperty(ColorId) ? mat.GetColor(ColorId).a : 1f;
+                        line += $"; live {n}: avg vertex alpha {F(alphaSum / n)} (x material {F(matAlpha)} = {F(alphaSum / n * matAlpha)}), avg size {F(sizeSum / n)} m, " +
+                                $"avg height above the player {F(ySum / n)} m" + (cam != null ? $", camera distance {F(minCam)}..{F(maxCam)} m" : "");
                     }
-                    var matAlpha = mat != null && mat.HasProperty(ColorId) ? mat.GetColor(ColorId).a : 1f;
-                    line += $"; live {n}: avg vertex alpha {F(alphaSum / n)} (x material {F(matAlpha)} = {F(alphaSum / n * matAlpha)}), avg size {F(sizeSum / n)} m, " +
-                            $"avg height above the player {F(ySum / n)} m" + (cam != null ? $", camera distance {F(minCam)}..{F(maxCam)} m" : "");
+                    else line += "; no live particles";
+                    into.Add(line);
+
                 }
-                else line += "; no live particles";
-                into.Add(line);
-            }
+                catch (Exception ex)
+                {
+                    into.Add($"  [{e.Layer}] {e.Anchor}: dump failed: {ex.Message}");   // one bad emitter must not hide the others
+                }            }
         }
 #endif
 
