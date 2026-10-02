@@ -76,6 +76,14 @@ namespace InvisibilityPotion
             {
                 Log.LogError($"Status effect registration failed: {e}");
             }
+            try
+            {
+                Items.AssetBundles.Load();
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Asset bundle load failed: {e}");
+            }
             // Server-synced values arrive after join; rebuild the snapshots so they take effect.
             Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) => Cfg.PluginConfig.Refresh();
             Jotunn.Managers.PrefabManager.OnVanillaPrefabsAvailable += RegisterItemsOnce;
