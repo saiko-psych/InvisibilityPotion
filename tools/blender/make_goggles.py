@@ -2,8 +2,8 @@
 
 Tier I   Black Forest  Watchman's Glass   crude bronze rims, resin-amber lenses, rough leather strap, wood temple blocks, twine
 Tier II  Mountains     Mimir's Glass      polished silver lunettes, pale crystal lenses, wolf-pelt trim, frost-crystal shards
-Tier III Ashlands      Allfather's Eye    black flametal half-mask, one obsidian lens (right eye), sealed left socket with an
-                                          Ansuz rune (Odin's rune), ember rim, leather strap with chain links
+Tier III Ashlands      Allfather's Eye    black flametal half-mask, two obsidian lenses with ember rims, small Ansuz rune
+                                          (Odin's rune) on the brow, black leather strap with riveted flametal plates
 Lore: docs/ideas/2026-10-01-norse-lore-research.md section 2.
 
 Frame: Blender Z-up, the wearer faces -Y (Blender front view), wearer's right eye is at -X.
@@ -12,10 +12,10 @@ Pivot = head centre so Unity can parent the model to the head bone. FBX is expor
 import bpy, math, os, random, sys
 from mathutils import Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import OUT, HERE, Builder as _Builder, mat, export_fbx, tri_count, write_log, reset, \
+from common import OUT, HERE, Builder as _Builder, mat, empty, export_fbx, tri_count, write_log, reset, \
     ground, light, camera, world, render
 
-PREVIEW = os.path.join(HERE, "preview-goggles-v1.png")
+PREVIEW = os.path.join(HERE, "preview-goggles-v2.png")
 
 # ==== KNOBS (metres) =========================================================
 SEED = 5
@@ -52,7 +52,9 @@ T1 = dict(rim_segs=9, rim_r=(0.023, 0.030), rim_depth=0.016, jitter=0.06, strap_
 T2 = dict(rim_segs=14, rim_r=(0.0245, 0.0285), rim_depth=0.011, bezel_r=0.0305, strap_w=0.018, strap_th=0.003,
           fur_tufts=40, fur_len=0.022)
 T3 = dict(mask_a=0.125, mask_b=0.142, mask_span=(-152, -28), mask_z=(-0.032, 0.042), mask_th=0.005,
-          lens_r=0.030, socket_r=0.026, strap_w=0.02, strap_th=0.004, links=3)
+          lens_r=0.030, strap_w=0.02, strap_th=0.004,
+          plates=(6, 32, 58), plate_len=0.022, rivets=2,     # plate positions: degrees back from each mask edge
+          rune_z=0.036, rune_h=0.011, crest_w=0.016, crest_h=0.018)   # crest plate + Ansuz mark on the brow centre
 # =============================================================================
 
 scene = reset()
@@ -174,46 +176,45 @@ def allfather(rng):
         th = math.degrees(math.atan2(-math.sqrt(max(0.0, 1 - (x/a)**2))*b, x))
         p = ell(th, a, b, z); nrm = Vector((p.x/a**2, p.y/b**2, 0)).normalized()
         return p + nrm*extra, nrm
-    # right eye (-X): obsidian lens in a raised flametal bezel with an ember rim
-    c, nrm = on_mask(-EYE_X - 0.004, EYE_Z + 0.004, 0.006)
+    # both eyes: obsidian lens in a raised flametal bezel with an ember rim
     lr = t["lens_r"]
-    B.ring(c, nrm, lr - 0.001, lr + 0.007, 0.012, 12, "flametal")
-    B.ring(c + nrm*0.0055, nrm, lr - 0.0015, lr + 0.0005, 0.002, 12, "ember_rim")
-    B.disc(c + nrm*0.004, nrm, lr, 12, "obsidian_lens", dome=0.003)
-    # left eye (+X): sealed socket plate with the Ansuz rune
-    c2, n2 = on_mask(EYE_X + 0.004, EYE_Z + 0.004, 0.005)
-    sr = t["socket_r"]
-    B.ring(c2, n2, sr - 0.004, sr + 0.004, 0.008, 10, "flametal")
-    B.disc(c2 + n2*0.003, n2, sr - 0.003, 10, "flametal")
-    ax, u, w = n2, Vector((0, 0, 1)), n2.cross(Vector((0, 0, 1))).normalized()
-    if w.x < 0: w = -w
-    o = c2 + n2*0.0045
-    def bar(p0, p1, wd=0.0025):
-        p0 = o + w*p0[0] + u*p0[1]; p1 = o + w*p1[0] + u*p1[1]
-        d = (p1 - p0); s = d.cross(n2).normalized()*wd/2
-        B.face([p0 - s, p0 + s, p1 + s, p1 - s], "rune_inlay")
-        # tiny side walls so the inlay has some depth
-        B.face([p0 - s, p1 - s, p1 - s - n2*0.0015, p0 - s - n2*0.0015], "rune_inlay")
-        B.face([p0 + s, p1 + s, p1 + s - n2*0.0015, p0 + s - n2*0.0015], "rune_inlay")
-    bar((-0.004, -0.014), (-0.004, 0.014))                 # stave
-    bar((-0.004, 0.014), (0.008, 0.005)); bar((-0.004, 0.005), (0.008, -0.004))   # Ansuz branches
-    # black leather strap from the mask edges around the back, chain links at the temples
-    pts = [ell(th, STRAP_A + 0.002, STRAP_B, EYE_Z + 0.004) for th in [th1 + 18 + i*(360 - (th1 - th0) - 36)/22 for i in range(23)]]
+    for sx in (-1, 1):
+        c, nrm = on_mask(sx*(EYE_X + 0.004), EYE_Z + 0.004, 0.006)
+        B.ring(c, nrm, lr - 0.001, lr + 0.007, 0.012, 12, "flametal")
+        B.ring(c + nrm*0.0055, nrm, lr - 0.0015, lr + 0.0005, 0.002, 12, "ember_rim")
+        B.disc(c + nrm*0.004, nrm, lr, 12, "obsidian_lens", dome=0.003)
+    # small flametal crest plate in the brow V carrying an Ansuz mark (stave + two branches) in ember inlay
+    c, nrm = on_mask(0.0, t["rune_z"], 0.0)
+    c = c + nrm*0.0075                                # brow bulge at the centre is about 0.006
+    up = Vector((0, 0, 1)); rt = up.cross(nrm).normalized()
+    B.box(c + nrm*0.0015, rt*t["crest_w"], up*t["crest_h"], nrm*0.003, "flametal")
+    c = c + nrm*0.003
+    h = t["rune_h"]/2
+    B.strokes(c, nrm, (0, 0, 1), [((-0.0025, -h), (-0.0025, h)), ((-0.0025, h), (0.0035, h*0.35)),
+                                  ((-0.0025, h*0.25), (0.0035, -h*0.4))], 0.0018, 0.0012, "rune_inlay")
+    # black leather strap: starts under the mask edges (hidden), runs round the back; riveted plates at the joints
+    a0, a1 = th1 - 8, th0 + 360 + 8
+    pts = [ell(a0 + (a1 - a0)*i/26, STRAP_A + 0.002, STRAP_B, EYE_Z + 0.004) for i in range(27)]
     B.ribbon(pts, t["strap_w"], t["strap_th"], "black_leather")
-    for side_pts in ((ell(th1 + 3, a, b, EYE_Z + 0.004), pts[0]), (ell(th0 - 3, a, b, EYE_Z + 0.004), pts[-1])):
-        p0, p1 = side_pts
-        for k in range(t["links"]):
-            q = p0.lerp(p1, (k + 0.5)/t["links"])
-            d = (p1 - p0).normalized()
-            nrm_out = Vector((q.x, q.y, 0)).normalized()
-            axis = nrm_out if k % 2 == 0 else Vector((0, 0, 1))
-            B.torus(q, axis, 0.0045, 0.0013, 6, 3, "chain", stretch=1.0)
+    for side, base in ((1, th1), (-1, th0 + 360)):
+        for off in t["plates"]:
+            th = base + side*off
+            p = ell(th, STRAP_A + 0.002, STRAP_B, EYE_Z + 0.004)
+            tng = (ell(th + 1, STRAP_A + 0.002, STRAP_B) - ell(th - 1, STRAP_A + 0.002, STRAP_B)).normalized()
+            out = Vector((p.x/(STRAP_A + 0.002)**2, p.y/STRAP_B**2, 0)).normalized()
+            L = t["plate_len"] * (1.25 if off == t["plates"][0] else 1.0)   # the joint plate overlaps the mask edge
+            pc = p + out*(t["strap_th"]/2 + 0.0015)
+            B.box(pc, tng*L, Vector((0, 0, t["strap_w"] + 0.004)), out*0.003, "flametal")
+            for k in range(t["rivets"]):
+                q = pc + tng*L*(0.3 if k else -0.3) + out*0.0015
+                B.disc(q, out, 0.0022, 5, "chain", dome=0.0018)
     return B.finish("goggles_t3")
 
 # ---------------------------------------------------------------- build + export
 models = {}
 for i, (k, fn) in enumerate((("t1", watchman), ("t2", mimir), ("t3", allfather))):
     models[k] = fn(random.Random(SEED + i))
+    empty("attach", (0, 0, 0), models[k], 0.02)        # head centre = pivot; VisEquipment looks for this name
 
 log = []
 for k, ob in models.items():

@@ -10,7 +10,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | `make_bottle.py` (v5) | `bottle_t1..3.fbx`, `bottles.blend`, `bottles.log` | `preview-bottles-v5.png` | base | `MistAnchor`, `attach` (neck) |
 | `make_bowl.py` (v1) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v1.png` | base | `attach` (rim, +X) |
 | `make_plants.py` (v2) | `plant_t1..3.fbx`, `plants.blend`, `plants.log` | `preview-plants-v2.png` | ground | `PickAnchor`, `EmberAnchor` (t3) |
-| `make_goggles.py` (v1) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v1.png` | head centre | none |
+| `make_goggles.py` (v2) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v2.png` | head centre | `attach` (head centre) |
 
 ## Shared conventions (`common.py`)
 
@@ -33,7 +33,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 |---|---|---|---|---|
 | 1 | 370 | 277 | 654 | 490 |
 | 2 | 448 | 451 | 484 | 1112 |
-| 3 | 560 | 447 | 592 | 1124 |
+| 3 | 560 | 447 | 592 | 1216 |
 
 # Veil-mead flasks (v5): finished meads
 
@@ -94,11 +94,11 @@ Knobs at the top of `make_plants.py`:
    `leaflet_len`, `leaflet_fwd`, `leaflet_droop`, `spore_scale`, `spore_from` (first leaflet with spores), `embers`, `ember_anchor_h`. `SEED` for all.
 Preview-only placement: `POS`, `ROT` (turn the flower toward the camera), camera and lights near the end.
 
-# Veil goggles (v1)
+# Veil goggles (v2)
 
 Outputs `goggles_t1/t2/t3.fbx`, `preview-goggles.png`, `goggles.blend`; the preview is copied to
-`tools/blender/preview-goggles-v1.png` (grey reference heads 0.22 m wide, turned 30 degrees so the strap shows).
-Real scale for a ~1.8 m character. Pivot = head centre (parent to the head bone). In Blender the wearer faces -Y and
+`tools/blender/preview-goggles-v2.png` (grey reference heads 0.22 m wide, turned 30 degrees so the strap shows).
+Real scale for a ~1.8 m character. Pivot = head centre (parent to the head bone); each FBX has an `attach` empty there. In Blender the wearer faces -Y and
 the right eye is at -X; check the facing once after the Unity import (rotate the attach point 180 degrees if it is
 backwards). Eyes 0.065 m apart, lenses about 0.05 m, strap ellipse just outside the 0.22 x 0.25 m head.
 
@@ -106,17 +106,17 @@ backwards). Eyes 0.065 m apart, lenses about 0.05 m, strap ellipse just outside 
 |---|---|---|---|---|
 | 1 | Watchman's Glass | Black Forest | crude jittered bronze rims, resin-amber lenses (alpha), wood temple blocks, rough leather strap, twine wraps | 490 |
 | 2 | Mimir's Glass | Mountains | polished silver rims with bezels, pale crystal lenses (alpha), silver temple arms with frost-crystal shards, dark strap with wolf-pelt trim | 1112 |
-| 3 | Allfather's Eye | Ashlands | black flametal half-mask with brow V and cheek guards, obsidian lens with ember rim over the right eye, sealed left socket with an Ansuz rune inlay, black strap on chain links | 1124 |
+| 3 | Allfather's Eye | Ashlands | black flametal half-mask with brow V and cheek guards, two obsidian lenses in flametal bezels with ember rims, small crest plate in the brow V with an ember Ansuz mark, black leather strap starting under the mask edges with 3 riveted flametal plates per side | 1216 |
 
 Knobs at the top of `make_goggles.py`:
 1. Fit: `HEAD`, `EYE_Z`, `EYE_X`, `LENS_Y`, `STRAP_A`, `STRAP_B`.
 2. `MATS`: colour, roughness, metallic, emission, alpha (`bronze`, `amber_lens`, `silver`, `crystal_lens`, `flametal`, `obsidian_lens`, `ember_rim`, `rune_inlay` ...).
 3. `T1`: rim segments/radii/depth/`jitter`, strap size. `T2`: rims, `bezel_r`, strap, `fur_tufts`, `fur_len`.
-   `T3`: mask ellipse, `mask_span` (degrees), `mask_z`, thickness, `lens_r`, `socket_r`, strap, chain `links`.
+   `T3`: mask ellipse, `mask_span` (degrees), `mask_z`, thickness, `lens_r`, strap, `plates` (degrees back from each
+   mask edge), `plate_len`, `rivets`, `rune_z`, `rune_h`, `crest_w`, `crest_h`.
 Preview-only: `HEAD_Z`, `SPACING`, `PREVIEW_TURN`, camera and lights near the end.
 
 # Known gaps
 
 Flat colours only (no textures yet), emission does not bloom in Eevee 5.x, transparent glass and lens materials
-need a transparent shader in Unity, the goggles have no `attach` empty yet (spec 5.1 lists one at the head centre;
-the pivot is already there), the bottle mist is a preview-only volume.
+need a transparent shader in Unity, the bottle mist is a preview-only volume.
