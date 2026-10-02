@@ -8,12 +8,13 @@ Custom models reach the game through one Unity asset bundle, `ip_assets`, embedd
 
 | Path | Content |
 |---|---|
-| `Assets/Shaders/JVLmock_Custom_*.shader` | Dummy stumps named `JVLmock_Custom/Creature`, `/Distortion`, `/LitParticles`, `/Piece`. Jötunn swaps in the vanilla shader at runtime (`fixReference: true`); only the `Shader "..."` line matters. They declare `_Color` and `_MainTex` so the material keeps those values. |
-| `Assets/Materials/*.mat` | In the bundle. |
-| `Assets/Prefabs/*.prefab` | In the bundle. Layout: root (empty) -> `model` (MeshFilter + MeshRenderer) -> anchors. Components come from C#. |
-| `Assets/Meshes/` | Meshes referenced by prefabs; pulled into the bundle as dependencies. |
+| `Assets/Shaders/JVLmock_Custom_*.shader` | Dummy stumps named `JVLmock_Custom/Creature`, `/Distortion`, `/LitParticles`, `/Piece`, `/Vegetation` (the last name is assumed, see below). Jötunn swaps in the vanilla shader at runtime (`fixReference: true`); only the `Shader "..."` line matters. They declare the properties the materials set (`_Color`, `_MainTex`, `_EmissionColor`, `_Glossiness`, `_Metallic`, normal map, `_Cutoff`; Distortion also `_RefractionIntensity`) so the values survive. |
+| `Assets/Models/*.fbx` | Blender output, copied by `make models`; committed with their `.meta` (importer settings and material remaps are written by `AssetSetup`). |
+| `Assets/Materials/*.mat` | In the bundle. One per Blender material name, written by `AssetSetup`. |
+| `Assets/Prefabs/*.prefab` | In the bundle, written by `AssetSetup`. Layout see "Models and prefabs". Components come from C#. |
+| `Assets/Textures/ip_white.asset` | 4x4 white albedo set as `_MainTex` on every material (the vanilla shaders' default texture is unknown). |
 | `Assets/Editor/BundleBuilder.cs` | `BundleBuilder.Build`: reads `-target linux\|windows` (default linux), assigns bundle name `ip_assets` to everything under `Assets/Prefabs` and `Assets/Materials`, builds `Build/Bundles/<target>/ip_assets` with `ChunkBasedCompression \| StrictMode`, exits 1 on failure. |
-| `Assets/Editor/SpikeSetup.cs` | `SpikeSetup.Create`: generates the spike cube mesh, materials and prefabs (no GUI needed). |
+| `Assets/Editor/AssetSetup.cs` | `AssetSetup.Create`: importer settings, materials and prefabs for every FBX in `Assets/Models` (no GUI needed). Replaces the spike's `SpikeSetup`. |
 | `Packages/manifest.json` | Minimal: `com.unity.modules.assetbundle` (required, see below) and `com.unity.toolchain.linux-x86_64` (Unity adds it on its own on Linux). |
 
 Never open the project in the editor while `make bundle` runs; the Makefile refuses while `Temp/UnityLockfile` exists.
@@ -21,7 +22,9 @@ Never open the project in the editor while `make bundle` runs; the Makefile refu
 ## Commands
 
 ```
-make unity-setup             # SpikeSetup.Create, log: build/unity-setup.log
+make models                  # every tools/blender/make_*.py headless, then copy tools/blender/out/*.fbx to Assets/Models
+make models SKIP_BLENDER=1   # only copy what tools/blender/out/ already holds
+make unity-setup             # AssetSetup.Create, log: build/unity-setup.log
 make bundle                  # Linux bundle -> InvisibilityPotion/Assets/ip_assets, log: build/unity-bundle-linux.log
 make bundle TARGET=windows   # Windows bundle -> InvisibilityPotion/Assets/ip_assets.windows, log: build/unity-bundle-windows.log
 ```
@@ -34,6 +37,36 @@ $UNITY -batchmode -nographics -quit -projectPath unity/InvisibilityPotionAssets 
 ```
 
 `InvisibilityPotion/Assets/ip_assets` is committed and embedded through `<EmbeddedResource Include="Assets\ip_assets" />`, so `make build` works without Unity.
+
+Full rebuild after a model change: `make models && make unity-setup && make bundle && make bundle TARGET=windows`, then commit the FBX files, the generated `.mat`/`.prefab`/`.meta` files and both bundles.
+
+## Models and prefabs
+
+`AssetSetup.Create` turns each `Assets/Models/<file>.fbx` into `Assets/Prefabs/<Prefab>.prefab`:
+
+| FBX | Prefab | Registered in game as | Layout |
+|---|---|---|---|
+| `bottle_t1..3` | `MeadBottle_T1..3` | item `MeadInvisibility_T1..3` (clone; mist added) | root -> `attach` -> `model` (`mist_tN` renderer disabled, `MistAnchor`, FBX `attach` empty) |
+| `bowl_t1..3` | `MeadBowl_T1..3` | item `MeadBaseInvisibility_T1..3` (clone) | root -> `attach` -> `model` |
+| `goggles_t1..3` | `Goggles_T1..3` | helmet item `VeilGoggles_T1..3` (clone) | root -> `attach` -> `model` |
+| `plant_t1_s1..s3`, `plant_t1`, `plant_t1_s3_a/b/c`, `plant_t1_flat`, `plant_t1_flat_a/b/c`, `plant_t2`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3`, `plant_t3_a/b/c`, `plant_t3_picked` | `Plant_T1_S1..S3`, `Plant_T1`, `Plant_T1_S3_a/b/c`, `Plant_T1_Flat`, `Plant_T1_Flat_a/b/c`, `Plant_T2`, `Plant_T2_a/b/c`, `Plant_T2_picked`, `Plant_T3`, `Plant_T3_a/b/c`, `Plant_T3_picked` (21) | the bundle prefab itself as `CustomPrefab` with a non-persistent `ZNetView` (`ip_spawn Plant_T2`) | root -> `model` (`PickAnchor`, `EmberAnchor` on T3) |
+
+Name rule (`AssetSetup.PrefabName`): `bottle`/`bowl`/`goggles`/`plant` become `MeadBottle`/`MeadBowl`/`Goggles`/`Plant`, `tN`/`sN` upper case, `flat` -> `Flat`, other suffixes (`a`, `b`, `c`, `picked`) stay as they are. Un-suffixed plant files are variant a (identical meshes; kept so the base names exist).
+
+Why `root -> attach -> model` for items: Valheim shows only the **direct child named `attach`** of an item prefab, instantiated at the hand/head joint or the item stand's attach point with an identity local transform (`VisEquipment.AttachItem`, `ItemStand.SetVisualItem`; `docs/decompile-notes.md`, "Asset items"). So the whole model lives inside `attach`, shifted so the FBX's own `attach` empty (grip point: bottle neck, bowl rim at +X, goggles head centre) lands on the `attach` origin. On the ground the same object is what you see; the C# `BoxCollider` is sized from the mesh bounds.
+
+Materials (one `.mat` per Blender material name, shared across FBX files):
+
+| Material names | Stump shader | Values |
+|---|---|---|
+| `bottle_glass_t1..3`, `amber_lens`, `crystal_lens`, `obsidian_lens` | `JVLmock_Custom/Distortion` | `_Color` with the Blender alpha (0.45 glass; lenses 0.6 / 0.35 / 0.88), `_RefractionIntensity` 0.02, `_Glossiness` 0.9 |
+| plant foliage: `huldra_strand`, `huldra_strand_shade`, `huldra_tip`, `baldr_leaf`, `baldr_petal`, `helfern_frond` | `JVLmock_Custom/Vegetation` (assumed vanilla name; C# falls back to `Custom/Creature` with a warning) | `_Color` |
+| `bottle_mist_t1..3` | `JVLmock_Custom/Creature` | renderer disabled; C# reads the colour for the particle mist |
+| everything else (wood, metal, leather, cork, brew, stones, berries, glowing parts) | `JVLmock_Custom/Creature` (chosen over `/Piece` for one shader everywhere; the `/Piece` stump stays for a comparison) | `_Color` opaque; `_EmissionColor` = colour x Blender emission strength for the 12 emissive materials |
+
+Where the values come from: `_Color` and alpha from the FBX import (Unity's Standard material import, read once before the remap); emission from the `MATS` tables in `tools/blender/make_*.py` (Blender's FBX exporter writes `EmissiveColor` 0,0,0).
+
+C# side: `Items/AssetBundles.cs` (load, asset list, shader safety net), `Items/ModelPrefabs.cs` (item components, mist, plants), `Items/PotionItems.cs` (meads and bases), `Items/GoggleItems.cs`, `Items/ModelItems.cs` (goggles, plants, unload), dev commands in `Dev/AssetCommands.cs`.
 
 ## Spike results
 
@@ -72,4 +105,15 @@ Findings that feed S1/S2:
 - A material with Unity `Standard` pulls `Standard` from `unity_builtin_extra` into the bundle (112.7 KB of 333 KB uncompressed on Linux), again per graphics API. So `Standard` would work only on the platform the bundle was built for (S2 in-game check still open).
 - Possible follow-up: shrink the stumps to a one-line unlit shader to cut bundle size.
 
-Open: S1 (cross-platform load), S2 (glass shader, `Standard` viability), S4, S5 (embedded resource name), S6 need the in-game spike with a C# loader.
+### First full integration (2026-10-02, build time)
+
+Observed while building (in-game results still open, see `docs/testing.md`, "Plan 4 – first integration"):
+- 30 FBX files, 73 materials, 30 prefabs. Bundle sizes: Linux `ip_assets` 857504 bytes (837 KB), Windows `ip_assets.windows` 811759 bytes (793 KB). `make unity-setup` about 7 s, `make bundle` about 7 s per target (warm).
+- Import: every FBX root comes in with identity rotation and scale 1 (Blender's `bake_space_transform` works); heights match the Blender scripts (bottles 0.162 / 0.231 / 0.26 m, bowls 0.062 m, goggles 0.237 m wide). Goggles: Y is up, the strap ring spans Z.
+- Alpha survives the FBX import (`_Color.a` 0.45 on the glass, the lens alphas as in `make_goggles.py`); emission does not (see above).
+- Batch-mode material remapping works: `ModelImporter.AddRemap(SourceAssetIdentifier(typeof(Material), name), mat)` + `SaveAndReimport`. Reading the embedded materials needs the remaps removed first, and the embedded `Material` objects are destroyed by the reimport.
+- `PrefabUtility.SaveAsPrefabAsset` gives newly created GameObjects new local file IDs on every run, so rerunning `make unity-setup` rewrites the item prefabs (`attach` wrapper) with only file-ID changes; plant prefabs stay byte-identical. Revert those diffs if no model changed.
+- Jötunn `PrefabManager.CreateClonedPrefab(name, prefab)` refuses a name that `GetPrefab` already resolves, and its cache can see the loaded bundle asset of the same name: items are therefore cloned under their item names, plants are registered as the bundle prefabs themselves.
+- S5 is expected to work: `AssetUtils.LoadAssetBundleFromResources` matches the manifest name by `EndsWith` (`InvisibilityPotion.Assets.ip_assets`; the Windows bundle is `....ip_assets.windows`, which does not end with `ip_assets`). The Debug build logs the manifest names to confirm.
+
+Open, settled in-game by the plan-4 checklist: S1 (Windows load), S2 (do the mock shaders resolve, does `Custom/Vegetation` exist, does the glass read as glass), S4 (`ip_components MeadHealthMinor`), S6 (held/stand visuals through `attach`).

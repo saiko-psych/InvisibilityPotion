@@ -229,3 +229,35 @@ Potions and recipes (Task 10):
 - [ ] Veil code (VeilController/FogVeil) should not run on a headless dedicated server.
 - [ ] Balancing of recipes and fermenter output (plan 4).
 - [ ] Two-client check: inject an out-of-range `IP_Tier` with a debug command and confirm nothing throws.
+
+## Plan 4 – first integration (custom models)
+
+Setup: `make build` (Debug), `make run`. Everything below also writes to the BepInEx log; paste the `assets:` lines into the chat.
+
+Startup log:
+- [ ] `assets: manifest resources: ...` lists `InvisibilityPotion.Assets.ip_assets` and `....ip_assets.windows` (S5); `assets: loaded 'ip_assets' (... 30 prefabs, 73 materials)`
+- [ ] One `assets: item ...` line per mead, base and goggles: note the template components (S4) and the layer
+- [ ] `assets: T1..T3 mist on 1 anchor(s)` (one MistAnchor per bottle: the attach wrapper holds the only model)
+- [ ] `assets: <item>: material ...: JVLmock_Custom/X -> Custom/X (resolved by the plugin)` per item material; any `not found; using Custom/Creature` warning names a wrong shader guess (expected candidate: `Custom/Vegetation`)
+- [ ] `assets: 21 plant prefabs registered`, `assets: goggles VeilGoggles_T1..3 registered`, `assets: bundle unloaded`
+- [ ] After joining: `assets: shader check at OnPrefabsRegistered: N material(s) still had a JVLmock_ shader` (N > 0 means Jötunn had not fixed the plant materials yet; the plugin did)
+
+Items (meads and bases):
+- [ ] Inventory icons of the three bases (bowls) and three meads (bottles) show the new models (icons are rendered with the resolved shaders)
+- [ ] Craft a base at the Mead Ketill; put it into the fermenter; the fermenter accepts it and yields 4 meads of the tier
+- [ ] Drop a mead and a base: they fall, rest upright-ish on the ground, can be picked up (collider size ok, not floating, not sinking)
+- [ ] Glass: does `Custom/Distortion` read as tinted glass (alpha 0.45) or invisible/opaque? Screenshot against the sky and against terrain (S2)
+- [ ] Mist inside the finished bottles: visible, stays inside the glass, tier colour, not flickering against the glass (sorting)
+- [ ] Item stand: hang a mead and a base; the model shows (needs the `attach` child) and sits sensibly (grip at the neck / rim). Note the orientation
+- [ ] Hand-held: consumables are not equipped in vanilla, so no held bottle is expected; drinking still plays the burst
+- [ ] Colours: compare with `tools/blender/preview-*.png` (the material colours are Blender's linear values; if everything looks washed out, the colour space needs a conversion)
+- [ ] Existing meads from earlier rounds in the inventory still exist (same prefab names) and now show the bottle
+
+Plants and goggles (look checks):
+- [ ] `ip_spawn <name>` for each: `Plant_T1_S1`, `Plant_T1_S2`, `Plant_T1_S3`, `Plant_T1_S3_a/b/c`, `Plant_T1_Flat`, `Plant_T1_Flat_a/b/c`, `Plant_T2`, `Plant_T2_a/b/c`, `Plant_T2_picked`, `Plant_T3`, `Plant_T3_a/b/c`, `Plant_T3_picked` (spawned on the ground 5 m ahead, facing you; tier 1 is meant for bark and will stand upright)
+- [ ] Lichen beards and leaves visible from both sides (Vegetation shader cull-off), no pink, glowing parts glow (`helfern_heart`, `helfern_ember`, `baldr_glow`)
+- [ ] `ip_spawn VeilGoggles_T1` (and T2, T3): dropped goggles visible on the ground
+- [ ] `ip_give goggles 1` (2, 3): goggles in the inventory with an icon, equip in the helmet slot: they show on the head; note position and facing (Blender -Y front should be the face side; if backwards or offset, the `attach` origin needs a rotation/offset); hair stays visible
+- [ ] `ip_components VeilGoggles_T1`, `ip_components MeadHealthMinor`, `ip_components HelmetLeather`: paste the logs (S4: compare the vanilla child names/components with ours)
+- [ ] `ip_shaderdump MeadInvisibility_T2` and `ip_shaderdump Plant_T2`: shaders resolved, render queue of the glass
+- [ ] `ip_bundle`: every material listed with a `Custom/...` shader, none `JVLmock_...`, all `supported True`
