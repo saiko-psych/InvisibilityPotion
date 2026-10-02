@@ -45,6 +45,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("ZNet", "UpdatePlayerList"),
             PatchHealth.TargetKey("ZDOMan", "SendZDOs"),
             PatchHealth.TargetKey("Player", "UpdatePlacementGhost"),
+            PatchHealth.TargetKey("Player", "GetMaxCarryWeight"),
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();

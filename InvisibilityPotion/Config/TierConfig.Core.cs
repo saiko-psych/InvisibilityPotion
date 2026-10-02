@@ -18,6 +18,7 @@ namespace InvisibilityPotion.Config
         public float DebuffDuration;
         public float Cooldown;
         public string Recipe = "";
+        public float CarryWeightMultiplier = 1f;   // max carry weight while the effect is active, 1 = off
         public string BodyVeilMode = "Off";  // Off, Cutoff, Hide, Tint, Ghost, Distortion, Shadow, Spirit; the fog look lives in [Fog.TierN]
 
         public bool EndsOnReveal => RehideDelay <= 0f;
@@ -28,6 +29,8 @@ namespace InvisibilityPotion.Config
             if (Duration <= 0f) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be > 0");
             if (AggroLossTime < 0f) throw new ArgumentOutOfRangeException(nameof(AggroLossTime));
             if (DebuffDuration < 0f) throw new ArgumentOutOfRangeException(nameof(DebuffDuration));
+            if (!(CarryWeightMultiplier >= 0f && CarryWeightMultiplier <= 1f))
+                throw new ArgumentOutOfRangeException(nameof(CarryWeightMultiplier), CarryWeightMultiplier, "carry weight multiplier must be 0..1");
         }
     }
 

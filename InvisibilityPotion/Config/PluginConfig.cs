@@ -45,9 +45,9 @@ namespace InvisibilityPotion.Config
         public static void Bind(ConfigFile file)
         {
             _file = file;
-            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, MeadRecipes.NewDefault(1), LookDefaults.BodyVeilModes[1]);
-            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, MeadRecipes.NewDefault(2), LookDefaults.BodyVeilModes[2]);
-            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, MeadRecipes.NewDefault(3), LookDefaults.BodyVeilModes[3]);
+            BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, 0.75f, MeadRecipes.NewDefault(1), LookDefaults.BodyVeilModes[1]);
+            BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, 0.6f, MeadRecipes.NewDefault(2), LookDefaults.BodyVeilModes[2]);
+            BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, 0.5f, MeadRecipes.NewDefault(3), LookDefaults.BodyVeilModes[3]);
             BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
             BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
@@ -75,7 +75,7 @@ namespace InvisibilityPotion.Config
             Refresh();
         }
 
-        private static void BindTier(int tier, float duration, float stealth, float noise, bool ignored, bool hiddenFromPlayers, float aggroLoss, float rehide, string recipe,
+        private static void BindTier(int tier, float duration, float stealth, float noise, bool ignored, bool hiddenFromPlayers, float aggroLoss, float rehide, float carry, string recipe,
                                      string bodyMode)
         {
             var section = $"Tier{tier}";
@@ -90,6 +90,9 @@ namespace InvisibilityPotion.Config
                 ["RehideDelay"] = Bind(section, "RehideDelay", rehide, "Seconds without attacking until hidden again; 0 = an attack ends the effect"),
                 ["DebuffStaminaRegenMultiplier"] = Bind(section, "DebuffStaminaRegenMultiplier", 0.5f, "Stamina regeneration multiplier after revealing"),
                 ["DebuffDuration"] = Bind(section, "DebuffDuration", 20f, "Debuff duration in seconds, restarted on every reveal"),
+                ["CarryWeightMultiplier"] = Bind(section, "CarryWeightMultiplier", carry,
+                                                 "Max carry weight while the effect is active, as a fraction of the normal limit (Megingjord and world settings included). 1 = no penalty. Being over the limit slows the player as in vanilla",
+                                                 new AcceptableValueRange<float>(0f, 1f)),
                 ["Cooldown"] = Bind(section, "Cooldown", 0f, "Reserved; not used in plan 2"),
                 ["Recipe"] = Bind(section, "Recipe", recipe, "Mead base recipe at the cauldron: Item:Amount,Item:Amount. Read once at startup from the local file; applies locally and is not server-controlled yet"),
                 ["BodyVeilMode"] = Bind(section, "BodyVeilMode", bodyMode,
@@ -298,6 +301,7 @@ namespace InvisibilityPotion.Config
                 RehideDelay = V<float>("RehideDelay"),
                 DebuffStaminaRegenMultiplier = V<float>("DebuffStaminaRegenMultiplier"),
                 DebuffDuration = V<float>("DebuffDuration"),
+                CarryWeightMultiplier = V<float>("CarryWeightMultiplier"),
                 Cooldown = V<float>("Cooldown"),
                 Recipe = V<string>("Recipe"),
                 BodyVeilMode = V<string>("BodyVeilMode"),

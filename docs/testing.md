@@ -459,3 +459,13 @@ Yaw:
 Wind:
 - [ ] Baldr's Tear leaves/petals, the fern fronds and Huldra's Hair strands sway gently in wind (compare with a nearby vanilla bush); no plant flies apart or sinks; stems stay still
 
+
+## Plan 5 – carry weight while invisible
+
+Config `[TierN] CarryWeightMultiplier` (admin, synced, 0..1, defaults T1 0.75, T2 0.6, T3 0.5; 1 = off). Applies to the full limit including Megingjord and the world carry-weight setting.
+- [ ] Log: `Patch health: ... targets patched, 0 missing` includes `Player.GetMaxCarryWeight` (`ip_state` `patched:` line)
+- [ ] Inventory open, `ip_give 1`: the weight text drops from `x/300` to `x/225` at once; `ip_state` prints `carry: max 225 (multiplier 0.75; ...)`
+- [ ] Same with Megingjord worn (450 -> 338 for T1), also when the belt is put on after drinking
+- [ ] Carrying more than the reduced limit: vanilla encumbered icon and slow walk; at expiry (or `ip_end`) the limit returns at once and the icon goes
+- [ ] T2 reveal (hit an enemy): the penalty stays during the Revealed phase (whole effect)
+- [ ] Set `[Tier1] CarryWeightMultiplier = 1`, `ip_reload_config`: the reload line prints `carry T1/T2/T3 1.00/...` and the active T1 penalty is gone without re-drinking
