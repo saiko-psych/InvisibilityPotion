@@ -9,7 +9,7 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 |---|---|---|---|---|
 | `make_bottle.py` (v5) | `bottle_t1..3.fbx`, `bottles.blend`, `bottles.log` | `preview-bottles-v5.png` | base | `MistAnchor`, `attach` (neck) |
 | `make_bowl.py` (v2) | `bowl_t1..3.fbx`, `bowls.blend`, `bowls.log` | `preview-bowls-v2.png` | base | `attach` (rim, +X) |
-| `make_plants.py` (v5) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a/b/c`, `plant_t2_picked`, `plant_t3_a/b/c`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v5.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
+| `make_plants.py` (v6) | `plant_t1_s1/s2`, `plant_t1_s3_a/b/c`, `plant_t1_flat_a/b/c`, `plant_t2_a..e`, `plant_t2_picked`, `plant_t3_a..e`, `plant_t3_picked` (+ compatibility `plant_t1_s3`, `plant_t1`, `plant_t1_flat`, `plant_t2`, `plant_t3`), `plants.blend`, `plants.log` | `preview-plants-v6.png` | ground (t1: patch centre on the bark) | `PickAnchor`, `EmberAnchor` (t3) |
 | `make_ingredients.py` (v1) | `ingredient_t1..3.fbx`, `ingredients.blend`, `ingredients.log` | `preview-ingredients-v1.png` | base centre (lying as dropped) | `attach` (bounding-box centre) |
 | `make_goggles.py` (v4, round L fit) | `goggles_t1..3.fbx`, `goggles.blend`, `goggles.log` | `preview-goggles-v4.png` | helmet joint `Helmet_attach` | `attach` (joint origin) |
 
@@ -34,8 +34,8 @@ a `.blend` and a `<name>.log` with tri counts. The preview is also copied next t
 | Tier | Bottle (incl. 80-tri mist mesh) | Bowl | Plant | Goggles |
 |---|---|---|---|---|
 | 1 | 370 | 297 | 1284 (stages 114 / 546 / 1284; variants see below) | 684 |
-| 2 | 448 | 488 | 484 | 1346 |
-| 3 | 560 | 488 | 1196 | 1216 |
+| 2 | 448 | 488 | 484 (variants 316-624, see below) | 1346 |
+| 3 | 560 | 488 | 1196 (variants 567-1292, see below) | 1216 |
 
 # Veil-mead flasks (v5): finished meads
 
@@ -76,16 +76,17 @@ Knobs at the top of `make_bowl.py`: `FILL`, `LIQUID_SINK`, `SWIRL_W` (start/end 
 the tints), and per tier `segs`, `rot`, `vjitter` (unevenness), `grain` (share of dark columns), `profile` with
 `rim`/`inner` indices, `carve` (band range), `silver` (rim band profile), `swirls`, `attach_side`.
 
-# Ingredient plants (v5)
+# Ingredient plants (v6)
 
 Outputs (all in `out/`): lichen `plant_t1_s1.fbx`, `plant_t1_s2.fbx`, `plant_t1_s3_a/b/c.fbx`, `plant_t1_flat_a/b/c.fbx`;
-Baldr's Tear `plant_t2_a/b/c.fbx`, `plant_t2_picked.fbx`; Helfern `plant_t3_a/b/c.fbx`, `plant_t3_picked.fbx`; plus the
+Baldr's Tear `plant_t2_a..e.fbx`, `plant_t2_picked.fbx`; Helfern `plant_t3_a..e.fbx`, `plant_t3_picked.fbx`; plus the
 compatibility files `plant_t1_s3.fbx`, `plant_t1.fbx`, `plant_t1_flat.fbx`, `plant_t2.fbx`, `plant_t3.fbx`, which are
-variant a exported again under the earlier file and object names (meshes identical to v4). Also `preview-plants.png`,
-`plants.blend`, `plants.log`. The preview is copied to `tools/blender/preview-plants-v5.png` (1280x1260, one row per
+variant a exported again under the earlier file and object names (`plant_t2` follows the v6 blossom angle of `plant_t2_a`). Also `preview-plants.png`,
+`plants.blend`, `plants.log`. The preview is copied to `tools/blender/preview-plants-v6.png` (1280x1340, one row per
 plant, rendered by `common.render_panels`): lichen s1, s2, s3a, s3b, s3c on five 0.5 m trunks (2 m ruler in 0.5 m
-bands); Baldr's Tear a, b, c, picked; Helfern a, b, c, picked (0.5 m rulers in 0.1 m bands).
-Each FBX is one mesh with named materials plus an empty `PickAnchor`; the fern variants a-c also have `EmberAnchor`
+bands); Baldr's Tear a, b, c, d, e, picked (turned so the blossoms face 30 degrees off the view axis); Helfern a, b, c, d,
+e, picked (0.5 m rulers in 0.1 m bands).
+Each FBX is one mesh with named materials plus an empty `PickAnchor`; the fern variants a-e also have `EmberAnchor`
 (the picked fern does not). Leaves and cards are single-sided except the lichen beards (two opposite faces); use a
 double-sided (cull off) shader in Unity.
 
@@ -99,13 +100,17 @@ Variant a is the reference model. Picked states use the base knobs and the plant
 | `plant_t1_s3_a` / `plant_t1_flat_a` | full patch, scale 1.0, density 1.0 | 1284 |
 | `plant_t1_s3_b` / `plant_t1_flat_b` | other runner layout (seed +101), scale 0.85, leaf density +15 % | 1082 |
 | `plant_t1_s3_c` / `plant_t1_flat_c` | other runner layout (seed +202), scale 1.15, leaf density -15 % | 1270 |
-| `plant_t2_a` | Baldr's Tear as before | 484 |
-| `plant_t2_b` | 1.15x taller, wide-open bell, 2 berries, flatter leaves, wider lower mound | 464 |
-| `plant_t2_c` | 0.85x, a second closed bud stem, 4 berries, steeper leaves, smaller higher mound | 624 |
+| `plant_t2_a` | Baldr's Tear, nodding blossom (60 degrees below the horizontal) | 484 |
+| `plant_t2_b` | 1.15x taller, wide-open half-open bell (30 degrees), less arched stem, 2 berries, flatter leaves, wider lower mound | 464 |
+| `plant_t2_c` | 0.85x, nearly upright blossom (10 degrees) on an almost straight stem, a second closed bud stem, 4 berries, steeper leaves, smaller higher mound | 624 |
+| `plant_t2_d` | 1.05x, two open blossoms (45 and 20 degrees; the second on a shorter stem turned round), no bud stems, 6 leaves | 563 |
+| `plant_t2_e` | 0.9x, only a closed bud (55 degrees) with the glowing tear on a thread, no bud stems, 2 berries, higher mound | 316 |
 | `plant_t2_picked` | snow mound, leaves and a 0.13 m cut stem stub; no blossom, buds or berries | 126 |
 | `plant_t3_a` | Helfern as before | 1196 |
 | `plant_t3_b` | wider and lower (1.2x spread, 0.9x height), 7 outer and 3 inner fronds, 6 embers, 7 basalt columns | 1292 |
 | `plant_t3_c` | 1.15x, 5 outer fronds, larger and taller fiddleheads, 5 basalt columns | 1081 |
+| `plant_t3_d` | young: 0.6x, 3 steeper fronds, no inner layer, no spores or embers, cold heart (`helfern_heart_cold`, no emission), 5 columns | 567 |
+| `plant_t3_e` | old: 1.1x spread, 8 long drooping fronds with ash-grey charred tips (`helfern_frond_char`, last 40 % of each frond), no inner layer or fiddleheads, 7 embers, larger strong heart (`helfern_heart_strong`, emission 5), 7 columns | 1144 |
 | `plant_t3_picked` | basalt base, root crown and roots, dim heart (`helfern_heart_dim`), 2 short young fronds | 334 |
 
 Tier 1 convention (all stages and the flat variant): the pivot is the patch centre on the bark, +Y up, and the patch's
@@ -139,13 +144,15 @@ Knobs at the top of `make_plants.py`:
    `reach_down`, `step`, `branches_per_runner`, `runner_w`, `ridge_until` (raised runners near the centre);
    `node_step`, `leaves_min`, `leaves_max`, `rosette`, `leaf_len`, `leaf_w`, `mature_dist`; beards `beard_zmax`,
    `beard_p`, `beard_strands`, `beard_len`, `beard_w`, `beard_delay`, `glints`; stages `stage_runners`, `stage_reach`.
-3. `T2`: mound size, `stem_h`, `nod` (how far the head bends over), bell length/radius/petals, `bell_open`, bud stem,
-   `bud_stems`, leaves, `leaf_rise`, berries, `cut_h` (picked stub), `scale` (horizontal, vertical).
+3. `T2`: mound size, `stem_h`, `nod` (how far the stem arches over), `bell_droop` (blossom angle: degrees the mouth
+   axis points below the horizontal), `blossoms` (1 or 2; the second uses `bell_droop2`, `blossom2_h`), `bud_only`
+   (closed bud with the tear instead of an open bell), bell length/radius/petals, `bell_open`, bud stem, `bud_stems`, leaves, `leaf_rise`, berries, `cut_h` (picked stub), `scale` (horizontal, vertical).
 4. `T3`: `columns`, `crack_r`, `crown_z`, `roots`, `root_len`, `heart_r`, `heart_z`, `ember_anchor_dz` (EmberAnchor
    height above the heart), `stem_r`, `leaflet_droop`, `teeth_min` (no saw teeth on shorter leaflets), `outer` and
    `inner` frond layers (`n`, `phase`, `len`, `angle` start/end elevation, `segs`, `leaflets`, `leaflet_len`, `fwd`,
    `start_r`), `spore_leaflets`, `spore_r`, `crozier_h`, `crozier_az`, `crozier_r`, `crozier_turns`, `crozier_w`,
-   `embers`, `young` (the two fronds of the picked state), `scale` (horizontal, vertical). `SEED` for all.
+   `embers`, `heart_mat` (heart material), `char_from` (charred leaflets from this fraction of the frond on, `None` =
+   none), `young` (the two fronds of the picked state), `scale` (horizontal, vertical). `SEED` for all.
 5. `VARIANTS`: seed offsets and overrides per variant (lichen: `scale`, `density`; others: any knob, nested dicts merge).
 Preview-only placement (`X1`, `DX1`, `Y2`, `DX2`, `Y3`, `DX3`, `PATCH_Z`, `on_trunk`), cameras and lights near the end.
 

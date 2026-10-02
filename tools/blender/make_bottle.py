@@ -1,5 +1,8 @@
 """Procedural low-poly Viking veil-mead flasks (finished meads), 3 tiers, v5.
 Run from the repo root: blender -b --python tools/blender/make_bottle.py
+Icon mode: blender -b --python tools/blender/make_bottle.py -- --icon
+  renders only the tier III flask on a dark radial gradient at 256x256 into InvisibilityPotion/Package/icon.png
+  (the Thunderstore package icon); no FBX export, no preview.
 
 Tier I   Faint Veil   0.16 m  squat moss-green flask, tan cork, twine rings
 Tier II  Deep Veil    0.22 m  steel-blue flask, iron neck band + cap, leather label band with a raised Hagalaz rune
@@ -16,6 +19,11 @@ from common import OUT, HERE, Builder, mat, r_at, empty, export_fbx, tri_count, 
     ground, ruler, light, camera, world, render
 
 PREVIEW = os.path.join(HERE, "preview-bottles-v5.png")
+ICON_MODE = "--icon" in (sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
+ICON = os.path.join(HERE, "..", "..", "InvisibilityPotion", "Package", "icon.png")
+ICON_SIZE = 256
+ICON_INNER = (0.16, 0.12, 0.22)   # gradient centre colour (dim violet behind the flask)
+ICON_OUTER = (0.02, 0.02, 0.03)   # gradient edge colour
 
 # ==== KNOBS (lengths in metres; FBX is Y-up, 1 unit = 1 m, pivot at base) ====
 SEED = 7                 # deterministic; each tier uses SEED + tier index
@@ -237,9 +245,40 @@ def make(tier, idx, t):
     return ob
 
 
+def render_icon(ob):
+    """Tier III flask alone, transparent film, then composited over a radial gradient with numpy (bundled with Blender)."""
+    import numpy as np
+    light("key", 'AREA', (0.6, -0.8, 0.7), 14, (1.0, 0.78, 0.55), 0.6, (0, 0, 0.13))
+    light("fill", 'AREA', (-0.8, -0.6, 0.3), 4, (0.65, 0.75, 1.0), 1.0, (0, 0, 0.13))
+    light("rim", 'AREA', (0.0, 0.9, 0.6), 16, (0.85, 0.7, 1.0), 0.6, (0, 0, 0.13))
+    camera((0, -0.95, 0.2), (0, 0, 0.128), 70)
+    world((0.05, 0.05, 0.06, 1))
+    bpy.context.scene.render.film_transparent = True
+    render("icon_raw.png", res=(ICON_SIZE, ICON_SIZE), volumetrics=(0.5, 1.5))
+    img = bpy.data.images.load(os.path.join(OUT, "icon_raw.png"))
+    w, h = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    yy, xx = np.mgrid[0:h, 0:w]
+    r = np.clip(np.hypot((xx - w/2)/(w/2), (yy - h*0.55)/(h/2)) / 1.1, 0, 1)[..., None]
+    bg = np.array(ICON_INNER)*(1 - r) + np.array(ICON_OUTER)*r
+    a = px[..., 3:4]
+    out = np.concatenate([px[..., :3]*a + bg*(1 - a), np.ones_like(a)], axis=2)   # pixels are straight alpha
+    icon = bpy.data.images.new("icon", w, h, alpha=True)
+    icon.pixels[:] = out.ravel()
+    icon.filepath_raw = os.path.abspath(ICON)
+    icon.file_format = 'PNG'
+    icon.save()
+    print(f"ICON written: {os.path.abspath(ICON)} ({w}x{h})")
+
+
 bottles = {}
 for i, (k, t) in enumerate(TIERS.items()):
+    if ICON_MODE and k != "t3": continue
     bottles[k] = make(k, i, t)
+
+if ICON_MODE:
+    render_icon(bottles["t3"])
+    sys.exit(0)
 
 log = []
 for k, ob in bottles.items():

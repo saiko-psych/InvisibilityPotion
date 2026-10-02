@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import OUT, HERE, Builder as _Builder, bezier, empty, export_fbx, tri_count, write_log, reset, \
     ground, ruler, light, camera, world, render_panels
 
-PREVIEW = os.path.join(HERE, "preview-plants-v5.png")
+PREVIEW = os.path.join(HERE, "preview-plants-v6.png")
 
 # ==== KNOBS (lengths in metres; Blender Z-up, FBX exported Y-up, 1 unit = 1 m, pivot at ground) ====
 SEED = 11                # deterministic; each plant uses SEED + tier index
@@ -40,6 +40,9 @@ MATS = {
     "helfern_root":   ((0.035, 0.028, 0.026, 1), 0.9, 0.0, 0.0),  # charred root crown
     "helfern_heart":  ((1.00, 0.42, 0.06, 1), 0.4, 0.0, 3.0),   # glowing core in the crown
     "helfern_heart_dim": ((0.45, 0.14, 0.03, 1), 0.5, 0.0, 0.6),  # picked state: the heart barely glows
+    "helfern_heart_cold": ((0.16, 0.07, 0.04, 1), 0.7, 0.0, 0.0),  # young fern (variant d): the heart has not lit yet
+    "helfern_heart_strong": ((1.00, 0.50, 0.10, 1), 0.35, 0.0, 5.0),  # old fern (variant e): a strong glowing heart
+    "helfern_frond_char": ((0.24, 0.20, 0.18, 1), 0.95, 0.0, 0.0),  # old fern (variant e): ash-grey charred frond tips
     "helfern_stem":   ((0.06, 0.05, 0.05, 1), 0.8, 0.0, 0.0),
     "helfern_frond":  ((0.055, 0.05, 0.05, 1), 0.75, 0.0, 0.0),  # charcoal leaflets
     "helfern_crozier": ((0.22, 0.06, 0.03, 1), 0.7, 0.0, 0.4),  # young fiddleheads, faint ember tint
@@ -60,7 +63,11 @@ T1 = dict(  # Huldra's Hair: dense creeping lichen on bark (like Ashvine on wall
 )
 T2 = dict(  # Baldr's Tear, ~0.45 m
     mound_r=0.11, mound_h=0.035,
-    stem_h=0.43, stem_r=0.0055, nod=0.62,     # nod: how far the flower head bends over (0 = upright)
+    stem_h=0.43, stem_r=0.0055, nod=0.62,     # nod: how far the stem arches over (0 = straight)
+    bell_droop=60,       # blossom angle: degrees the bell's mouth axis points below the horizontal (90 = straight down)
+    blossoms=1,          # open blossoms on full-height stems (the second one turned round, shorter, bell_droop2)
+    bell_droop2=30, blossom2_h=0.82,
+    bud_only=False,      # True: the main stem carries a closed bud (with the hanging tear) instead of an open bell
     bell_len=0.065, bell_r=0.032, petals=6,
     bud_stem_h=0.25,
     leaves=5, leaf_len=(0.17, 0.26), leaf_w=0.014,
@@ -77,6 +84,8 @@ T3 = dict(  # Hel's Ember Fern, ~0.45 m
     spore_leaflets=(2, 3, 4, 5), spore_r=0.0045,   # outer fronds: one capsule under each of these leaflets (alternating sides)
     crozier_h=(0.13, 0.10), crozier_az=(-60, 150), crozier_r=0.024, crozier_turns=1.35, crozier_w=0.006,
     embers=3,
+    heart_mat="helfern_heart",   # d: helfern_heart_cold (no glow), e: helfern_heart_strong
+    char_from=None,              # fraction along each frond after which leaflets are charred (helfern_frond_char); None = none
     young=dict(n=2, phase=0.25, len=(0.12, 0.15), angle=(85, 55), segs=3, leaflets=4, leaflet_len=0.045, fwd=0.2, start_r=0.016),
     scale=(1.0, 1.0),                                         # variant scale (horizontal, vertical) about the pivot
 )
@@ -87,13 +96,27 @@ VARIANTS = {
     "t1": {"a": (0, dict(scale=1.0, density=1.0)),
            "b": (101, dict(scale=0.85, density=1.15)),          # small and dense
            "c": (202, dict(scale=1.15, density=0.85))},         # large and looser
+    # Baldr's Tear: the blossom angle differs per variant (a nodding 60 deg, b half-open 30 deg, c nearly upright 10 deg),
+    # d carries two open blossoms, e only a closed bud (still with its hanging tear)
     "t2": {"a": (0, {}),
-           "b": (101, dict(scale=(1.15, 1.15), bell_open=1.7, berries=2, leaf_rise=0.85, mound_r=0.12, mound_h=0.030)),
-           "c": (202, dict(scale=(0.85, 0.85), bud_stems=2, berries=4, leaf_rise=1.15, mound_r=0.10, mound_h=0.042))},
+           "b": (101, dict(scale=(1.15, 1.15), bell_open=1.7, berries=2, leaf_rise=0.85, mound_r=0.12, mound_h=0.030,
+                           bell_droop=30, nod=0.40)),
+           "c": (202, dict(scale=(0.85, 0.85), bud_stems=2, berries=4, leaf_rise=1.15, mound_r=0.10, mound_h=0.042,
+                           bell_droop=10, nod=0.15)),
+           "d": (303, dict(scale=(1.05, 1.05), blossoms=2, bud_stems=0, bell_droop=45, bell_droop2=20, nod=0.5,
+                           bell_open=1.3, leaves=6)),
+           "e": (404, dict(scale=(0.9, 0.9), bud_only=True, bud_stems=0, bell_droop=55, nod=0.55, berries=2,
+                           leaf_rise=1.05, mound_h=0.040))},
+    # Hel's Ember Fern: d young (3 fronds, cold heart, 0.6x), e old (8 drooping fronds with charred tips, strong heart)
     "t3": {"a": (0, {}),
            "b": (101, dict(scale=(1.2, 0.9), outer=dict(n=7), inner=dict(n=3), embers=6, columns=7)),
            "c": (202, dict(scale=(1.15, 1.15), outer=dict(n=5), columns=5,
-                           crozier_h=(0.21, 0.17), crozier_r=0.032, crozier_w=0.0085))},
+                           crozier_h=(0.21, 0.17), crozier_r=0.032, crozier_w=0.0085)),
+           "d": (303, dict(scale=(0.6, 0.6), outer=dict(n=3, angle=(84, 30), leaflets=6), inner=dict(n=0),
+                           spore_leaflets=(), embers=0, heart_mat="helfern_heart_cold", columns=5)),
+           "e": (404, dict(scale=(1.1, 1.0), outer=dict(n=8, angle=(70, -8), len=(0.52, 0.60)), inner=dict(n=0),
+                           embers=7, heart_mat="helfern_heart_strong", heart_r=0.026, char_from=0.6,
+                           crozier_h=(), crozier_az=(), columns=7))},
 }
 # =============================================================================
 
@@ -265,8 +288,10 @@ def huldra(skel, stage, flat=False, name=None, t=T1):
     return ob, [pick]
 
 # ---------------------------------------------------------------- Tier II
-def bell(B, base, axis, length, radius, petals, open_=1.0, rng=None, glow=True):
-    """Hanging teardrop bell: base at the stem tip, axis points out of the mouth."""
+def bell(B, base, axis, length, radius, petals, open_=1.0, rng=None, glow=True, tear=None):
+    """Hanging teardrop bell: base at the stem tip, axis points out of the mouth. tear (default: glow) adds the glowing
+    drop hanging out of the mouth; a closed bud (glow=False, tear=True) gets only the drop on a thread."""
+    if tear is None: tear = glow
     ax = Vector(axis).normalized()
     ref = Vector((0, 0, 1)) if abs(ax.z) < 0.9 else Vector((1, 0, 0))
     u = (ref - ax*ref.dot(ax)).normalized(); v = ax.cross(u)
@@ -294,9 +319,10 @@ def bell(B, base, axis, length, radius, petals, open_=1.0, rng=None, glow=True):
         # glowing pistil ending in a teardrop that hangs just out of the mouth ("Baldr's tear")
         B.tube([Vector(base) + ax*length*0.1, Vector(base) + ax*length*0.4, Vector(base) + ax*length*0.72],
                [radius*0.25, radius*0.55, radius*0.5], 6, "baldr_glow", cap=True)   # inner glowing cup
-        B.tube([Vector(base) + ax*length*0.3, Vector(base) + ax*length*1.2], [0.0025, 0.0025], 3, "baldr_glow")
-        tear = Vector(base) + ax*length*1.3
-        B.tube([tear - ax*0.012, tear - ax*0.004, tear + ax*0.006, tear + ax*0.011],
+    if tear:
+        B.tube([Vector(base) + ax*length*(0.3 if glow else 1.05), Vector(base) + ax*length*1.2], [0.0025, 0.0025], 3, "baldr_glow")
+        drop = Vector(base) + ax*length*1.3
+        B.tube([drop - ax*0.012, drop - ax*0.004, drop + ax*0.006, drop + ax*0.011],
                [0.0, 0.0055, 0.006, 0.0], 5, "baldr_glow")
 
 def baldr(rng, t=T2, name="plant_t2", picked=False):
@@ -316,16 +342,27 @@ def baldr(rng, t=T2, name="plant_t2", picked=False):
             B.face([a[0], c[k], c[j]] if len(a) == 1 else [a[k], c[k], c[j], a[j]], "baldr_snow")
     H = t["stem_h"]; nod = t["nod"]
     # main stem: up, then arches over so the bell nods
-    ctrl = [(0.0, 0.0, 0.02), (0.005, 0.0, H*0.45), (0.0, 0.0, H*0.85), (0.035*nod/0.6, 0.0, H*1.0), (0.07*nod/0.6, 0.0, H*0.97)]
     if picked:      # cut stem: a short straight stub with a slanted, capped end
         B.tube([Vector((0.0, 0.0, 0.02)), Vector((0.003, 0.0, t["cut_h"]*0.6)), Vector((0.005, 0.0, t["cut_h"]))],
                [t["stem_r"]]*3, 4, "baldr_stem", cap=True)
     else:
-        stem = bezier(ctrl, 9)
-        B.tube(stem, [t["stem_r"]]*8 + [t["stem_r"]*0.7], 4, "baldr_stem")
-        tip = stem[-1]; ax = (stem[-1] - stem[-2]).normalized()
-        ax = (ax + Vector((0, -0.6, -0.8))).normalized()   # face the mouth a little to the viewer
-        bell(B, tip, ax, t["bell_len"], t["bell_r"], t["petals"], t["bell_open"], rng)
+        # one full-height stem per blossom (the second turned round and shorter): up, then arching over by `nod`;
+        # the bell's mouth axis points along the arch's heading, bell_droop degrees below the horizontal
+        for k in range(max(1, t["blossoms"])):
+            hk = H*(1.0 if k == 0 else t["blossom2_h"]); n = nod*(1.0 if k == 0 else 0.8)
+            ctrl = [(0.0, 0.0, 0.02), (0.005, 0.0, hk*0.45), (0.0, 0.0, hk*0.85), (0.035*n/0.6, 0.0, hk*1.0),
+                    (0.07*n/0.6, 0.0, hk*(1.0 - 0.03*n/0.6))]
+            rot = Matrix.Rotation(0.0 if k == 0 else 2.6, 3, 'Z')
+            stem = [rot @ p for p in bezier(ctrl, 9)]
+            B.tube(stem, [t["stem_r"]]*8 + [t["stem_r"]*0.7], 4, "baldr_stem")
+            head = rot @ Vector((1.0, 0.0, 0.0))
+            if k == 0: head = (head + Vector((0, -0.6, 0))).normalized()   # face the first mouth a little to the viewer
+            dr = math.radians(t["bell_droop"] if k == 0 else t["bell_droop2"])
+            ax = head*math.cos(dr) - Vector((0, 0, 1))*math.sin(dr)
+            if t["bud_only"] and k == 0:   # closed bud, a little larger than a side bud, with the hanging tear
+                bell(B, stem[-1], ax, t["bell_len"]*0.8, t["bell_r"]*0.7, t["petals"], 0.0, rng, glow=False, tear=True)
+            else:
+                bell(B, stem[-1], ax, t["bell_len"], t["bell_r"], t["petals"], t["bell_open"], rng)
         # shorter stems with closed buds (the second one turned round the stem)
         h2 = t["bud_stem_h"]
         for b in range(t["bud_stems"]):
@@ -387,7 +424,8 @@ def frond(B, rng, L, d, start, a0, a1, segs, nl, l_len, spores, fwd, t=T3):
         ll = l_len*(1 - 0.75*(i/(nl - 1)))*min(1.0, 0.55 + 2.5*s)   # largest near the base, shrinking to the tip
         for sg in (1, -1):
             out = (side*sg + tan*fwd - nf*t["leaflet_droop"]).normalized()
-            tip = leaflet(B, qa, qb, out, tan, ll, "helfern_frond", ll > t["teeth_min"])
+            m = "helfern_frond_char" if t["char_from"] is not None and s >= t["char_from"] else "helfern_frond"
+            tip = leaflet(B, qa, qb, out, tan, ll, m, ll > t["teeth_min"])
             tips.append(tip)
             if spores and i in spores and sg == (1 if i % 2 else -1):
                 c = (qa + qb + tip)/3 - nf*0.006           # glowing capsule under the leaflet
@@ -428,7 +466,7 @@ def helfern(rng, t=T3, name="plant_t3", picked=False):
                d*L*0.8 - bend + Vector((0, 0, 0.040)), d*L + Vector((0, 0, 0.006))]
         B.tube(pts, [0.012, 0.009, 0.006, 0.002], 3, "helfern_root")
     # glowing heart in the crown
-    B.ico((0, 0, t["heart_z"]), (t["heart_r"],)*3, "helfern_heart_dim" if picked else "helfern_heart", 1, 0.12, rng)
+    B.ico((0, 0, t["heart_z"]), (t["heart_r"],)*3, "helfern_heart_dim" if picked else t["heart_mat"], 1, 0.12, rng)
     # fronds: outer arching layer, inner steeper layer (offset half a step)
     tips = []
     layers = ((t["young"], None),) if picked else ((t["outer"], t["spore_leaflets"]), (t["inner"], None))
@@ -501,8 +539,8 @@ for fname, src, objname in (("plant_t1_s3", "t1_s3_a", "plant_t1_s3"), ("plant_t
     log.append(f"{fname}.fbx = plant_{src} (object named {objname})")
 write_log("plants", log)
 
-# ---- preview (1280 x 1260), one row per plant:
-# lichen s1 s2 s3a s3b s3c on five 0.5 m trunks | Baldr's Tear a b c picked | Helfern a b c picked ----
+# ---- preview (1280 x 1340), one row per plant:
+# lichen s1 s2 s3a s3b s3c on five 0.5 m trunks | Baldr's Tear a b c d e picked | Helfern a b c d e picked ----
 from common import mat
 import bpy
 PATCH_Z, TR = 1.30, T1["trunk_r"]
@@ -512,25 +550,25 @@ def on_trunk(ob, x, z, turn=0.0):
     ob.rotation_euler.z = turn
     ob.location = Vector((x, TR, z)) + Matrix.Rotation(turn, 3, 'Z') @ Vector((0, -TR, 0))
 row1 = ["t1_s1", "t1_s2", "t1_s3_a", "t1_s3_b", "t1_s3_c"]
-X1, DX1, Y2, DX2, Y3, DX3 = -10.0, 0.58, 4.0, 0.45, 8.0, 0.95
+X1, DX1, Y2, DX2, Y3, DX3 = -10.0, 0.58, 4.0, 0.38, 8.0, 0.8
 trunks = []
 for k, key in enumerate(row1):
     x = X1 + (k - 2)*DX1
     bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=TR, depth=2.2, location=(x, TR, 1.1))
     o = bpy.context.active_object; o.name = f"trunk_ref_{k}"; o.data.materials.append(trunk_mat); trunks.append(o)
     on_trunk(plants[key][0], x, PATCH_Z)
-row2 = ["t2_a", "t2_b", "t2_c", "t2_picked"]
+row2 = ["t2_a", "t2_b", "t2_c", "t2_d", "t2_e", "t2_picked"]
 for k, key in enumerate(row2):
-    plants[key][0].location = ((k - 1.5)*DX2, Y2, 0); plants[key][0].rotation_euler.z = -1.0
-row3 = ["t3_a", "t3_b", "t3_c", "t3_picked"]
+    plants[key][0].location = ((k - 2.5)*DX2, Y2, 0); plants[key][0].rotation_euler.z = -0.45   # blossoms 30 deg off the view axis
+row3 = ["t3_a", "t3_b", "t3_c", "t3_d", "t3_e", "t3_picked"]
 for k, key in enumerate(row3):
-    plants[key][0].location = ((k - 1.5)*DX3, Y3, 0); plants[key][0].rotation_euler.z = 0.75
+    plants[key][0].location = ((k - 2.5)*DX3, Y3, 0); plants[key][0].rotation_euler.z = 0.75
 for key in ("t1_flat_a", "t1_flat_b", "t1_flat_c"):              # not in this preview (see v4 for the plank view)
     plants[key][0].location = (0, -30, 0)
 g = ground(40.0)
 r1 = ruler((X1 - 2.5*DX1, 0.0, 0), height=2.0, band=0.5, r=0.015)
-r2 = ruler((-2.25*DX2, Y2 + 0.1, 0))
-r3 = ruler((-1.95*DX3, Y3 - 0.3, 0))
+r2 = ruler((-3.2*DX2, Y2 + 0.1, 0))
+r3 = ruler((-3.1*DX3, Y3 - 0.3, 0))
 def row_lights(c, tag, e=160):
     c = Vector(c)
     return [light("key_" + tag, 'AREA', tuple(c + Vector((1.5, -2.0, 2.0))), e, (1.0, 0.85, 0.7), 1.5, tuple(c)),
@@ -545,8 +583,8 @@ both = [g, sky]
 render_panels([
     dict(height=420, panels=[dict(width=1280, cam=((X1 - 0.05, -3.55, PATCH_Z + 0.12), (X1 - 0.05, 0, PATCH_Z + 0.04), 42),
          show=both + trunks + [plants[k][0] for k in row1] + [r1] + L1)]),
-    dict(height=420, panels=[dict(width=1280, cam=((-0.05, Y2 - 2.2, 0.5), (-0.05, Y2, 0.22), 40),
+    dict(height=460, panels=[dict(width=1280, cam=((-0.05, Y2 - 2.85, 0.47), (-0.05, Y2, 0.25), 40),
          show=both + [plants[k][0] for k in row2] + [r2] + L2)]),
-    dict(height=420, panels=[dict(width=1280, cam=((-0.1, Y3 - 4.3, 1.1), (-0.1, Y3, 0.20), 40),
+    dict(height=460, panels=[dict(width=1280, cam=((-0.2, Y3 - 5.7, 1.35), (-0.2, Y3, 0.20), 40),
          show=both + [plants[k][0] for k in row3] + [r3] + L3)]),
 ], "preview-plants.png", PREVIEW, "plants.blend")
