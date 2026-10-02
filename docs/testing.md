@@ -545,3 +545,31 @@ Veil Cooldown
 - [ ] After the cooldown runs out (shorten it: `[Tier2] Cooldown = 20`, `ip_reload_config`, drink again after the old one ends) any mead can be drunk again; an upgrade T1 -> T3 after the T1 cooldown works
 - [ ] `[TierN] Cooldown = 0`: no cooldown effect, drinking is only limited by the tier rules as before
 - [ ] Relog: the cooldown is gone (status effects are not saved, as for vanilla potions)
+
+## Plan 5 – round R (even wide fog that keeps world rotation, Veil Broken until the veil returns, harsher debuff)
+
+Setup: game closed, `make build`, `make run`. Real meads as in round Q (`ip_spawn MeadInvisibility_T2 3` etc.). Paste the `Config migration`, `veil fog spawned`, `auto fog dump` and `ip_state` lines.
+
+Config and log
+- [ ] `Config migration (look defaults revision 12): ...` once (tiers I/II reset, old values logged); `[Fog.Tier1] OuterBurst = 50`, `[Fog.Tier2] OuterBurst = 70`; `OuterFollowShare` description mentions "drift slowly around you; 60 % of OuterBurst starts there"
+- [ ] `Config migration (gameplay defaults revision 4): [TierN] DebuffStaminaRegenMultiplier 0.25 -> 0.15` once (a value you changed stays); new keys `[TierN] DebuffEitrRegenMultiplier = 0.25`, `DebuffHealthRegenMultiplier = 0.5`, `DebuffSpeedModifier = -0.2` (T1) / `-0.3` (T2, T3); `DebuffDuration` description says it applies to tier I and re-hiding tiers last until the veil returns
+
+Wide fog (tier II, then tier I)
+- [ ] `veil fog spawned T2`: `ip_fog_outer_follow ... follow: rate 4/s, Volume radius 2.8 m, ..., space Local, ..., burst 42 (follow share 0.4, follow burst fraction 0.6, ...), follower position only (world rotation), alive at spawn 42, size 3.4 m, ..., max 56`; `ip_fog_outer ... trail: ..., burst 28, follower position only (world rotation), ..., max 84`
+- [ ] Auto fog dump: both outer lines show `follower position only (world rotation), emitter rotation (0.0, 0.0, 0.0)`; the follow line `orbital 0.08 rad/s (4.7 deg/s, velocity space Local)` (tier II)
+- [ ] Standing and turning in small steps (mouse left/right, A/D strafing back and forth): the cloud around you stays put as one continuous cloud, no spotlight-like swinging, no holes on one side
+- [ ] Right after drinking: the instant cloud is evenly spread around you (no clusters, no empty quadrant)
+- [ ] Standing still for 10 s: the follow puffs drift slowly around you (the cloud does not look frozen), slowly enough not to read as a vortex
+- [ ] Walking and sprinting: you stay inside fog, the trail still stays behind and fades
+- [ ] Tier I: the same, lighter (burst 30 follow + 20 trail)
+
+Veil Broken (tier II, then tier III, then tier I)
+- [ ] Tier II, hit a creature: "Veil Broken" shows a 12 s countdown (RehideDelay), not 15 s; it disappears exactly when the veil returns (the fog body is back, `ip_state` phase Hidden)
+- [ ] While revealed, hit again: the countdown restarts at 12 s together with the re-hide timer, and both still end together
+- [ ] Tier III: the countdown is 8 s and ends with the re-hide
+- [ ] Tier I: one hit ends the veil, Veil Broken runs 15 s (DebuffDuration)
+- [ ] While Veil Broken runs: visibly slower walking and running (tier II/III 30 %, tier I 20 %), stamina regenerates very slowly (15 %), health regeneration halved, eitr regenerates at a quarter (staff build)
+- [ ] Inventory, "Active effects" page (Texts dialog): Veil Broken lists the tooltip "Your veil was broken: you move slower ..." plus `Health regen -50%`, `Stamina regen -85%`, `Eitr regen -75%`, `Movement -30%` (vanilla wording)
+- [ ] `ip_state`: `veil broken: 9.3s of 12s left, stamina regen x0.15, eitr regen x0.25, health regen x0.50, speed -0.30` and three `veil broken config T1/T2/T3: 15s / 12s / 8s ...` lines
+- [ ] `[Tier2] DebuffSpeedModifier = -2` (out of range), restart: BepInEx clamps it to -0.9; `DebuffDuration = 0`, `ip_reload_config`: no Veil Broken at all on tier II
+- [ ] Status bar: the three tier effects still show their own names and icons (Faint Veil, Deep Veil, Shadow Veil)
