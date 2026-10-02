@@ -98,9 +98,9 @@ namespace InvisibilityPotion.Visuals
     /// </summary>
     public static class LookDefaults
     {
-        public const int Revision = 8;
+        public const int Revision = 9;
         /// <summary>Files below this revision get the [Fog.TierN] sections of <see cref="ResetTiers"/> reset to the defaults (round M: 8).</summary>
-        public const int FullResetRevision = 8;
+        public const int FullResetRevision = 9;
         /// <summary>First revision whose FogMaterial default is soft.</summary>
         public const int SoftFogRevision = 5;
         /// <summary>First revision whose tier II outer layer is the ring (local space, 2.5 m, turning).</summary>
@@ -320,8 +320,8 @@ namespace InvisibilityPotion.Visuals
             s.OuterShape = FogOuterShape.Volume;
             s.OuterAnchors = new List<string> { "Hips" };
             s.OuterHorizontal = false;
-            s.OuterSize = 3.2f; s.OuterAlpha = alpha; s.OuterRadius = 3f; s.OuterSpreadY = 0.35f;
-            s.OuterRate = 4f; s.OuterRateDistance = 2f; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
+            s.OuterSize = 3.4f; s.OuterAlpha = alpha; s.OuterRadius = 3f; s.OuterSpreadY = 0.35f;
+            s.OuterRate = 6f; s.OuterRateDistance = 3f; s.OuterLifetime = 9f; s.OuterRotation = 0f; s.OuterOffsetY = 0f; s.OuterTrail = true;
         }
 
         /// <summary>Round M ruling 2a: mid grey, darker than the sky, so the fog reads as haze and never as light.</summary>
@@ -340,13 +340,15 @@ namespace InvisibilityPotion.Visuals
                     // Round L: Rate 5 x Size 0.45 left gaps between the 13 bone emitters (fog on hands and feet only); the cloud
                     // now envelops the whole body like tier II's, only lighter, plus the fog volume and the ground field.
                     // Round M (revision 8): subtle haze: mid grey, alpha 0.09 inner, 0.045 volume, 0.10 ground.
-                    s.Rate = 10f; s.Size = 0.75f; s.Lifetime = 2.2f; s.Speed = 0.03f; s.Alpha = 0.09f;
+                    // Round O (revision 9): round M overshot (volume 2.6 % effective alpha, cloud visible only at the bone centres);
+                    // fewer, larger particles per bone so the blobs merge into one body cloud, alphas halfway between rounds L and M.
+                    s.Rate = 7f; s.Size = 1.1f; s.Lifetime = 2.4f; s.Speed = 0.03f; s.Alpha = 0.16f;
                     ApplyHazeColor(s); s.Emission = 0f;
                     s.SpreadX = 1f; s.SpreadY = 0.6f; s.SpreadZ = 1f; s.Drift = 0.03f;
                     s.Trail = false;
-                    ApplyFogVolume(s, 0.045f);
+                    ApplyFogVolume(s, 0.11f);
                     s.GroundEnabled = true;
-                    s.GroundAlpha = 0.1f;
+                    s.GroundAlpha = 0.14f;
                     s.DistortionStrength = 0.04f; s.DA = 0.5f;
                     break;
                 case 2:
@@ -356,15 +358,16 @@ namespace InvisibilityPotion.Visuals
                     // alpha with the full SpreadY reads as a thin haze; the slight downward drift keeps it from rising into a plume.
                     // Round L ruling 2 (revision 7): a denser cloud enveloping the whole body (all anchors), 0.8 grey, matte.
                     // Round M (revision 8): tier II was a blown-out white blob in daylight; mid grey and alpha 0.12 (rate/size kept).
-                    s.Rate = 14f; s.Size = 0.8f; s.Lifetime = 2.5f; s.Speed = 0.05f; s.Alpha = 0.12f;
+                    // Round O (revision 9): fewer, larger particles per bone (one merged cloud instead of 13 blobs), alpha 0.22.
+                    s.Rate = 9f; s.Size = 1.2f; s.Lifetime = 2.6f; s.Speed = 0.05f; s.Alpha = 0.22f;
                     ApplyHazeColor(s); s.Emission = 0f;
                     s.SpreadX = 1.125f; s.SpreadY = 0.6f; s.SpreadZ = 1.025f; s.Drift = -0.066f;
                     // Round L ruling 1: light fog in a wide area around the player (replaces the round J ring of flat discs);
                     // round M: left behind in the world, alpha 0.06.
-                    ApplyFogVolume(s, 0.06f);
+                    ApplyFogVolume(s, 0.15f);
                     // Round H: a wider ground fog field than tier I; round L: lighter (alpha, size, growth); round M: alpha 0.12.
                     s.GroundEnabled = true;
-                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.12f; s.GroundRadius = 0.9f;
+                    s.GroundRate = 6f; s.GroundRateDistance = 3f; s.GroundSize = 1.2f; s.GroundGrow = 2.5f; s.GroundAlpha = 0.16f; s.GroundRadius = 0.9f;
                     s.DistortionStrength = 0.1f; s.DA = 0.08f;
                     break;
                 case 3:
