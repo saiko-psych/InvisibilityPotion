@@ -6,6 +6,8 @@
     <RootNamespace>InvisibilityPotion</RootNamespace>
     <AssemblyName>InvisibilityPotion</AssemblyName>
     <Version>0.3.0</Version>
+    <!-- The servers run Jötunn 2.30.0; `make compat-check` compiles against the newest release to prove API compatibility. -->
+    <JotunnVersion Condition="'$(JotunnVersion)' == ''">2.30.0</JotunnVersion>
     <LangVersion>10</LangVersion>
     <Nullable>disable</Nullable>
     <Deterministic>true</Deterministic>
@@ -28,7 +30,7 @@
 
   <ItemGroup>
     <!-- Supplies game, BepInEx, Harmony and Unity references from $(VALHEIM_INSTALL) and the publicizer prebuild task -->
-    <PackageReference Include="JotunnLib" Version="2.30.0" />
+    <PackageReference Include="JotunnLib" Version="$(JotunnVersion)" />
   </ItemGroup>
 
   <ItemGroup>

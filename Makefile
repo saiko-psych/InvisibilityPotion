@@ -6,7 +6,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package test run play log bundle unity-setup models
+.PHONY: help decompile build package test run play log bundle unity-setup models compat-check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -32,6 +32,13 @@ build: ## Build Debug and deploy the DLL into BepInEx/plugins (refuses while Val
 package: ## Build Release and zip the Thunderstore package (refuses while Valheim runs; FORCE=1 overrides)
 	$(guard_game)
 	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal
+
+# Proves the code compiles against the newest Jötunn (API superset of the pinned 2.30.0); nothing is deployed.
+JOTUNN_LATEST ?= 2.30.2
+compat-check: ## Compile Release against JOTUNN_LATEST into build/compat (no deploy)
+	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal -p:JotunnVersion=$(JOTUNN_LATEST) -p:MOD_DEPLOYPATH=$(CURDIR)/build/compat/deploy -p:OutDir=$(CURDIR)/build/compat/bin/
+	@dotnet restore InvisibilityPotion/InvisibilityPotion.csproj -v quiet > /dev/null   # back to the pinned version for the next normal build
+	@echo "Compiled against Jotunn $(JOTUNN_LATEST): OK"
 
 test: ## Run unit tests (pure logic, no game DLLs)
 	dotnet test InvisibilityPotion.Tests -nologo -v quiet
