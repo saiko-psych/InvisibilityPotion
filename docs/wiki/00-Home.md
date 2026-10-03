@@ -2,7 +2,7 @@
 
 Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies notice you less (tier I) or lose you completely (tier II and III), and the strongest mead hides you from other players too. The ingredients grow on plants that nobody can see without veil goggles.
 
-![Deep Veil fog](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier2-deep-veil.jpg)
+![Deep Veil fog](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/fog-tier2-deep-veil.jpg)
 
 ## At a glance
 
@@ -24,6 +24,6 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 ## Links
 
-- Source and issue tracker: https://github.com/kitschekko/InvisibilityPotion
+- Source and issue tracker: https://github.com/saiko-psych/InvisibilityPotion
 - If you enjoy the mod: https://buymeacoffee.com/kitschekko
 - Licence: MIT. Built with BepInEx and Jötunn.

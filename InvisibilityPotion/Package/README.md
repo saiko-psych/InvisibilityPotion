@@ -6,13 +6,13 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 ## Screenshots
 
-![Deep Veil fog](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier2-deep-veil.jpg)
-![Faint Veil](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier1-faint-veil.jpg)
-![Allfather's Eye](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/goggles-3-allfathers-eye.jpg)
-![Hel's Ember Fern in the Ashlands](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/ferns-ashlands-day.jpg)
-![Baldr's Tear in the Mountains](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/plant-baldrs-tear-mountains.jpg)
-![Veil meads on the serving tray](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/bottles-on-serving-tray.jpg)
-![Models](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/models-bottles.png)
+![Deep Veil fog](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/fog-tier2-deep-veil.jpg)
+![Faint Veil](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/fog-tier1-faint-veil.jpg)
+![Allfather's Eye](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/goggles-3-allfathers-eye.jpg)
+![Hel's Ember Fern in the Ashlands](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/ferns-ashlands-day.jpg)
+![Baldr's Tear in the Mountains](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/plant-baldrs-tear-mountains.jpg)
+![Veil meads on the serving tray](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/bottles-on-serving-tray.jpg)
+![Models](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/models-bottles.png)
 
 ## Install
 
@@ -112,7 +112,7 @@ With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/Configur
 
 ## Support
 
-Source, issues and screenshots: https://github.com/kitschekko/InvisibilityPotion · If you enjoy the mod: [Buy me a coffee](https://buymeacoffee.com/kitschekko)
+Source, issues and screenshots: https://github.com/saiko-psych/InvisibilityPotion · If you enjoy the mod: [Buy me a coffee](https://buymeacoffee.com/kitschekko)
 
 ## Source and license
 

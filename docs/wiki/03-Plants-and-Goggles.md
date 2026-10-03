@@ -2,7 +2,7 @@
 
 The mead ingredients grow as **veil plants**. They are invisible, cannot be hovered and cannot be picked unless you wear **veil goggles** (helmet slot) of at least the plant's tier.
 
-![Baldr's Tear in the Mountains](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/plant-baldrs-tear-mountains.jpg)
+![Baldr's Tear in the Mountains](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/plant-baldrs-tear-mountains.jpg)
 
 ## The plants
 
@@ -19,7 +19,7 @@ The mead ingredients grow as **veil plants**. They are invisible, cannot be hove
 
 ## The goggles
 
-![Allfather's Eye](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/goggles-3-allfathers-eye.jpg)
+![Allfather's Eye](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/goggles-3-allfathers-eye.jpg)
 
 | Goggles | Station | Default recipe | Shows |
 |---|---|---|---|

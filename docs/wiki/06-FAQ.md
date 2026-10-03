@@ -43,4 +43,4 @@ No. Jötunn checks its version to the patch number. Install the server's Jötunn
 Yes. Huldra's Hair appears on existing trees. Ground plants only in new zones.
 
 **Where do I report bugs or say thanks?**
-Issues: https://github.com/kitschekko/InvisibilityPotion/issues. Support: https://buymeacoffee.com/kitschekko
+Issues: https://github.com/saiko-psych/InvisibilityPotion/issues. Support: https://buymeacoffee.com/kitschekko

@@ -1,6 +1,6 @@
 # Veil Meads
 
-![Faint Veil](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier1-faint-veil.jpg)
+![Faint Veil](https://raw.githubusercontent.com/saiko-psych/InvisibilityPotion/main/docs/screenshots/fog-tier1-faint-veil.jpg)
 
 ## The three tiers
 

@@ -39,7 +39,7 @@ Open `BepInEx/LogOutput.log` in the Valheim folder (or use "View logs" in your m
 Patch health: 24 targets patched, 0 missing
 ```
 
-"0 missing" means every game hook was found. If some are missing, another mod or a game update changed something. Please report it with the log on the [issue tracker](https://github.com/kitschekko/InvisibilityPotion/issues).
+"0 missing" means every game hook was found. If some are missing, another mod or a game update changed something. Please report it with the log on the [issue tracker](https://github.com/saiko-psych/InvisibilityPotion/issues).
 
 ## First steps
 
