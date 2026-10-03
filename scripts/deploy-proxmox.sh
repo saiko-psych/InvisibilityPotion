@@ -7,8 +7,10 @@
 # Builds nothing: run `make package` first (Release). Refuses a Debug DLL.
 #
 # Usage: scripts/deploy-proxmox.sh [--dry-run] [--logs]
-#   (no option)  scp the DLL to the Proxmox host, `pct push` it into the container, restart the valheim unit
-#   --logs       show the last 2 minutes of the valheim unit's journal, filtered to plugin loading, our mod and errors
+#   (no option)  stop the valheim unit, scp the DLL to the Proxmox host, `pct push` it into the overlay, start valheim-gate
+#                (CT 132 runs on demand: the gate wakes the server on the first connection and run-server.sh mirrors the
+#                overlay via apply-mods.sh; NEVER `systemctl start valheim` directly, it bypasses the gate)
+#   --logs       show the last 5 minutes of the valheim unit's journal (server must be running: connect first)
 #   --dry-run    print the commands instead of running them
 # Environment (defaults in brackets):
 #   HOST    Proxmox host for ssh/scp [proxymoxy]; logged in as root
@@ -50,7 +52,7 @@ run_ssh() {
 
 if [ "$MODE" = "logs" ]; then
   need ssh
-  run_ssh "pct exec $CT -- journalctl -u valheim --no-pager --since '-2 min' | grep -iE 'Loading \\[|InvisibleMod|InvisibilityPotion|exception|Patch health'"
+  run_ssh "pct exec $CT -- journalctl -u valheim --no-pager --since '-5 min' | grep -iE 'Loading \\[|InvisibleMod|InvisibilityPotion|exception|Patch'"
   exit 0
 fi
 
@@ -58,7 +60,10 @@ need ssh scp
 check_release_dll "$DLL"
 tmp="/tmp/$NAME"
 note "deploying $DLL ($(stat -c %s "$DLL") bytes) to $HOST CT $CT:$TARGET/$NAME"
+run_ssh "pct exec $CT -- systemctl stop valheim"
 run scp "$DLL" "root@$HOST:$tmp"
-run_ssh "pct push $CT $(q "$tmp") $(q "$TARGET/$NAME") && pct exec $CT -- systemctl restart valheim"
+run_ssh "pct push $CT $(q "$tmp") $(q "$TARGET/$NAME")"
+run_ssh "pct exec $CT -- systemctl start valheim-gate"
 [ "$DRY_RUN" = "1" ] && { note "dry run: nothing changed"; exit 0; }
-note "done. The server restarts now; check the log after about a minute: scripts/deploy-proxmox.sh --logs"
+note "done. The gate is armed: connect in game to wake the server (apply-mods.sh mirrors the overlay); then: scripts/deploy-proxmox.sh --logs"
+note "if an old InvisibilityPotion.dll exists, remove it from BOTH $TARGET and /opt/valheim/server/BepInEx/plugins (the mirror never deletes)"

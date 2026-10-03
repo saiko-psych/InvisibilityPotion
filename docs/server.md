@@ -21,7 +21,7 @@ and 5.4.2351 both ship BepInEx 5.4.23.5). Version matrix: `docs/compatibility.md
 |---|---|
 | `scripts/server-setup.sh [--dry-run] [--force] <ssh-host> <server-path>` | One time on a vanilla server: installs BepInExPack_Valheim, Jötunn and our DLL. Rerunnable. |
 | `scripts/deploy-server.sh [--dry-run] [--force] <ssh-host> [server-path]` | Every later update: copies only our DLL (the asset bundle is embedded). `server-path` defaults to `$IP_SERVER_PATH`. |
-| `scripts/deploy-proxmox.sh [--dry-run] [--logs]` | Only for the author's Proxmox container (CT 132): copies the Release DLL as `InvisibleMod.dll` into the overlay and restarts the server. See the section below; the two scripts above must not be used there. |
+| `scripts/deploy-proxmox.sh [--dry-run] [--logs]` | Only for the author's Proxmox container (CT 132): stops the server, copies the Release DLL as `InvisibleMod.dll` into the overlay and arms the on-demand gate. See the section below; the two scripts above must not be used there. |
 
 `server-setup.sh` and `deploy-server.sh` take `--dll FILE` (default `InvisibilityPotion/Package/plugins/InvisibilityPotion.dll`, the output of `make package`) and
 refuse a Debug DLL (it contains the dev console commands). Both refuse while `valheim_server.x86_64` runs on the server unless
@@ -126,27 +126,33 @@ matches the container layout. Use `scripts/deploy-proxmox.sh` instead; it follow
 ```sh
 make package                                  # Release build; deploy-proxmox.sh builds nothing itself
 scripts/deploy-proxmox.sh --dry-run           # print the commands
-scripts/deploy-proxmox.sh                     # copy and restart
-scripts/deploy-proxmox.sh --logs              # last 2 minutes of the server journal, filtered
+scripts/deploy-proxmox.sh                     # stop → push → arm the gate
+scripts/deploy-proxmox.sh --logs              # last 5 minutes of the server journal (after connecting)
 ```
 
-What it runs (defaults shown):
+What it runs (defaults shown). **CT 132 runs on demand**: `valheim-gate.service` (`Conflicts=valheim.service`) wakes the
+server on the first connection, `run-server.sh` calls `apply-mods.sh`, which mirrors the overlay into the server directory.
+A manual server start is neither needed nor wanted, and `systemctl start valheim` must never be called directly (it bypasses
+the gate); `systemctl restart valheim` would keep the server up permanently and leave the gate off.
 
 ```sh
+ssh root@proxymoxy "pct exec 132 -- systemctl stop valheim"
 scp InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll root@proxymoxy:/tmp/InvisibleMod.dll
-ssh root@proxymoxy "pct push 132 /tmp/InvisibleMod.dll /opt/valheim/mods/overlay/BepInEx/plugins/InvisibleMod.dll && pct exec 132 -- systemctl restart valheim"
-# --logs:
-ssh root@proxymoxy "pct exec 132 -- journalctl -u valheim --no-pager --since '-2 min' | grep -iE 'Loading \[|InvisibleMod|InvisibilityPotion|exception|Patch health'"
+ssh root@proxymoxy "pct push 132 /tmp/InvisibleMod.dll /opt/valheim/mods/overlay/BepInEx/plugins/InvisibleMod.dll"
+ssh root@proxymoxy "pct exec 132 -- systemctl start valheim-gate"
+# then connect in game; afterwards (--logs):
+ssh root@proxymoxy "pct exec 132 -- journalctl -u valheim --no-pager --since '-5 min' | grep -iE 'Loading \[|InvisibleMod|InvisibilityPotion|exception|Patch'"
 ```
 
-- Overridable through the environment: `HOST` (`proxymoxy`), `CT` (`132`), `TARGET` (plugin directory in the container,
+- Overridable through the environment: `HOST` (`proxymoxy`), `CT` (`132`), `TARGET` (overlay plugin directory,
   `/opt/valheim/mods/overlay/BepInEx/plugins`), `NAME` (`InvisibleMod.dll`), `DLL` (the local Release DLL).
 - The DLL is `InvisibilityPotion/bin/Release/net48/InvisibilityPotion.dll` from `make package` (the same file the package zip
   contains). A Debug DLL is refused (same check as the other scripts: it contains the `ip_give` dev command).
-- The script does not stop the server first: `pct push` overwrites the DLL of the running server and the restart follows right
-  after (the author's convention). The running process has the old DLL loaded; on the client, overwriting a loaded plugin DLL
-  crashed the game (see `CLAUDE.md`). If the server ever crashes in that window, the world save of the graceful stop is lost
-  back to the last autosave. Safer order when it matters: `pct exec 132 -- systemctl stop valheim`, push, then `start`.
+- The stop → push → gate order means the DLL is never overwritten under a running server.
+- **Old copies**: `apply-mods.sh` mirrors the overlay but deletes nothing in the server directory, so a stale
+  `InvisibilityPotion.dll` must be removed from BOTH `/opt/valheim/mods/overlay/BepInEx/plugins/` (source) and
+  `/opt/valheim/server/BepInEx/plugins/` (mirror); otherwise BepInEx loads whichever copy has the higher version (arbitrary
+  when equal).
 - **File name**: BepInEx's chainloader loads every `*.dll` under `BepInEx/plugins/` regardless of its file name and identifies
   plugins by their `[BepInPlugin]` GUID (`TypeLoader`: `Directory.GetFiles(dir, "*.dll", AllDirectories)`), so `InvisibleMod.dll`
   works and the log still says `Loading [InvisibilityPotion 0.3.x]` and `[Info   :InvisibilityPotion]`. Do not leave a second
