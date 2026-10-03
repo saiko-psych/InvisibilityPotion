@@ -1,6 +1,6 @@
 {
   "name": "InvisibilityPotion",
-  "version_number": "0.3.0",
+  "version_number": "0.3.1",
   "website_url": "",
   "description": "Three veil meads that hide you from enemies (and, at tier III, from other players). Brew them from hidden plants that only veil goggles reveal. Attacking or using tools reveals you. Requires the mod on server and clients.",
   "dependencies": [
