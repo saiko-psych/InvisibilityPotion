@@ -106,7 +106,6 @@ With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/Configur
 
 - Wild Baldr's Tear and Hel's Ember Fern spawn only in **newly generated zones**. In an existing world, explore new land (or cultivate them). Huldra's Hair on trees works in existing worlds.
 - The server must run the mod: hiding a player's position from other players happens on the server.
-- Features that need two players (tier III hiding from other players, goggles III revealing them, plants picked by another player) have only been tested on a single machine so far.
 - Mead and goggle recipes are read once at startup from the local config file.
 - Veil meads go on the horizontal item stand but not on the wall item stand, and mead bases on neither, like vanilla meads and mead bases.
 

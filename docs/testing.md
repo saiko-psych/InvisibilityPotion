@@ -24,10 +24,10 @@ Singleplayer (checkable now):
 - [ ] `ip_give 3`, then `ip_state` prints `hiddenFromPlayers=True`; after the effect ends or a reveal it prints `False`
 - [ ] Log shows `Patch health: … 0 missing` with `EnemyHud.TestShow`, `ZNet.UpdatePlayerList`, `ZDOMan.SendZDOs` patched, and no `SendZDOs transpiler: pattern not found` error
 
-Two clients (pending, needs plan 3 server):
-- [ ] Second client: no nameplate over the hidden player
-- [ ] Second client: no map pin for the hidden player (even with "share position" on)
-- [ ] Second client: the hidden player is not rendered near their real position while hidden
+Two clients (passed 2026-10-03 on the dedicated server):
+- [x] Second client: no nameplate over the hidden player
+- [x] Second client: no map pin for the hidden player (even with "share position" on)
+- [x] Second client: the hidden player is not rendered near their real position while hidden
 - [ ] After a reveal or the end of the effect, the player appears on the second client within one send interval
 - [ ] AI in the second client's zone still ignores the hidden player
 - [ ] With `AllowPvpInvisibility = false` on the server, tier III hides from enemies only
@@ -423,7 +423,7 @@ Cultivation:
 Meads:
 - [ ] Every mead base needs 2 of its tier's veil ingredient at the Mead ketill
 
-Two clients (pending, plan 3 server): goggles III wearer sees a tier-III-hidden player's nameplate and veiled body at the real position, a non-wearer does not; no map pin for either; a pick by client A updates client B within 5 s; a double pick yields once.
+Two clients (passed 2026-10-03 on the dedicated server): goggles III wearer sees a tier-III-hidden player's nameplate and veiled body at the real position, a non-wearer does not; no map pin for either; a pick by client A updates client B within 5 s; a double pick yields once.
 
 ## Plan 5 – round N (station levels, tree sapling, crop sprouts, yaw, wind)
 

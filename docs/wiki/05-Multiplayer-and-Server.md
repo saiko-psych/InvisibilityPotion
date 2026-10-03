@@ -35,5 +35,4 @@ The server's config file is the one that counts: gameplay values are pushed to e
 - **Admin-only values:** only admins can change gameplay values in game.
 - **Recipes are local:** read at startup from each machine's file, not synced.
 - **Wild plants only in new zones:** Baldr's Tear and Hel's Ember Fern spawn only in newly generated zones.
-- **Untested with many players:** features that need two players (tier III hiding, the goggles' player reveal, plants picked by another player) have only been tested on a single machine so far.
 - Mods that replace AI perception, rewrite `ZDOMan.SendZDOs`, or replace nameplates may break hiding. See the FAQ for compatibility.
