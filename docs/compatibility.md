@@ -53,6 +53,7 @@ All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `P
 | Tree prefabs `FirTree`, `Pinetree_01`, `FirTree_big` | `TreeLichen` component added to the prefab root (at `OnVanillaPrefabsAvailable` and on every `OnPrefabsRegistered`). A lichen child object is instantiated only on trees that win the roll. RPC `IP_LichenPlant` registered on the tree's `ZNetView`. | Mods that clone these trees after us copy the component: `TreeLichen.Start` does not check the prefab hash, so such clones can roll lichen too in the Black Forest (harmless, but planting a sprout on them is refused because `TreeSapling` checks the hash). Mods that replace the tree prefabs entirely lose wild lichen. |
 | Crop saplings (`sapling_carrot`, else turnip/onion/barley) | **Cloned** (`CreateClonedPrefab`) into `IP_HuldraSapling`, `IP_BaldrSapling`, `IP_FernSapling`; the vanilla prefab is not changed. | None. |
 | `MeadHealthMinor`, `MeadBaseHealthMinor`, `Thistle`, `HelmetLeather` | Read as data templates for our items (shared data copied onto our own bundle prefabs; plain clones as fallback). Not modified. | None. |
+| Serving Tray piece table (`_FeasterPieceTable`) | Our six meads and bases are appended to `m_pieces` on every `ObjectDB.Awake` (Jötunn `PieceManager.RegisterPieceInPieceTable`); their `Piece`/`WearNTear` fields are copied from `MeadHealthMinor` (not modified). | Mods that rebuild or sort the tray table after us may drop or reorder our entries. |
 | Vanilla mead consume status effect (`[Veil] PotionVfxSource`, default `MeadFrostResist`) | Its start/stop `EffectList`s are **shared by reference** with our status effects. | A mod that edits those effect lists in place also changes our potion start/stop effect. |
 | Pick effects (`Pickable_Thistle` etc.) | `m_pickEffector` read for the pick sound. | None. |
 | Vegetation | Two `ZoneVegetation` entries through Jötunn's `ZoneManager` (Mountains, Ashlands). | Mods that rebuild `ZoneSystem.m_vegetation` from their own list (world-gen overhauls such as Expand World Data) can drop ours unless they read the live list. |
@@ -137,7 +138,7 @@ compile with 0 warnings): `AssetUtils.LoadAssetBundleFromResources`, `AssetUtils
 `MockManager.FixShader` and `fixReference` on the custom entities, `ItemManager.Instance.AddItem/AddStatusEffect/
 AddItemConversion/GetItem`, `CustomItem`, `ItemConfig` (incl. `MinStationLevel`), `CustomStatusEffect`, `CustomPrefab`,
 `ZoneManager.Instance.AddCustomVegetation/GetZoneVegetation`, `ZoneManager.OnVegetationRegistered`, `CustomVegetation`,
-`VegetationConfig` (`ScaleMin/Max`, `GroupSizeMin/Max`, `GroundOffset`, tilt and altitude fields), `PieceManager.Instance.AddPiece`,
+`VegetationConfig` (`ScaleMin/Max`, `GroupSizeMin/Max`, `GroundOffset`, tilt and altitude fields), `PieceManager.Instance.AddPiece`, `PieceManager.Instance.RegisterPieceInPieceTable/GetPieceTable/GetPieceTables`, `PieceManager.OnPiecesRegistered`,
 `CustomPiece`, `PieceConfig`, `RenderManager.Instance.Render`, `RenderManager.IsometricRotation`, `ShaderHelper.ShaderDump`,
 `SynchronizationManager.OnConfigurationSynchronized`, `ConfigurationManagerAttributes` (`IsAdminOnly`), `NetworkCompatibility`,
 `CommandManager.Instance.AddConsoleCommand` (Debug), `LocalizationManager.Instance.GetLocalization`.

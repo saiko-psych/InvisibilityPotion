@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace InvisibilityPotion.Dev
 {
-    /// <summary>Debug-only asset inspection commands (plan 4): ip_components, ip_shaderdump, ip_bundle. Output goes to the console and Plugin.Log.</summary>
+    /// <summary>Debug-only asset inspection commands (plan 4): ip_components, ip_shaderdump, ip_bundle, ip_tray. Output goes to the console and Plugin.Log.</summary>
     internal static class AssetCommands
     {
         private const int MaxLines = 300;
@@ -19,6 +19,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new ComponentsCommand());
             CommandManager.Instance.AddConsoleCommand(new ShaderDumpCommand());
             CommandManager.Instance.AddConsoleCommand(new BundleCommand());
+            CommandManager.Instance.AddConsoleCommand(new TrayCommand());
         }
 
         /// <summary>A registered prefab (ZNetScene, then Jötunn's prefabs, then any loaded GameObject of that name).</summary>
@@ -119,6 +120,42 @@ namespace InvisibilityPotion.Dev
             {
                 foreach (var line in Items.AssetBundles.Describe()) DevCommands.Say(line);
             }
+        }
+
+        private class TrayCommand : ConsoleCommand
+        {
+            public override string Name => "ip_tray";
+            public override string Help => "ip_tray [all]: the Serving Tray's piece table (owning item, flags, categories) and its mead entries (prefab, components, " +
+                                           "piece name/category/usage, resources); 'all' lists every entry";
+
+            public override void Run(string[] args)
+            {
+                var all = args.Length > 0 && args[0] == "all";
+                var table = Items.TrayPieces.FindTable(out var how);
+                if (table == null) { DevCommands.Say("ip_tray: Serving Tray piece table not found (no world loaded?)"); return; }
+                var owners = ObjectDB.instance == null ? new List<string>() : ObjectDB.instance.m_items
+                    .Where(i => i != null && i.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_buildPieces == table).Select(i => i.name).ToList();
+                DevCommands.Say($"ip_tray: table {table.name} (found by {how}), item(s) [{string.Join(", ", owners)}], {table.m_pieces.Count} entries, " +
+                                $"canRemovePieces {table.m_canRemovePieces}, canRemoveFeasts {table.m_canRemoveFeasts}, hideAdvancedMenu {table.m_hideAdvancedMenu}, skill {table.m_skill}, " +
+                                $"categories [{string.Join(", ", table.m_categories)}], labels [{string.Join(", ", table.m_categoryLabels)}]");
+                foreach (var go in table.m_pieces)
+                {
+                    if (go == null) { DevCommands.Say("  null entry"); continue; }
+                    var p = go.GetComponent<Piece>();
+                    var isMead = p != null && p.m_category == Piece.PieceCategory.Meads;
+                    if (!all && !isMead && !go.name.Contains("Mead")) continue;
+                    var res = p?.m_resources == null ? "-" : string.Join(" + ", p.m_resources.Select(r => $"{(r.m_resItem != null ? r.m_resItem.name : "null")} x{r.m_amount} recover {r.m_recover}"));
+                    var drop = go.GetComponent<ItemDrop>();
+                    var dropInfo = drop == null ? "no ItemDrop" : $"ItemDrop({drop.m_itemData.m_shared.m_name}, type {drop.m_itemData.m_shared.m_itemType}, drink {drop.m_itemData.m_shared.m_isDrink}, " +
+                                                                   $"enableObj {(drop.m_pieceEnableObj != null ? drop.m_pieceEnableObj.name : "-")}, disabledObj {(drop.m_pieceDisabledObj != null ? drop.m_pieceDisabledObj.name : "-")})";
+                    var wnt = go.GetComponent<WearNTear>();
+                    DevCommands.Say($"  {go.name} layer {LayerMask.LayerToName(go.layer)}: [{Items.ModelPrefabs.ComponentList(go)}] piece '{p?.m_name}' category {p?.m_category} usage {p?.m_usage} " +
+                                    $"canBeRemoved {p?.m_canBeRemoved} groundPiece {p?.m_groundPiece} | resources {res} | {dropInfo} | " +
+                                    $"WearNTear {(wnt == null ? "-" : $"health {wnt.m_health} material {wnt.m_materialType} supports {wnt.m_supports} fragments {wnt.m_autoCreateFragments} new {(wnt.m_new != null ? wnt.m_new.name : "-")}")}");
+                }
+            }
+
+            public override List<string> CommandOptionList() => new List<string> { "all" };
         }
     }
 }

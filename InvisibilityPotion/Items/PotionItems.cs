@@ -60,6 +60,21 @@ namespace InvisibilityPotion.Items
                 }
                 catch (System.Exception e) { Plugin.Log.LogError($"Icons for tier {t} failed: {e}"); }
             }
+            // Serving Tray (0.3.1): meads and bases become their own build piece like vanilla meads (after the icons: the piece
+            // shows the item icon). The table entries are added on every ObjectDB.Awake (TrayPieces.Subscribe).
+            try
+            {
+                var prepared = 0;
+                foreach (var name in TrayPieceRules.ItemNames(MeadName, BaseName))
+                {
+                    var prefab = PrefabManager.Instance.GetPrefab(name);
+                    if (prefab == null) { Plugin.Log.LogWarning($"tray: {name} not registered; not placeable"); continue; }
+                    try { if (TrayPieces.Prepare(prefab)) prepared++; }
+                    catch (System.Exception e) { Plugin.Log.LogWarning($"tray: preparing {name} failed, not placeable: {e}"); }
+                }
+                if (prepared > 0) TrayPieces.Subscribe();
+            }
+            catch (System.Exception e) { Plugin.Log.LogWarning($"tray: setup failed, meads not placeable with the Serving Tray: {e}"); }
         }
 
         private static void RegisterTier(int t)

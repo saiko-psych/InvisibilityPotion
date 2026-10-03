@@ -661,3 +661,22 @@ screenshot); one cultivated Baldr's Tear or fern nearby; `make build`, `make run
 - [ ] With the switch on (default): within a few seconds of the zone loading the fern in the sea is gone; log `plants: removed IP_... at (x,y,z): below sea level` (or `on lava`) once per reason; `ip_plants` shows `removed by this peer since start: N`
 - [ ] Wild plants on dry ash ground / dry mountain ground stay; no `misplaced` in `ip_plants`
 - [ ] A plant grown from a sapling after this update shows `cultivated,` in `ip_plants` and is never removed; an older cultivated plant on cultivated ground stays too
+
+## 0.3.1 – veil meads and bases on the Serving Tray (2026-10-03)
+
+Setup: a Serving Tray, one of each veil mead (`ip_spawn MeadInvisibility_T1` .. `T3`) and base (`MeadBaseInvisibility_T1` .. `T3`)
+and one vanilla mead in the inventory; `make build`, `make run`.
+
+- [ ] Log at startup: six `tray: MeadInvisibility_T1/2/3, MeadBaseInvisibility_T1/2/3 prepared as piece ...` lines (category `Meads`,
+  `resources <own item> x1`, template requirement shown), and after joining six `tray: registered ... in _FeasterPieceTable` lines;
+  no `tray:` warning. A second world load in the same session logs `tray: 6 piece(s) already listed`
+- [ ] `ip_tray` (and `ip_tray all` once): paste the log. It settles the tray item name, the vanilla mead entries' components,
+  requirement (`MeadHealthMinor x1 recover ...`), `m_usage` and whether vanilla bases are listed (expected: not)
+- [ ] Serving Tray "Mead" tab: our three meads and three bases appear next to the vanilla meads, with their icons and names
+- [ ] Place each one: our bottle/bowl stands on the table at the same size as a dropped one (no vanilla health mead mesh),
+  the cork wisp rises on the meads; one item leaves the inventory per placement. Placing reveals you while veiled (tool use, as for the hammer)
+- [ ] Hover a placed veil mead: `[E] Drink`; drinking it starts the veil (and the Veil Cooldown), the bottle disappears, nothing drops;
+  during the cooldown it is refused with `$msg_cantconsume` and stays on the table
+- [ ] Hover a placed base: `[E] Pick up`; picking up returns the base. Alt-use on a placed mead picks it up instead of drinking
+- [ ] Removing a placed mead/base with the tray (right click) drops exactly that item; the hammer cannot remove it
+- [ ] Log out and back in: placed meads and bases are still on the table (no rigidbody, they do not fall or roll)

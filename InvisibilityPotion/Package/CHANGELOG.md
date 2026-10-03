@@ -3,6 +3,7 @@
 ## 0.3.1 (unreleased)
 
 - Wild Baldr's Tear and Hel's Ember Fern left in water or (ferns) on lava by zones generated before 0.3.0's dry-land rules are removed when their zone loads. Cultivated plants are never removed. Config `[Plants] RemoveMisplacedWildPlants` (default on, server-synced).
+- The veil meads and their mead bases can be placed with the Serving Tray ("Mead" tab) like vanilla meads: drink a placed mead with Use, pick it up with alt-use, or remove it with the tray to get it back.
 
 ## 0.3.0
 
