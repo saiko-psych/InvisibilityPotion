@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 (2026-10-03)
+
+- Package page: screenshot gallery, install guide with the Thunderstore package name, source and support links. No gameplay change.
+
 ## 0.3.1 (2026-10-03)
 
 - Wild Baldr's Tear and Hel's Ember Fern left in water or (ferns) on lava by zones generated before 0.3.0's dry-land rules are removed when their zone loads. Cultivated plants are never removed. Config `[Plants] RemoveMisplacedWildPlants` (default on, server-synced).
