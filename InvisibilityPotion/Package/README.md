@@ -4,6 +4,29 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 **The mod must be installed on the server and on every client** (Jötunn refuses mismatched clients). Server and clients also need the **same Jötunn version** (built against 2.30.0; Jötunn compares its own version down to the patch number).
 
+## Install
+
+**Mod manager (recommended):** install *InvisibilityPotion* with r2modman or Thunderstore Mod Manager; BepInExPack Valheim and Jötunn are pulled in automatically.
+
+**Manual:**
+1. Install [BepInExPack Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) (unzip into the Valheim folder so `BepInEx/` sits next to `valheim.exe` / `valheim.x86_64`).
+2. Put `Jotunn.dll` from [Jötunn 2.30.0](https://thunderstore.io/c/valheim/p/ValheimModding/Jotunn/) into `BepInEx/plugins/Jotunn/`.
+3. Put `plugins/InvisibilityPotion.dll` from this zip into `BepInEx/plugins/InvisibilityPotion/`.
+
+Result:
+```
+Valheim/
+└── BepInEx/
+    ├── config/saikopsych.InvisibilityPotion.cfg   (created on first start)
+    └── plugins/
+        ├── Jotunn/Jotunn.dll
+        └── InvisibilityPotion/InvisibilityPotion.dll
+```
+
+**Dedicated server:** same three steps in the server folder (BepInExPack's `start_server_bepinex.sh` / `.bat` starts it); the server's config file is the one that counts for all players. Linux users: Steam launch option `./start_game_bepinex.sh %command%`.
+
+**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 24 targets patched, 0 missing` when everything loaded.
+
 ## The meads
 
 | Mead | Duration | Enemies | Other players | After a reveal | Carry weight |
