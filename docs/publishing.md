@@ -13,6 +13,12 @@ Where to publish, what each site needs, and ready-to-paste descriptions. Screens
 
 Order: Thunderstore first (dependency handling), then Nexus with the same zip, then the release tag; post the Discord announcement last with both links.
 
+## Live listings (2026-10-03)
+
+- Thunderstore: https://thunderstore.io/c/valheim/p/EdgeExploxers/InvisibilityPotion/ (0.3.2; wiki with seven pages from `docs/wiki/`)
+- Nexus Mods: https://www.nexusmods.com/valheim/mods/4179 ("Invisibility Potion - Veil Meads", because the plain name was taken; description is BBCode, requirements are external links to the Thunderstore pages of BepInExPack and Jötunn; new versions go to the Files step of the mod editor)
+- Source: https://github.com/saiko-psych/InvisibilityPotion
+
 ## Short description (≤ 250 characters, Thunderstore manifest / Nexus summary)
 
 > Three veil meads that hide you from enemies and, at tier III, from other players. Brew them from hidden plants only veil goggles reveal. Attacking or using tools breaks the veil. Server + clients need the mod.
