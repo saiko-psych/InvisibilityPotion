@@ -4,7 +4,7 @@ The mod needs **BepInExPack Valheim** and **Jötunn**. It must be installed on t
 
 ## Mod manager (recommended)
 
-Install *InvisibilityPotion* with r2modman or the Thunderstore Mod Manager. BepInExPack Valheim and Jötunn are installed automatically.
+Install **EdgeExploxers-InvisibilityPotion** (https://thunderstore.io/c/valheim/p/EdgeExploxers/InvisibilityPotion/) with r2modman or the Thunderstore Mod Manager. BepInExPack Valheim and Jötunn are installed automatically.
 
 ## Manual
 

@@ -4,9 +4,19 @@ Three veil meads for Valheim. Drink one and a fog veil settles over you: enemies
 
 **The mod must be installed on the server and on every client** (Jötunn refuses mismatched clients). Server and clients also need the **same Jötunn version** (built against 2.30.0; Jötunn compares its own version down to the patch number).
 
+## Screenshots
+
+![Deep Veil fog](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier2-deep-veil.jpg)
+![Faint Veil](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/fog-tier1-faint-veil.jpg)
+![Allfather's Eye](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/goggles-3-allfathers-eye.jpg)
+![Hel's Ember Fern in the Ashlands](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/ferns-ashlands-day.jpg)
+![Baldr's Tear in the Mountains](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/plant-baldrs-tear-mountains.jpg)
+![Veil meads on the serving tray](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/bottles-on-serving-tray.jpg)
+![Models](https://raw.githubusercontent.com/kitschekko/InvisibilityPotion/main/docs/screenshots/models-bottles.png)
+
 ## Install
 
-**Mod manager (recommended):** install *InvisibilityPotion* with r2modman or Thunderstore Mod Manager; BepInExPack Valheim and Jötunn are pulled in automatically.
+**Mod manager (recommended):** install [EdgeExploxers-InvisibilityPotion](https://thunderstore.io/c/valheim/p/EdgeExploxers/InvisibilityPotion/) with r2modman or Thunderstore Mod Manager; BepInExPack Valheim and Jötunn are pulled in automatically.
 
 **Manual:**
 1. Install [BepInExPack Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) (unzip into the Valheim folder so `BepInEx/` sits next to `valheim.exe` / `valheim.x86_64`).
@@ -99,6 +109,10 @@ With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/Configur
 - Features that need two players (tier III hiding from other players, goggles III revealing them, plants picked by another player) have only been tested on a single machine so far.
 - Mead and goggle recipes are read once at startup from the local config file.
 - Veil meads go on the horizontal item stand but not on the wall item stand, and mead bases on neither, like vanilla meads and mead bases.
+
+## Support
+
+Source, issues and screenshots: https://github.com/kitschekko/InvisibilityPotion · If you enjoy the mod: [Buy me a coffee](https://buymeacoffee.com/kitschekko)
 
 ## Source and license
 
