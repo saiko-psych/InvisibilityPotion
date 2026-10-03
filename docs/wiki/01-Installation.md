@@ -36,7 +36,7 @@ Linux players start Valheim with the Steam launch option `./start_game_bepinex.s
 Open `BepInEx/LogOutput.log` in the Valheim folder (or use "View logs" in your mod manager) and look for:
 
 ```
-Patch health: 24 targets patched, 0 missing
+Patch health: 25 targets patched, 0 missing
 ```
 
 "0 missing" means every game hook was found. If some are missing, another mod or a game update changed something. Please report it with the log on the [issue tracker](https://github.com/saiko-psych/InvisibilityPotion/issues).

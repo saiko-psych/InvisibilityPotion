@@ -35,7 +35,7 @@ Valheim/
 
 **Dedicated server:** same three steps in the server folder (BepInExPack's `start_server_bepinex.sh` / `.bat` starts it); the server's config file is the one that counts for all players. Linux users: Steam launch option `./start_game_bepinex.sh %command%`.
 
-**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 24 targets patched, 0 missing` when everything loaded.
+**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 25 targets patched, 0 missing` when everything loaded.
 
 ## The meads
 
@@ -104,7 +104,7 @@ With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/Configur
 
 ## Known limitations
 
-- Wild Baldr's Tear and Hel's Ember Fern spawn only in **newly generated zones**. In an existing world, explore new land (or cultivate them). Huldra's Hair on trees works in existing worlds.
+- Wild Baldr's Tear and Hel's Ember Fern appear in newly generated zones and, since 0.4.0, also in zones generated before the mod (`RetrofitExistingZones`, on by default): the server rolls each zone once a player comes near, with the same seed vanilla would have used, so a zone never fills up over time. A plant can stand close to a location entrance in such a zone. Huldra's Hair on trees works in existing worlds either way.
 - The server must run the mod: hiding a player's position from other players happens on the server.
 - Mead and goggle recipes are read once at startup from the local config file.
 - Veil meads go on the horizontal item stand but not on the wall item stand, and mead bases on neither, like vanilla meads and mead bases.

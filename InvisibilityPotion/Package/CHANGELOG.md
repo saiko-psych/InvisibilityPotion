@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-10-03)
+
+- Wild Baldr's Tear and Hel's Ember Fern now also appear in zones that were generated before the mod was installed: when a player comes near such a zone, the server rolls its chance once, with the same seed vanilla uses for new zones, and places the group under the usual rules. Zones that already hold a wild plant are skipped; a zone that misses its roll misses on every load, so nothing accumulates. Switch `[Plants] RetrofitExistingZones` (default on, server-side). Debug build: `ip_retrofit`.
+- Wild plant rates raised to the rate of vanilla carrot and turnip seeds: `BaldrZoneChance` 0.2 -> 0.5, `HelFernZoneChance` 0.1 -> 0.5 (migrated once in existing config files that still hold an old default; customised values stay).
+- New patch target `ZoneSystem.CreateGhostZones` (25 targets).
+
 ## 0.3.2 (2026-10-03)
 
 - Package page: screenshot gallery, install guide with the Thunderstore package name, source and support links. No gameplay change.

@@ -31,9 +31,11 @@ namespace InvisibilityPotion.Config
             _plantEntries["CultivateMinutes"] = Bind(PlantsSection, "CultivateMinutes", 240f,
                 "Minutes of world time (vanilla thistle: 240) until a planted Baldr's Tear or Hel's Ember Fern sprout is grown (Cultivator, cultivated ground in its own biome). Read at startup", new AcceptableValueRange<float>(1f, 100000f));
             _plantEntries["BaldrZoneChance"] = Bind(PlantsSection, "BaldrZoneChance", PlantDefaults.BaldrZoneChance,
-                "Chance per newly generated Mountains zone to get a Baldr's Tear group (1-2 plants within 4 m, variants mixed; 0.2 = 1 zone in 5). Plants only on dry land at least 0.5 m above sea level. Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
+                "Chance per Mountains zone to get a Baldr's Tear group (1-2 plants within 4 m, variants mixed; 0.5 = every second zone, the rate of vanilla carrot seeds). Plants only on dry land at least 0.5 m above sea level. Read at startup. Applies to newly generated zones and, with RetrofitExistingZones, to zones generated before the mod", new AcceptableValueRange<float>(0f, 0.99f));
             _plantEntries["HelFernZoneChance"] = Bind(PlantsSection, "HelFernZoneChance", PlantDefaults.HelFernZoneChance,
-                "Chance per newly generated Ashlands zone to get a Hel's Ember Fern group (3-6 plants within 6 m, variants mixed; 0.1 = 1 zone in 10). Plants only on solid ground at least 0.5 m above sea level and off lava. Read at startup; only new zones", new AcceptableValueRange<float>(0f, 0.99f));
+                "Chance per Ashlands zone to get a Hel's Ember Fern group (3-6 plants within 6 m, variants mixed; 0.5 = every second zone, the rate of vanilla turnip seeds). Plants only on solid ground at least 0.5 m above sea level and off lava. Read at startup. Applies to newly generated zones and, with RetrofitExistingZones, to zones generated before the mod", new AcceptableValueRange<float>(0f, 0.99f));
+            _plantEntries["RetrofitExistingZones"] = Bind(PlantsSection, "RetrofitExistingZones", true,
+                "Zones generated before the mod was installed (or before a plant existed) get their wild Baldr's Tear / Hel's Ember Fern when a player comes near: the server rolls the zone chance with the same seed vanilla uses for new zones (world seed + zone + prefab), so a zone always rolls the same way and never fills up. Zones that already hold a wild plant are skipped. Server-side; the server's value counts");
             _plantEntries["RemoveMisplacedWildPlants"] = Bind(PlantsSection, "RemoveMisplacedWildPlants", true,
                 "Wild Baldr's Tear and Hel's Ember Fern that stand below sea level (in water) or a fern on lava, left over from zones generated before the dry-land rules, are removed when their zone loads. Cultivated plants are never removed");
             _plantEntries["GroundRegrowMinutes"] = Bind(PlantsSection, "GroundRegrowMinutes", 240f,
@@ -91,6 +93,7 @@ namespace InvisibilityPotion.Config
         public static float CultivateMinutes => PlantValue("CultivateMinutes", 240f);
         public static float BaldrZoneChance => PlantValue("BaldrZoneChance", PlantDefaults.BaldrZoneChance);
         public static float HelFernZoneChance => PlantValue("HelFernZoneChance", PlantDefaults.HelFernZoneChance);
+        public static bool RetrofitExistingZones => PlantValue("RetrofitExistingZones", true);
         public static bool RemoveMisplacedWildPlants => PlantValue("RemoveMisplacedWildPlants", true);
         public static float GroundRegrowMinutes => PlantValue("GroundRegrowMinutes", 240f);
         /// <summary>[Plants] YieldTN as (min, max); a malformed value falls back to the default with one warning per text.</summary>

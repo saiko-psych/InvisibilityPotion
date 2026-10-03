@@ -34,5 +34,5 @@ The server's config file is the one that counts: gameplay values are pushed to e
 - **Map pin:** hidden players have no pin for others, and goggles never show one.
 - **Admin-only values:** only admins can change gameplay values in game.
 - **Recipes are local:** read at startup from each machine's file, not synced.
-- **Wild plants only in new zones:** Baldr's Tear and Hel's Ember Fern spawn only in newly generated zones.
+- **Retrofit is server-side:** wild plants for zones generated before the mod are placed by the server (`RetrofitExistingZones`); the server's config value counts, and the server does the work (one zone per player per 0.1 s, only zones near players).
 - Mods that replace AI perception, rewrite `ZDOMan.SendZDOs`, or replace nameplates may break hiding. See the FAQ for compatibility.

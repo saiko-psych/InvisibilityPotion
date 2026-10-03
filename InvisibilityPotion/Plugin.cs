@@ -15,7 +15,7 @@ namespace InvisibilityPotion
     {
         public const string PluginGuid = "saikopsych.InvisibilityPotion";
         public const string PluginName = "InvisibilityPotion";
-        public const string PluginVersion = "0.3.2";
+        public const string PluginVersion = "0.4.0";
 
         public static ManualLogSource Log { get; private set; }
         public static Harmony HarmonyInstance { get; private set; }
@@ -49,6 +49,7 @@ namespace InvisibilityPotion
             PatchHealth.TargetKey("Player", "PlacePiece"),
             PatchHealth.TargetKey("Player", "CheckRun"),   // round S: no sprinting while Veil Broken runs
             PatchHealth.TargetKey("Plant", "Grow"),   // 0.3.1: marks cultivated ground plants (IP_Cultivated)
+            PatchHealth.TargetKey("ZoneSystem", "CreateGhostZones"),   // 0.4.0: wild plants for zones generated before the mod (ZoneRetrofit)
         };
 
         public static IReadOnlyList<string> MissingPatches { get; private set; } = new List<string>();

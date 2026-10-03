@@ -51,7 +51,8 @@ The file is `BepInEx/config/saikopsych.InvisibilityPotion.cfg`, created on first
 | LichenRevealDistance | Metres within which goggles show the lichen; 0 = no limit (40) |
 | HuldraCultivable | Huldra's Hair can be planted on trunks |
 | CultivateMinutes | Minutes until a planted sprout is grown (240) |
-| BaldrZoneChance, HelFernZoneChance | Chance per newly generated Mountains / Ashlands zone to get a plant group (0.2 / 0.1) |
+| BaldrZoneChance, HelFernZoneChance | Chance per Mountains / Ashlands zone to get a plant group (0.5 / 0.5, the rate of vanilla carrot and turnip seeds). Read at startup |
+| RetrofitExistingZones | Zones generated before the mod get their wild plants when a player comes near; the server rolls once per zone with vanilla's seed, so nothing accumulates (on) |
 | RemoveMisplacedWildPlants | Remove wild plants in water or on lava when their zone loads |
 | GroundRegrowMinutes | Minutes until a picked ground plant is ripe again (240) |
 | YieldT1, YieldT2, YieldT3 | Items per pick as min-max (1-2, 1-1, 2-4) |

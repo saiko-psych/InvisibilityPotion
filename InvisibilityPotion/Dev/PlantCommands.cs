@@ -20,6 +20,7 @@ namespace InvisibilityPotion.Dev
             CommandManager.Instance.AddConsoleCommand(new GrowCommand());
             CommandManager.Instance.AddConsoleCommand(new LichenCommand());
             CommandManager.Instance.AddConsoleCommand(new VegCommand());
+            CommandManager.Instance.AddConsoleCommand(new RetrofitCommand());
         }
 
         private static Minimap.PinData _pin;
@@ -229,6 +230,27 @@ namespace InvisibilityPotion.Dev
                 var lines = PlantVegetation.Describe().ToList();
                 if (lines.Count == 0) Say("no vegetation registered (bundle missing or zone chances 0)");
                 foreach (var l in lines) Say(l);
+            }
+        }
+
+        /// <summary>ip_retrofit: state of the zone retrofit; "here" runs it for the player's zone now (ignores the checked list); "reset" clears the checked list.</summary>
+        private class RetrofitCommand : ConsoleCommand
+        {
+            public override string Name => "ip_retrofit";
+            public override string Help => "ip_retrofit [here|reset]: wild plants for zones generated before the mod. No argument: state; here = run for the current zone now (server/host only); reset = forget which zones were checked this session";
+
+            public override void Run(string[] args)
+            {
+                var arg = args.Length > 0 ? args[0].ToLowerInvariant() : "";
+                if (arg == "reset") { ZoneRetrofit.Reset(); Say("retrofit: checked list cleared"); return; }
+                if (arg == "here")
+                {
+                    var p = Player.m_localPlayer;
+                    if (p == null) { Say("no local player"); return; }
+                    Say(ZoneRetrofit.RunNow(ZoneSystem.GetZone(p.transform.position)));
+                    return;
+                }
+                foreach (var l in ZoneRetrofit.Describe()) Say(l);
             }
         }
 

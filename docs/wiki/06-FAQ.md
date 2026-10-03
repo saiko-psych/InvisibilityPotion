@@ -1,7 +1,7 @@
 # FAQ
 
 **I don't see any plants.**
-Put on veil goggles. Plants are invisible without goggles of at least their tier (Watchman's Glass shows Huldra's Hair, Mimir's Glass adds Baldr's Tear, Allfather's Eye adds the Ashlands fern). Wild Baldr's Tear and ferns only spawn in **newly generated zones**, so in an old world walk into unexplored land, or cultivate them. Huldra's Hair grows on only about 1 in 40 Black Forest firs and pines and shows within 40 m.
+Put on veil goggles. Plants are invisible without goggles of at least their tier (Watchman's Glass shows Huldra's Hair, Mimir's Glass adds Baldr's Tear, Allfather's Eye adds the Ashlands fern). Wild Baldr's Tear and ferns appear in about every second Mountains / Ashlands zone, also in old worlds (since 0.4.0 the server adds them to zones generated before the mod as you come near, if `RetrofitExistingZones` is on). Walk around a bit: the server checks one zone per 0.1 s around you. Huldra's Hair grows on only about 1 in 40 Black Forest firs and pines and shows within 40 m.
 
 **Where is the config?**
 `BepInEx/config/saikopsych.InvisibilityPotion.cfg`. On a server, the server's file counts. See [Configuration](04-Configuration).
@@ -40,7 +40,7 @@ Yes. It is developed on Linux. Use the Steam launch option `./start_game_bepinex
 No. Jötunn checks its version to the patch number. Install the server's Jötunn version.
 
 **Can an existing world use the mod?**
-Yes. Huldra's Hair appears on existing trees. Ground plants only in new zones.
+Yes. Huldra's Hair appears on existing trees, and since 0.4.0 the ground plants are added to old zones as players come near (`RetrofitExistingZones`).
 
 **Where do I report bugs or say thanks?**
 Issues: https://github.com/saiko-psych/InvisibilityPotion/issues. Support: https://buymeacoffee.com/kitschekko

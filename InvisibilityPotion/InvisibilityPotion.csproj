@@ -5,7 +5,7 @@
     <TargetFramework>net48</TargetFramework>
     <RootNamespace>InvisibilityPotion</RootNamespace>
     <AssemblyName>InvisibilityPotion</AssemblyName>
-    <Version>0.3.2</Version>
+    <Version>0.4.0</Version>
     <!-- The servers run Jötunn 2.30.0; `make compat-check` compiles against the newest release to prove API compatibility. -->
     <JotunnVersion Condition="'$(JotunnVersion)' == ''">2.30.0</JotunnVersion>
     <LangVersion>10</LangVersion>

@@ -9,12 +9,12 @@ The mead ingredients grow as **veil plants**. They are invisible, cannot be hove
 | Tier | Plant | Where | Rarity (default) | Yield per pick |
 |---|---|---|---|---|
 | I | Huldra's Hair (lichen on the bark) | Black Forest firs and pines | about 1 eligible tree in 40 (2.5 %) | 1-2 Huldra's Hair |
-| II | Baldr's Tear | Mountains, on dry land | a group of 1-2 plants in about 1 of 5 new zones | 1 Baldr's Tear |
-| III | Hel's Ember Fern | Ashlands, on solid ground, not on lava | a group of 3-6 ferns in about 1 of 10 new zones | 2-4 Hel's Ember Spore |
+| II | Baldr's Tear | Mountains, on dry land | a group of 1-2 plants in about every second zone (the rate of vanilla carrot seeds) | 1 Baldr's Tear |
+| III | Hel's Ember Fern | Ashlands, on solid ground, not on lava | a group of 3-6 ferns in about every second zone (the rate of vanilla turnip seeds) | 2-4 Hel's Ember Spore |
 
 - Bigger plants give up to 25 % more, smaller ones up to 25 % less (ground plants only).
 - **Regrowth:** a picked ground plant is ripe again after 240 minutes of world time, the same as vanilla thistle. The lichen needs two growth stages of 120 minutes each.
-- **Wild ground plants only appear in newly generated zones.** In an existing world, explore new land or cultivate them. The lichen on trees works in existing worlds.
+- **Existing worlds get the plants too** (0.4.0, `RetrofitExistingZones`, on by default): when a player comes near a zone that was generated before the mod, the server rolls that zone's chance once, with the same seed vanilla uses for new zones, and places the group under the usual rules (dry land, no lava, not inside buildings). Zones that already have a wild plant are left alone, and a zone that missed its roll misses again on every load, so nothing fills up. The lichen on trees works in existing worlds either way.
 - Plants come in several model variants (5 for Baldr's Tear and the fern) and are mixed by position. Their leaves and strands sway gently in the wind.
 
 ## The goggles

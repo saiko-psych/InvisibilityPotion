@@ -33,6 +33,7 @@ All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `P
 | `ZDOMan.SendZDOs` | **transpiler** | no | Normal | Server: replaces the one `ZDO.GetPosition()` call that feeds `ZPackage.Write(Vector3)` in the ZDO header with `HeaderPosition` (spoofed height for hidden players). **Most fragile patch**, see below. |
 | `Player.UpdatePlacementGhost` | postfix | no | Normal | Huldra's Hair sprout: trunk check and ghost snap. |
 | `Player.GetMaxCarryWeight` | postfix | no | Normal | Multiplies the final value by `CarryWeightMultiplier`. A later postfix of another mod that adds a flat bonus is not reduced; candidate for `Priority.Low` (`Patches/CarryWeightPatches.cs`, not changed here). |
+| `ZoneSystem.CreateGhostZones` | postfix | no | Normal | Server: after vanilla looked for ungenerated zones around a peer, checks one already generated zone for missing wild plants and places them with vanilla's own `PlaceVegetation` (our two entries only, Ghost mode). Mods that replace zone generation or `m_vegetation` wholesale (custom world generators) may stop the retrofit; it then logs nothing and places nothing. |
 | Debug only: `FejdStartup.Start`, `PlayerController.TakeInput` | postfix | no | Normal | Not in Release builds. |
 
 ### The `SendZDOs` transpiler
