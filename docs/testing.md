@@ -665,9 +665,11 @@ screenshot); one cultivated Baldr's Tear or fern nearby; `make build`, `make run
 ## 0.4.0 – wild plants for old zones, seed-rate chances (2026-10-03)
 
 Setup: `make build` (game closed), `make run` into `testing` (an old world whose Mountains/Ashlands zones were generated before 0.4.0 or before the plants existed). Paste `Patch health`, every `Config migration (plant defaults revision 2)` line and every `plants: retrofit zone` line.
+
+Result 2026-10-04 (world `testing`, host, Ashlands): migration 0.2/0.1 -> 0.5 logged, 25 targets patched, 55 zones checked, 10 ferns placed in 4 zones, `ip_retrofit here` in a zone with ferns: `HasPlants`; no misplaced removals, no exceptions. User confirmed the ferns in game.
 - [ ] Log: `Patch health: 25 targets patched, 0 missing`; `Config migration (plant defaults revision 2): [Plants] BaldrZoneChance 0.2 -> 0.5, [Plants] HelFernZoneChance 0.1 -> 0.5` on a file that still had the old defaults (a customised value is listed as unchanged)
 - [ ] `ip_retrofit` prints `enabled True, available True, server True` and the current zone's state
-- [ ] Walk through old Mountains zones with goggles II: `plants: retrofit zone (x,y): Placed, N placed` lines appear, Baldr's Tear groups (1-2) stand on dry ground; `ip_plants` finds them; every second zone roughly
+- [ ] Walk through old Mountains zones with goggles II: `plants: retrofit zone (x,y): N placed` lines appear, Baldr's Tear groups (1-2) stand on dry ground; `ip_plants` finds them; every second zone roughly
 - [ ] Walk through old Ashlands zones with goggles III: fern groups (3-6) on solid ground, none on lava or in water
 - [ ] Leave and come back (`ip_retrofit reset`, walk again): no second group appears in a zone that already has one (`HasPlants` in `ip_retrofit here`), a zone that rolled `NoRoll` stays empty
 - [ ] `ip_retrofit here` in a zone generated with the mod that has no plant: `NoRoll` (same seed as the original generation) or `HasPlants`

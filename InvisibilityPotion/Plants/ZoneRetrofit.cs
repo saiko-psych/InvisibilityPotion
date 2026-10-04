@@ -55,8 +55,10 @@ namespace InvisibilityPotion.Plants
                 if (!Planner.Next(centre.x, centre.y, radius, (x, y) => IsGenerated(zs, x, y), out var zx, out var zy)) return;
                 var outcome = Check(zs, zx, zy, out var placed);
                 if (outcome == RetrofitOutcome.TerrainNotReady) Planner.Unmark(zx, zy);
-                if (outcome == RetrofitOutcome.Placed || outcome == RetrofitOutcome.NoSpot)
-                    Plugin.Log.LogInfo($"plants: retrofit zone ({zx},{zy}): {outcome}, {placed} placed");
+                if (outcome == RetrofitOutcome.Placed)
+                    Plugin.Log.LogInfo($"plants: retrofit zone ({zx},{zy}): {placed} placed");
+                else if (outcome == RetrofitOutcome.NoSpot)   // common and harmless (the other plant's roll, lava, water): debug level only
+                    Plugin.Log.LogDebug($"plants: retrofit zone ({zx},{zy}): roll hit, no valid spot");
             }
             catch (Exception e)
             {
