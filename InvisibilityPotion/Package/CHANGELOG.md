@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 (unreleased)
+
+- Download is a third of the size (DLL 2.3 MB -> 0.8 MB). No gameplay change. The models lost data nothing ever read (tangents, which only normal-mapped materials use), use Unity's mesh compression, five duplicate meshes are shared, and the separate Windows copy of the asset bundle is gone: meshes and materials are platform-neutral and the placeholder shaders are swapped for Valheim's own shaders by Jötunn on every platform. If a Windows client ever showed pink models, please report the `assets: shader check` line of its `BepInEx/LogOutput.log`.
+
 ## 0.4.1 (2026-10-11)
 
 - Huldra's Hair is less rare: `[Plants] LichenTreeChance` 0.025 -> 0.1 (1 eligible fir/pine in 10 instead of 1 in 40). The roll is deterministic per tree and world seed, so the new rate applies to every tree at once, old zones included. Migrated once in config files that still hold the old default; a customised value stays.

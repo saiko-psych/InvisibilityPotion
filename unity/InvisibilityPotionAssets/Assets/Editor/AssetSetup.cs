@@ -71,6 +71,15 @@ public static class AssetSetup
 
     static readonly string[] FoliageWords = { "strand", "tip", "leaf", "petal", "frond" };
 
+    // 0.4.2 (size): tools/blender/make_plants.py exports variant "a" a second time under the older file names (compatibility
+    // files). The prefab of such a file is built from the variant's FBX, so the bundle holds one mesh instead of two identical
+    // ones (plant_t1_s3 was in three times). The compatibility FBX files stay in the project for their materials and names.
+    static readonly Dictionary<string, string> MeshAlias = new Dictionary<string, string>
+    {
+        ["plant_t1"] = "plant_t1_s3_a", ["plant_t1_s3"] = "plant_t1_s3_a", ["plant_t1_flat"] = "plant_t1_flat_a",
+        ["plant_t2"] = "plant_t2_a", ["plant_t3"] = "plant_t3_a",
+    };
+
     // Wind (plan 5 round N, ruling 5). Vanilla Custom/Vegetation sway properties and values, read from the game's shader and
     // materials (decompressed SoftRef bundle c4210710, Valheim 1.0.16): the shader declares _SwaySpeed (default 15),
     // _SwayDistance (0.5), _RippleSpeed (100), _RippleDistance (0.5), _RippleDeadzoneMin (0.3), _RippleDeadzoneMax (2),
@@ -134,6 +143,10 @@ public static class AssetSetup
         imp.addCollider = false;
         imp.isReadable = false;
         imp.importNormals = ModelImporterNormals.Import;
+        // 0.4.2 (size): no material has a normal map, so tangents (16 of 40 bytes per vertex) are never read; and Unity's mesh
+        // compression packs positions/normals with fewer bits (sub-millimetre at our object sizes). Together about half the bundle.
+        imp.importTangents = ModelImporterTangents.None;
+        imp.meshCompression = ModelImporterMeshCompression.High;
         imp.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
         imp.materialLocation = ModelImporterMaterialLocation.InPrefab;
         imp.materialName = ModelImporterMaterialName.BasedOnMaterialName;
@@ -283,6 +296,12 @@ public static class AssetSetup
     {
         var file = Path.GetFileNameWithoutExtension(path);
         var name = PrefabName(file);
+        if (MeshAlias.TryGetValue(file, out var aliasFile))
+        {
+            var aliasPath = ModelDir + "/" + aliasFile + ".fbx";
+            if (File.Exists(aliasPath)) { Debug.Log("[AssetSetup] " + name + ": mesh shared with " + aliasPath); path = aliasPath; }
+            else Debug.LogWarning("[AssetSetup] " + name + ": alias " + aliasPath + " missing, own mesh used");
+        }
         var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
         if (asset == null) throw new Exception("Model not loadable: " + path);
 

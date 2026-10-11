@@ -13,7 +13,7 @@ Valheim mod (BepInEx 5.4.23.5 from BepInExPack_Valheim 5.4.2350 + Jötunn 2.30.0
 - `make decompile` – regenerate `tools/decompiled/` from the installed game; rerun after game updates
 - `make package` – Release build + Thunderstore zip (`InvisibilityPotion/InvisibilityPotion.zip`); package files in `InvisibilityPotion/Package/` (manifest, README, CHANGELOG, icon from `blender -b --python tools/blender/make_bottle.py -- --icon`). Bump the version in `Plugin.cs`, the csproj and `manifest.json` together
 - `scripts/server-setup.sh <ssh-host> <server-path>` (one time: BepInExPack + Jötunn + DLL on a Linux dedicated server) and `scripts/deploy-server.sh <ssh-host> [server-path]` (DLL updates); both have `--dry-run`, see `docs/server.md`. Mod compatibility notes: `docs/compatibility.md`
-- `make models` – Blender scripts → FBX into the Unity project; `make bundle [TARGET=linux|windows]` – headless Unity bundle build → `InvisibilityPotion/Assets/ip_assets[.windows]` (committed, embedded); see `docs/assets.md`
+- `make models` – Blender scripts → FBX into the Unity project; `make bundle` – headless Unity bundle build → `InvisibilityPotion/Assets/ip_assets` (committed, embedded; one bundle for every platform since 0.4.2, `TARGET=windows` only for experiments); see `docs/assets.md`
 
 ## Rules
 - Verify every game member in `tools/decompiled/` and record it in `docs/decompile-notes.md` before use. That file is the authority for game hooks and holds the findings that affect the design (read "Findings that affect the design" first).

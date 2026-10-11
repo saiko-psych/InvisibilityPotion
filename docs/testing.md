@@ -235,7 +235,7 @@ Potions and recipes (Task 10):
 Setup: `make build` (Debug), `make run`. Everything below also writes to the BepInEx log; paste the `assets:` lines into the chat.
 
 Startup log:
-- [ ] `assets: manifest resources: ...` lists `InvisibilityPotion.Assets.ip_assets` and `....ip_assets.windows` (S5); `assets: loaded 'ip_assets' (... 30 prefabs, 73 materials)`
+- [ ] `assets: manifest resources: ...` lists `InvisibilityPotion.Assets.ip_assets` (and, until 0.4.1, `....ip_assets.windows`) (S5); `assets: loaded 'ip_assets' (... 30 prefabs, 73 materials)`
 - [ ] One `assets: item ...` line per mead, base and goggles: note the template components (S4) and the layer
 - [ ] `assets: T1..T3 mist on 1 anchor(s)` (one MistAnchor per bottle: the attach wrapper holds the only model)
 - [ ] `assets: <item>: material ...: JVLmock_Custom/X -> Custom/X (resolved by the plugin)` per item material; any `not found; using Custom/Creature` warning names a wrong shader guess (expected candidate: `Custom/Vegetation`)
@@ -706,4 +706,13 @@ Released without an in-game run at the user's request ("ich will nicht noch mehr
 - [ ] Black Forest: `ip_plants 64` reports about 10 % lichen trees over several forests (was 2.5 %)
 - [ ] Startup log without `[Logging] Verbose`: no `plants: tree ...` collider dumps, no `assets:   <name>` lines, no `mesh bounds`; with `Verbose = true` they are back
 - [ ] Startup log: no `plants: tree PineTree_01_dead: not found` / `Pine_tree_normal_small` lines
+
+## 0.4.2 – smaller download (2026-10-11, not released yet)
+
+Setup: `make build` (game closed), `make run` into `testing`. The geometry data changed (no tangents, mesh compression High, five shared meshes, one bundle for every platform), so this time look at the models once.
+
+- [ ] Log: `assets: loaded 'ip_assets' (... 37 prefabs, 86 materials)`, `assets: shader check at ...: 0 material(s) still had a JVLmock_ shader`, no `assets:` error
+- [ ] Bottles (held, on the item stand), bowls, goggles (worn, `ip_give goggles 3`), ingredients: same look as 0.4.1, smooth shading on the glass (no visible banding; if there is, lower `meshCompression` to Medium in `AssetSetup.cs` and rebuild)
+- [ ] Plants: `ip_spawn Plant_T1`, `Plant_T1_S3`, `Plant_T1_Flat`, `Plant_T2`, `Plant_T3` (the five shared-mesh prefabs) and one of each variant look as before; wind sway still on the foliage
+- [ ] Windows client (any player): `assets: shader check ... 0 material(s) still had a JVLmock_ shader` and no pink models. Until then the Windows path is unverified
 

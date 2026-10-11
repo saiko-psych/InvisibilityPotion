@@ -1,6 +1,6 @@
 # Asset pipeline
 
-Custom models reach the game through one Unity asset bundle, `ip_assets`, embedded in the plugin DLL. Design: `docs/superpowers/specs/2026-10-02-plan4-assets-design.md`; background: `docs/ideas/2026-10-02-asset-pipeline-research.md`.
+Custom models reach the game through one Unity asset bundle, `ip_assets`, embedded in the plugin DLL (one bundle for every platform since 0.4.2, see "Size" below). Design: `docs/superpowers/specs/2026-10-02-plan4-assets-design.md`; background: `docs/ideas/2026-10-02-asset-pipeline-research.md`.
 
 ## Unity project
 
@@ -26,7 +26,7 @@ make models                  # every tools/blender/make_*.py headless, then copy
 make models SKIP_BLENDER=1   # only copy what tools/blender/out/ already holds
 make unity-setup             # AssetSetup.Create, log: build/unity-setup.log
 make bundle                  # Linux bundle -> InvisibilityPotion/Assets/ip_assets, log: build/unity-bundle-linux.log
-make bundle TARGET=windows   # Windows bundle -> InvisibilityPotion/Assets/ip_assets.windows, log: build/unity-bundle-windows.log
+make bundle TARGET=windows   # Windows build for experiments only (not embedded since 0.4.2), log: build/unity-bundle-windows.log
 ```
 
 Underlying call (`UNITY` defaults to `~/Unity/Hub/Editor/6000.0.75f1/Editor/Unity`):
@@ -38,7 +38,17 @@ $UNITY -batchmode -nographics -quit -projectPath unity/InvisibilityPotionAssets 
 
 `InvisibilityPotion/Assets/ip_assets` is committed and embedded through `<EmbeddedResource Include="Assets\ip_assets" />`, so `make build` works without Unity.
 
-Full rebuild after a model change: `make models && make unity-setup && make bundle && make bundle TARGET=windows`, then commit the FBX files, the generated `.mat`/`.prefab`/`.meta` files and both bundles.
+Full rebuild after a model change: `make models && make unity-setup && make bundle`, then commit the FBX files, the generated `.mat`/`.prefab`/`.meta` files and the bundle.
+
+## Size (0.4.2)
+
+The user asked why the DLL was 2.3 MB when other mods are a few KB (2026-10-11). Measured with UnityPy: code about 260 KB, icons and texts 120 KB, and 1.9 MB for two embedded bundles that held the same 40 meshes (2.4 MB raw: position 12 + normal 12 + **tangent 16 bytes per vertex**, no UVs, no mesh compression; `plant_t1_s3` three times, four other variant-"a" meshes twice, because `make_plants.py` exports variant a again under the older file names). Three changes:
+
+1. `AssetSetup.ImportWithMaterials`: `importTangents = None` (no material has a normal map, so tangents are never read) and `meshCompression = High` (positions and normals packed with fewer bits; if banding shows on a smooth surface such as the bottle glass, lower it to Medium).
+2. `AssetSetup.MeshAlias`: the prefab of a compatibility file (`plant_t1`, `plant_t1_s3`, `plant_t1_flat`, `plant_t2`, `plant_t3`) is built from the variant-a FBX, so the bundle holds 35 distinct meshes instead of 40.
+3. No Windows bundle: meshes, materials and prefabs are platform-neutral; the only platform-specific content, the JVLmock_ stump shaders, is replaced by Jötunn before anything renders, and `AssetBundles.FixShaders` logs what was left. `AssetBundles.Load` always takes `ip_assets`; `ip_assets.windows` was deleted from the repo and the csproj.
+
+Result: bundle 992113 -> 422786 bytes (meshes 2.41 MB -> 359 KB raw), Release DLL 2321408 -> 817664 bytes. Open until a Windows player confirms: `assets: shader check ... 0 material(s) still had a JVLmock_ shader` in a Windows client log (see `docs/testing.md`, 0.4.2).
 
 ## Models and prefabs
 
@@ -112,7 +122,7 @@ Pitfalls found:
 | `make unity-setup`, first ever run (project creation, default package import) | 73 s |
 | `make bundle` (linux), first run after trimming the manifest | 12 s |
 | `make bundle` (linux), warm | 7 s |
-| `make bundle TARGET=windows` | 6 s |
+| `make bundle TARGET=windows` (not embedded since 0.4.2) | 6 s |
 
 ### First test bundle (input for S1/S2/S5)
 

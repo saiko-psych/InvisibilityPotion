@@ -28,14 +28,19 @@ namespace InvisibilityPotion.Items
         public static IEnumerable<GameObject> Prefabs => _prefabs.Values;
         public static IReadOnlyList<GameObject> Tracked => _tracked;
 
-        /// <summary>Windows players load the Windows build of the bundle (d3d11 stump shaders), everything else the Linux one.</summary>
+        /// <summary>
+        /// One bundle for every platform (0.4.2): meshes, materials and prefabs are platform-neutral, and the only platform-specific
+        /// content, the JVLmock_ stump shaders, is swapped for the game's own shaders by Jötunn before anything renders
+        /// (<see cref="FixShaders"/> is the safety net and logs what was left). Until 0.4.1 a second, Windows-built copy of the
+        /// same bundle (ip_assets.windows) doubled the DLL size for nothing.
+        /// </summary>
         public static void Load()
         {
             var asm = typeof(AssetBundles).Assembly;
 #if DEBUG
             Plugin.Verbose($"assets: manifest resources: {string.Join(", ", asm.GetManifestResourceNames())}");
 #endif
-            ResourceName = (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsServer) ? BundleName + ".windows" : BundleName;
+            ResourceName = BundleName;
             _bundle = LoadFromEmbedded(asm, ResourceName);
             if (_bundle == null)
             {
