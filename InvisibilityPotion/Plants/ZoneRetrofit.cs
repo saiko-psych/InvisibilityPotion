@@ -28,7 +28,8 @@ namespace InvisibilityPotion.Plants
         public static readonly ZoneRetrofitPlanner Planner = new ZoneRetrofitPlanner();
         private static ZoneSystem _plannedFor;   // the planner is per world: a new ZoneSystem resets it
         private static readonly HashSet<int> WildHashes = new HashSet<int> { PlantPrefabs.BaldrName.GetStableHashCode(), PlantPrefabs.FernName.GetStableHashCode() };
-        private static int _placedZones, _placedPlants, _loggedErrors;
+        public static readonly RetrofitStats Stats = new RetrofitStats();
+        private static int _loggedErrors;
         private static readonly List<GameObject> Spawned = new List<GameObject>();
 
         private static readonly MethodInfo IsZoneGeneratedMethod = AccessTools.Method(typeof(ZoneSystem), "IsZoneGenerated");
@@ -48,17 +49,22 @@ namespace InvisibilityPotion.Plants
                 var zs = ZoneSystem.instance;
                 if (zs == null || !Config.PluginConfig.RetrofitExistingZones || !Available) return;
                 if (ZNet.instance == null || !ZNet.instance.IsServer() || PlantVegetation.Registered.Count == 0 || WorldGenerator.instance == null) return;
-                if (_plannedFor != zs) { Planner.Reset(); _plannedFor = zs; _placedZones = _placedPlants = 0; }
+                if (_plannedFor != zs) { Planner.Reset(); Stats.Reset(); _plannedFor = zs; }
                 var centre = ZoneSystem.GetZone(refPoint);
                 var simObj = SimulationDistanceField.GetValue(zs);
                 var radius = simObj is SimulationDistance sim ? sim.NearSimulationDistance : 2;   // struct, boxed by reflection
                 if (!Planner.Next(centre.x, centre.y, radius, (x, y) => IsGenerated(zs, x, y), out var zx, out var zy)) return;
-                var outcome = Check(zs, zx, zy, out var placed);
+                var reportOnly = Config.PluginConfig.RetrofitReportOnly;
+                var outcome = Check(zs, zx, zy, reportOnly, out var placed);
                 if (outcome == RetrofitOutcome.TerrainNotReady) Planner.Unmark(zx, zy);
                 if (outcome == RetrofitOutcome.Placed)
-                    Plugin.Log.LogInfo($"plants: retrofit zone ({zx},{zy}): {placed} placed");
+                    Plugin.Log.LogInfo($"plants: retrofit zone ({zx},{zy}): {placed} {(reportOnly ? "would be placed (report only)" : "placed")}");
                 else if (outcome == RetrofitOutcome.NoSpot)   // common and harmless (the other plant's roll, lava, water): debug level only
                     Plugin.Log.LogDebug($"plants: retrofit zone ({zx},{zy}): roll hit, no valid spot");
+                else if (outcome == RetrofitOutcome.HasPlants || outcome == RetrofitOutcome.NoRoll)
+                    Plugin.Log.LogDebug($"plants: retrofit zone ({zx},{zy}): {outcome}");
+                if (Stats.Add(outcome, placed))   // 0.4.1: a summary every RetrofitStats.LogEvery evaluated zones, so a quiet log still proves the retrofit ran
+                    Plugin.Log.LogInfo($"plants: retrofit {Stats.Summary(reportOnly)}");
             }
             catch (Exception e)
             {
@@ -73,16 +79,23 @@ namespace InvisibilityPotion.Plants
             if (!Available) return "retrofit unavailable: a game member was not found (see patch health)";
             if (ZNet.instance == null || !ZNet.instance.IsServer()) return "not the server: the server runs the retrofit";
             if (!IsGenerated(ZoneSystem.instance, zone.x, zone.y)) return $"zone ({zone.x},{zone.y}) is not generated yet: vanilla places the plants itself";
-            var outcome = Check(ZoneSystem.instance, zone.x, zone.y, out var placed);
-            return $"zone ({zone.x},{zone.y}): {outcome}, {placed} placed (RetrofitExistingZones={Config.PluginConfig.RetrofitExistingZones})";
+            var reportOnly = Config.PluginConfig.RetrofitReportOnly;
+            var outcome = Check(ZoneSystem.instance, zone.x, zone.y, reportOnly, out var placed);
+            Stats.Add(outcome, placed);
+            return $"zone ({zone.x},{zone.y}): {outcome}, {placed} {(reportOnly ? "would be placed (report only)" : "placed")} (RetrofitExistingZones={Config.PluginConfig.RetrofitExistingZones})";
         }
 
-        public static void Reset() => Planner.Reset();
+        public static void Reset()
+        {
+            Planner.Reset();
+            Stats.Reset();
+        }
 
         public static IEnumerable<string> Describe()
         {
-            yield return $"retrofit: enabled {Config.PluginConfig.RetrofitExistingZones}, available {Available}, server {(ZNet.instance != null && ZNet.instance.IsServer())}, " +
-                         $"zones checked this session {Planner.CheckedCount}, zones with new plants {_placedZones}, plants placed {_placedPlants}";
+            yield return $"retrofit: enabled {Config.PluginConfig.RetrofitExistingZones}, report only {Config.PluginConfig.RetrofitReportOnly}, available {Available}, " +
+                         $"server {(ZNet.instance != null && ZNet.instance.IsServer())}, zones checked this session {Planner.CheckedCount}";
+            yield return $"  {Stats.Summary(Config.PluginConfig.RetrofitReportOnly)}";
             var p = Player.m_localPlayer;
             if (p != null && ZoneSystem.instance != null)
             {
@@ -111,7 +124,12 @@ namespace InvisibilityPotion.Plants
             return n;
         }
 
-        private static RetrofitOutcome Check(ZoneSystem zs, int x, int y, out int placed)
+        /// <summary>
+        /// One zone. <paramref name="reportOnly"/> (0.4.1, [Plants] RetrofitReportOnly): the plants are placed and counted, then their
+        /// ZDOs are destroyed again through ZNetScene.Destroy (ZNetScene.cs:116: ResetZDO, DestroyZDO on the owner, which the server
+        /// is for a ZDO it just created), so the world keeps nothing.
+        /// </summary>
+        private static RetrofitOutcome Check(ZoneSystem zs, int x, int y, bool reportOnly, out int placed)
         {
             placed = 0;
             var zone = new Vector2s((short)x, (short)y);
@@ -164,11 +182,16 @@ namespace InvisibilityPotion.Plants
             {
                 zs.m_vegetation = all;
                 placed = Spawned.Count;
-                foreach (var go in Spawned) if (go != null) UnityEngine.Object.Destroy(go);   // ghost instances: the ZDOs stay (SpawnZone does the same, ZoneSystem.cs:1346-1352)
+                foreach (var go in Spawned)
+                {
+                    if (go == null) continue;
+                    if (reportOnly && ZNetScene.instance != null) ZNetScene.instance.Destroy(go);   // report only: ZDO and instance go
+                    else UnityEngine.Object.Destroy(go);   // ghost instances: the ZDOs stay (SpawnZone does the same, ZoneSystem.cs:1346-1352)
+                }
                 Spawned.Clear();
                 if (temp != null) UnityEngine.Object.Destroy(temp);
             }
-            if (placed > 0) { _placedZones++; _placedPlants += placed; return RetrofitOutcome.Placed; }
+            if (placed > 0) return RetrofitOutcome.Placed;
             return RetrofitOutcome.NoSpot;
         }
     }

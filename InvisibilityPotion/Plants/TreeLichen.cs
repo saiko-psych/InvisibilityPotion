@@ -27,7 +27,7 @@ namespace InvisibilityPotion.Plants
         /// <summary>Seconds between the checks for an IP_LichenForce change made by another peer.</summary>
         public const float PollInterval = 5f;
         /// <summary>Dumped at startup for the eligibility decision, never given the component.</summary>
-        public static readonly string[] InspectOnly = { "FirTree_small", "FirTree_small_dead", "PineTree_01_dead", "Pine_tree_normal_small" };
+        public static readonly string[] InspectOnly = { "FirTree_small", "FirTree_small_dead" };   // 0.4.1: PineTree_01_dead / Pine_tree_normal_small do not exist in 1.0.17
 
         public static readonly int ForceHash = "IP_LichenForce".GetStableHashCode();
         /// <summary>Planted position on the trunk (<see cref="TrunkCoords"/>): height above the tree base and angle around the axis; unset for wild lichen.</summary>
@@ -298,7 +298,7 @@ namespace InvisibilityPotion.Plants
                 PlacementLogs[key] = n + 1;
                 // S1/S4: proves which collider carries the trunk and how far out the patch sits.
                 var radius = Vector3.ProjectOnPlane(pos - root, Vector3.up).magnitude;
-                Plugin.Log.LogInfo($"lichen: {key} at {root:F1} ({Decision}): patch at r={radius:F2} m, h={PatchHeight} m, angle {angle:F0}, " +
+                Plugin.Verbose($"lichen: {key} at {root:F1} ({Decision}): patch at r={radius:F2} m, h={PatchHeight} m, angle {angle:F0}, " +
                                    (bestCol != null
                                        ? $"via {bestCol.GetType().Name} '{bestCol.name}' layer {LayerMask.LayerToName(bestCol.gameObject.layer)} trigger {bestCol.isTrigger}"
                                        : "no collider hit, fallback radius") + $", tree scale {s.x:F2}");
@@ -316,7 +316,7 @@ namespace InvisibilityPotion.Plants
             if (n >= 5) return;
             PlacementLogs[key] = n + 1;
             var radius = Vector3.ProjectOnPlane(pos - transform.position, Vector3.up).magnitude;
-            Plugin.Log.LogInfo($"lichen: {PrefabName} at {transform.position:F1} (planted): patch at {pos:F2}, r={radius:F2} m, h={height:F2} m, angle {angle:F0}, " +
+            Plugin.Verbose($"lichen: {PrefabName} at {transform.position:F1} (planted): patch at {pos:F2}, r={radius:F2} m, h={height:F2} m, angle {angle:F0}, " +
                                (onTrunk ? $"via {Trunk.GetType().Name} '{Trunk.name}' (ClosestPoint)" : "no trunk capsule, fallback radius") + $", tree scale {s.x:F2}");
         }
 
@@ -374,7 +374,7 @@ namespace InvisibilityPotion.Plants
                 {
                     var prefab = PrefabManager.Instance.GetPrefab(name);
                     if (prefab != null) Dump(prefab, false);
-                    else Plugin.Log.LogInfo($"plants: tree {name}: not found");
+                    else Plugin.Verbose($"plants: tree {name}: not found");
                 }
             _dumped = true;
             var check = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab("FirTree") : null;
@@ -390,7 +390,7 @@ namespace InvisibilityPotion.Plants
                 $"{c.GetType().Name} '{c.name}' layer {LayerMask.LayerToName(c.gameObject.layer)} trigger {c.isTrigger} bounds {LocalBounds(prefab.transform, c)}");
             var children = prefab.transform.Cast<Transform>().Select(t => $"{t.name}[{t.childCount}]");
             var tb = prefab.GetComponent<TreeBase>();
-            Plugin.Log.LogInfo($"plants: tree {prefab.name} ({(eligible ? "eligible" : "inspect only")}): TreeBase {tb != null}" +
+            Plugin.Verbose($"plants: tree {prefab.name} ({(eligible ? "eligible" : "inspect only")}): TreeBase {tb != null}" +
                                $"{(tb != null && tb.m_trunk != null ? $" (trunk '{tb.m_trunk.name}')" : "")}, Destructible {prefab.GetComponent<Destructible>() != null}, " +
                                $"LODGroup {(lods == null ? "none" : $"{lods.Length} LODs ({string.Join("/", lods.Select(l => l.renderers?.Length ?? 0))} renderers)")}, " +
                                $"children {string.Join(", ", children)}; colliders: {string.Join("; ", cols)}");

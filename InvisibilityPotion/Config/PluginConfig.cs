@@ -76,6 +76,8 @@ namespace InvisibilityPotion.Config
             Dev.FogTuningWindow.BindConfig(file);   // before MigrateAndDropOrphans, or the stored window values would be dropped as orphans
 #endif
             BindPlants();   // plan 5: [Plants], [Goggles] (Config/PluginConfig.Plants.cs)
+            _verbose = _file.Bind("Logging", "Verbose", false,
+                "Also write the startup dumps (tree colliders and LODs, mesh bounds, bundle asset lists, per-tree lichen placement) at Info level. Off: only summary lines (patch health, vegetation, retrofit, cultivation). Local, not synced");
             MigrateLookDefaults();
             MigrateGameplayDefaults();
             MigrateMeadRecipes();
@@ -322,6 +324,10 @@ namespace InvisibilityPotion.Config
             }
             _file.Save();
         }
+
+        private static ConfigEntry<bool> _verbose;
+        /// <summary>[Logging] Verbose (0.4.1): the startup dumps go to Info instead of Debug.</summary>
+        public static bool VerboseLogging => _verbose != null && _verbose.Value;
 
         private static void BindGlobal<T>(string key, T value, string description) =>
             _globalEntries[key] = Bind("General", key, value, description);

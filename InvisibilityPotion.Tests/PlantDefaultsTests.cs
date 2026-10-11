@@ -32,13 +32,30 @@ public class PlantDefaultsTests
     }
 
     [Fact]
-    public void Unknown_key_is_kept() => Assert.Equal(0.5f, PlantDefaults.Migrate("LichenTreeChance", 0.5f, 0));
+    public void Unknown_key_is_kept() => Assert.Equal(0.5f, PlantDefaults.Migrate("GroundRegrowMinutes", 0.5f, 0));
+
+    [Fact]
+    public void Lichen_chance_moves_from_revision_2_default_only()
+    {
+        Assert.Equal(0.1f, PlantDefaults.Migrate("LichenTreeChance", 0.025f, 0));
+        Assert.Equal(0.1f, PlantDefaults.Migrate("LichenTreeChance", 0.025f, 2));
+        Assert.Equal(0.025f, PlantDefaults.Migrate("LichenTreeChance", 0.025f, 3));   // file already at revision 3: a value set back by hand stays
+        Assert.Equal(0.05f, PlantDefaults.Migrate("LichenTreeChance", 0.05f, 0));     // customised: kept
+    }
+
+    [Fact]
+    public void Revision_2_file_keeps_zone_chances_and_only_moves_the_lichen()
+    {
+        Assert.Equal(0.3f, PlantDefaults.Migrate("BaldrZoneChance", 0.3f, 2));
+        Assert.Equal(0.2f, PlantDefaults.Migrate("BaldrZoneChance", 0.2f, 2));   // revision 2 already ran: the old revision 1 default is treated as customised
+    }
 
     [Fact]
     public void New_defaults_match_vanilla_seeds_one_in_two()
     {
         Assert.Equal(0.5f, PlantDefaults.BaldrZoneChance);
         Assert.Equal(0.5f, PlantDefaults.HelFernZoneChance);
-        Assert.Equal(2, PlantDefaults.Revision);
+        Assert.Equal(0.1f, PlantDefaults.LichenTreeChance);
+        Assert.Equal(3, PlantDefaults.Revision);
     }
 }

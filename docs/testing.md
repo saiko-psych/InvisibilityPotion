@@ -694,3 +694,16 @@ and one vanilla mead in the inventory; `make build`, `make run`.
 - [ ] Hover a placed base: `[E] Pick up`; picking up returns the base. Alt-use on a placed mead picks it up instead of drinking
 - [ ] Removing a placed mead/base with the tray (right click) drops exactly that item; the hammer cannot remove it
 - [ ] Log out and back in: placed meads and bases are still on the table (no rigidbody, they do not fall or roll)
+
+## 0.4.1 – lichen rate, admin commands, retrofit counters, synced grow time (2026-10-11)
+
+Released without an in-game run at the user's request ("ich will nicht noch mehr testen! ich will einen neuen release einfach!"); unit tests (394) and `make compat-check` passed, Debug and Release builds compile against Valheim 1.0.17. First check happens on the dedicated servers (CT 132 test, then CT 133). Paste from the server log and from a client:
+
+- [ ] Server log: `Loading [InvisibilityPotion 0.4.1]`, `Patch health: 23 targets patched, 0 missing`, `Config migration (plant defaults revision 3): [Plants] LichenTreeChance 0.025 -> 0.1` (a file already at 0.1 or customised logs "nothing to change" or lists only the moved keys)
+- [ ] Server log: `plants: retrofit N zones evaluated: ...` every 25 evaluated zones once a player walks through old Mountains/Ashlands zones; `RetrofitReportOnly = true` logs `would be placed (report only)` and the world keeps nothing (`ip_plants` in that zone lists no new wild plant after a rejoin)
+- [ ] Client on the server, not admin: `ip_plants` prints `ip_plants: admins only on a dedicated server`; as admin it lists plants and `sapling ... grow time N min` with the **server's** CultivateMinutes (log on the client: `cultivation: grow time A -> B min on 2 sapling prefabs and 0 loaded sprouts (server config)` after the join when the files differ)
+- [ ] Plant a sprout as admin with the server at `CultivateMinutes = 1`: the client log shows `cultivation: IP_BaldrSapling grew into IP_BaldrsTear at (x, z) zone (a,b) after 1 min` within about two minutes
+- [ ] Black Forest: `ip_plants 64` reports about 10 % lichen trees over several forests (was 2.5 %)
+- [ ] Startup log without `[Logging] Verbose`: no `plants: tree ...` collider dumps, no `assets:   <name>` lines, no `mesh bounds`; with `Verbose = true` they are back
+- [ ] Startup log: no `plants: tree PineTree_01_dead: not found` / `Pine_tree_normal_small` lines
+

@@ -10,7 +10,7 @@ patches run in registration order (plugin load order; ours loads after every mod
 
 ## 1. Harmony patches
 
-All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `Patch health: N targets patched, M missing`.
+All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `Patch health: N targets patched, M missing` (23 targets in a Release build, 25 in Debug: `FejdStartup.Start` and `PlayerController.TakeInput` are Debug-only).
 
 | Target | Kind | Skips original? | Priority | Notes |
 |---|---|---|---|---|

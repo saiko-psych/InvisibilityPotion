@@ -7,7 +7,8 @@ The file is `BepInEx/config/saikopsych.InvisibilityPotion.cfg`, created on first
 - Gameplay values (`[General]`, `[Tier1-3]`, `[Plants]`, `[Goggles]`) are **synced from the server**. In game only admins can change them. Edit the server's file, then restart (or change them in game as admin).
 - Look values (`[Fog]`, `[Fog.Tier1-3]`, `[Veil]`) are **client-side**: everyone tunes their own fog.
 - With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/ConfigurationManager/) installed (F1 by default) you can edit values in game.
-- **Read at startup, not synced:** mead and goggle recipes, `HuldraCultivable`, `CultivateMinutes`, `BaldrZoneChance`, `HelFernZoneChance`. Keep them identical in every player's file, or leave the defaults.
+- **Read at startup, not synced:** mead and goggle recipes, `HuldraCultivable`, `BaldrZoneChance`, `HelFernZoneChance`. Keep them identical in every player's file, or leave the defaults. `CultivateMinutes` is synced since 0.4.1: the server's value is applied once its config arrives.
+- `[Logging] Verbose` is local: it only changes what your own log file shows.
 
 ## [General]
 
@@ -46,13 +47,14 @@ The file is `BepInEx/config/saikopsych.InvisibilityPotion.cfg`, created on first
 
 | Key | Meaning |
 |---|---|
-| LichenTreeChance | Chance that an eligible Black Forest fir/pine carries Huldra's Hair (0.025) |
+| LichenTreeChance | Chance that an eligible Black Forest fir/pine carries Huldra's Hair (0.1 since 0.4.1, 0.025 before). Deterministic per tree and world seed: a change applies to every tree at once |
 | LichenStageMinutes | Minutes per growth stage of the lichen; regrowth takes twice this (120) |
 | LichenRevealDistance | Metres within which goggles show the lichen; 0 = no limit (40) |
 | HuldraCultivable | Huldra's Hair can be planted on trunks |
-| CultivateMinutes | Minutes until a planted sprout is grown (240) |
+| CultivateMinutes | Minutes until a planted sprout is grown (240). The server's value counts for sprouts planted after joining |
 | BaldrZoneChance, HelFernZoneChance | Chance per Mountains / Ashlands zone to get a plant group (0.5 / 0.5, the rate of vanilla carrot and turnip seeds). Read at startup |
 | RetrofitExistingZones | Zones generated before the mod get their wild plants when a player comes near; the server rolls once per zone with vanilla's seed, so nothing accumulates (on) |
+| RetrofitReportOnly | Dry run of the retrofit (off): the server logs what would be placed and changes nothing |
 | RemoveMisplacedWildPlants | Remove wild plants in water or on lava when their zone loads |
 | GroundRegrowMinutes | Minutes until a picked ground plant is ripe again (240) |
 | YieldT1, YieldT2, YieldT3 | Items per pick as min-max (1-2, 1-1, 2-4) |
@@ -63,6 +65,12 @@ The file is `BepInEx/config/saikopsych.InvisibilityPotion.cfg`, created on first
 |---|---|
 | RecipeT1, RecipeT2, RecipeT3 | Goggle recipes |
 | RevealHiddenPlayers | Allfather's Eye shows Shadow Veil players |
+
+## [Logging]
+
+| Key | Meaning |
+|---|---|
+| Verbose | Also write the startup dumps (tree colliders, mesh bounds, bundle asset lists, per-tree lichen placement) to the log (off). Local, not synced |
 
 ## Recipe strings
 

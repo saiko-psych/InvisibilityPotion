@@ -33,7 +33,7 @@ namespace InvisibilityPotion.Items
         {
             var asm = typeof(AssetBundles).Assembly;
 #if DEBUG
-            Plugin.Log.LogInfo($"assets: manifest resources: {string.Join(", ", asm.GetManifestResourceNames())}");
+            Plugin.Verbose($"assets: manifest resources: {string.Join(", ", asm.GetManifestResourceNames())}");
 #endif
             ResourceName = (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsServer) ? BundleName + ".windows" : BundleName;
             _bundle = LoadFromEmbedded(asm, ResourceName);
@@ -50,7 +50,7 @@ namespace InvisibilityPotion.Items
             }
             var materials = _bundle.LoadAllAssets<Material>();
             Plugin.Log.LogInfo($"assets: loaded '{ResourceName}' ({AssetNames.Count} assets, {_prefabs.Count} prefabs, {materials.Length} materials)");
-            foreach (var name in AssetNames) Plugin.Log.LogInfo($"assets:   {name}");
+            foreach (var name in AssetNames) Plugin.Verbose($"assets:   {name}");
         }
 
         /// <summary>
@@ -123,7 +123,7 @@ namespace InvisibilityPotion.Items
                 if (shader != null)
                 {
                     m.shader = shader;
-                    Plugin.Log.LogInfo($"assets: {context}: material {m.name}: {name} -> {shader.name} (resolved by the plugin)");
+                    Plugin.Verbose($"assets: {context}: material {m.name}: {name} -> {shader.name} (resolved by the plugin)");
                 }
                 else
                 {

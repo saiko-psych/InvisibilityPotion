@@ -16,7 +16,7 @@ namespace InvisibilityPotion.Patches
         private static bool _loggedError;
 
         [HarmonyPostfix]
-        private static void Postfix(UnityEngine.GameObject __result)
+        private static void Postfix(Plant __instance, UnityEngine.GameObject __result)
         {
             try
             {
@@ -24,6 +24,13 @@ namespace InvisibilityPotion.Patches
                 var nview = __result.GetComponent<ZNetView>();
                 if (nview == null || !nview.IsValid()) return;
                 nview.GetZDO().Set(VeilHarvest.CultivatedHash, true);
+                // 0.4.1: one Info line per grown sprout, so a dedicated server log proves cultivation without a client (server test report 2026-10-11, point 5).
+                var pos = __result.transform.position;
+                var zone = ZoneSystem.GetZone(pos);
+                var planted = __instance != null && __instance.m_nview != null && __instance.m_nview.IsValid() ? __instance.m_nview.GetZDO().GetLong(ZDOVars.s_plantTime, 0L) : 0L;
+                var minutes = planted > 0 && ZNet.instance != null ? (ZNet.instance.GetTime().Ticks - planted) / (double)TimeSpan.TicksPerMinute : -1;
+                Plugin.Log.LogInfo($"cultivation: {(__instance != null ? __instance.name.Replace("(Clone)", "") : "sprout")} grew into {__result.name.Replace("(Clone)", "")} " +
+                                   $"at ({pos.x:F0}, {pos.z:F0}) zone ({zone.x},{zone.y}){(minutes >= 0 ? $" after {minutes:F0} min" : "")}");
             }
             catch (Exception e)
             {

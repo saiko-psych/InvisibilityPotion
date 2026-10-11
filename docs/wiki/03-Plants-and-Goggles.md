@@ -8,7 +8,7 @@ The mead ingredients grow as **veil plants**. They are invisible, cannot be hove
 
 | Tier | Plant | Where | Rarity (default) | Yield per pick |
 |---|---|---|---|---|
-| I | Huldra's Hair (lichen on the bark) | Black Forest firs and pines | about 1 eligible tree in 40 (2.5 %) | 1-2 Huldra's Hair |
+| I | Huldra's Hair (lichen on the bark) | Black Forest firs and pines | about 1 eligible tree in 10 (10 %, since 0.4.1; 1 in 40 before) | 1-2 Huldra's Hair |
 | II | Baldr's Tear | Mountains, on dry land | a group of 1-2 plants in about every second zone (the rate of vanilla carrot seeds) | 1 Baldr's Tear |
 | III | Hel's Ember Fern | Ashlands, on solid ground, not on lava | a group of 3-6 ferns in about every second zone (the rate of vanilla turnip seeds) | 2-4 Hel's Ember Spore |
 

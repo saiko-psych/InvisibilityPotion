@@ -15,9 +15,19 @@ namespace InvisibilityPotion
     {
         public const string PluginGuid = "saikopsych.InvisibilityPotion";
         public const string PluginName = "InvisibilityPotion";
-        public const string PluginVersion = "0.4.0";
+        public const string PluginVersion = "0.4.1";
 
         public static ManualLogSource Log { get; private set; }
+
+        /// <summary>
+        /// 0.4.1: startup dumps that only matter when something is wrong (tree colliders and LODs, mesh bounds, bundle asset lists,
+        /// per-tree lichen placement): Info with [Logging] Verbose = true, else Debug (BepInEx hides Debug from the log file by default).
+        /// </summary>
+        public static void Verbose(string message)
+        {
+            if (Cfg.PluginConfig.VerboseLogging) Log.LogInfo(message);
+            else Log.LogDebug(message);
+        }
         public static Harmony HarmonyInstance { get; private set; }
 
         /// <summary>Game methods this mod must have patched for its features to work. Later plans add entries.</summary>
@@ -91,7 +101,11 @@ namespace InvisibilityPotion
                 Log.LogError($"Asset bundle load failed: {e}");
             }
             // Server-synced values arrive after join; rebuild the snapshots so they take effect.
-            Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) => Cfg.PluginConfig.Refresh();
+            Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) =>
+            {
+                Cfg.PluginConfig.Refresh();
+                Plants.Cultivation.ApplyGrowTime();   // 0.4.1: the server's CultivateMinutes reaches the sapling prefabs of every client
+            };
             Jotunn.Managers.PrefabManager.OnVanillaPrefabsAvailable += RegisterItemsOnce;
             HarmonyInstance = new Harmony(PluginGuid);
             // Per-class patching: one unresolvable target must not abort Awake before the health check runs.
@@ -122,6 +136,14 @@ namespace InvisibilityPotion
             catch (Exception e)
             {
                 Log.LogError($"Veil sight driver setup failed: {e}");
+            }
+            try
+            {
+                Commands.AdminCommands.Register();   // 0.4.1: ip_plants and ip_retrofit in Release, admin-gated
+            }
+            catch (Exception e)
+            {
+                Log.LogError($"Admin command registration failed: {e}");
             }
 #if DEBUG
             Dev.DevCommands.Register();

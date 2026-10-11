@@ -1,10 +1,21 @@
 # Changelog
 
+## 0.4.1 (2026-10-11)
+
+- Huldra's Hair is less rare: `[Plants] LichenTreeChance` 0.025 -> 0.1 (1 eligible fir/pine in 10 instead of 1 in 40). The roll is deterministic per tree and world seed, so the new rate applies to every tree at once, old zones included. Migrated once in config files that still hold the old default; a customised value stays.
+- `ip_plants` and `ip_retrofit` are now in the Release build for server admins (a local game and the host always pass; on a dedicated server Jötunn's admin status is required). `ip_plants` lists the hidden plants, lichen trees and sprouts around you; `ip_retrofit` shows the retrofit counters, `ip_retrofit here` runs it for your zone.
+- Retrofit log: every 25 evaluated zones the server logs a summary ("N zones evaluated: P got plants, H already had plants, R roll missed or wrong biome, S no valid spot"), so a quiet log still proves the retrofit ran. New `[Plants] RetrofitReportOnly` (default off, server-side): dry run that logs what would be placed and changes nothing.
+- A grown sprout logs one line on its owner ("cultivation: IP_BaldrSapling grew into IP_BaldrsTear at (x, z) zone (a,b) after N min"), so growth is visible in a server log.
+- `[Plants] CultivateMinutes` is applied again after the server's config arrives, so the server's value counts for every client (it used to be the client's own file; the default 240 minutes made sprouts look stuck).
+- New `[Logging] Verbose` (default off, local): the startup dumps (tree colliders and LODs, mesh bounds, bundle asset lists, per-tree lichen placement) go to Debug level unless it is on; the summary lines stay at Info.
+- Two tree names that do not exist in Valheim 1.0.17 are no longer looked up at startup (`PineTree_01_dead`, `Pine_tree_normal_small`; they were only inspected, never used).
+- Correction to the 0.4.0 notes: Release builds patch 23 targets (25 in Debug builds, which add two Debug-only hooks). No new patch target in 0.4.1. Built and checked against Valheim 1.0.17.
+
 ## 0.4.0 (2026-10-03)
 
 - Wild Baldr's Tear and Hel's Ember Fern now also appear in zones that were generated before the mod was installed: when a player comes near such a zone, the server rolls its chance once, with the same seed vanilla uses for new zones, and places the group under the usual rules. Zones that already hold a wild plant are skipped; a zone that misses its roll misses on every load, so nothing accumulates. Switch `[Plants] RetrofitExistingZones` (default on, server-side). Debug build: `ip_retrofit`.
 - Wild plant rates raised to the rate of vanilla carrot and turnip seeds: `BaldrZoneChance` 0.2 -> 0.5, `HelFernZoneChance` 0.1 -> 0.5 (migrated once in existing config files that still hold an old default; customised values stay).
-- New patch target `ZoneSystem.CreateGhostZones` (25 targets).
+- New patch target `ZoneSystem.CreateGhostZones` (23 targets in Release builds, 25 in Debug builds).
 
 ## 0.3.2 (2026-10-03)
 

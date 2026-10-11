@@ -64,4 +64,27 @@ public class ZoneRetrofitTests
         Assert.DoesNotContain((2, 0), visited);
         Assert.DoesNotContain((0, -2), visited);
     }
+
+    [Fact]
+    public void Stats_count_outcomes_and_ask_for_a_summary_every_25_evaluated_zones()
+    {
+        var s = new RetrofitStats();
+        Assert.False(s.Add(RetrofitOutcome.TerrainNotReady, 0));   // not evaluated
+        Assert.False(s.Add(RetrofitOutcome.Skipped, 0));
+        Assert.Equal(0, s.Evaluated);
+        var due = 0;
+        for (var i = 0; i < 24; i++) if (s.Add(RetrofitOutcome.NoRoll, 0)) due++;
+        Assert.Equal(0, due);
+        Assert.True(s.Add(RetrofitOutcome.Placed, 3));   // the 25th evaluated zone
+        Assert.Equal(25, s.Evaluated);
+        Assert.Equal(1, s.PlacedZones);
+        Assert.Equal(3, s.PlacedPlants);
+        Assert.Equal(24, s.Count(RetrofitOutcome.NoRoll));
+        Assert.Equal(1, s.Count(RetrofitOutcome.TerrainNotReady));
+        Assert.Equal("25 zones evaluated: 1 got plants (3 plants), 0 already had plants, 24 roll missed or wrong biome, 0 roll hit but no valid spot", s.Summary(false));
+        Assert.StartsWith("25 zones evaluated: 1 would get plants", s.Summary(true));
+        s.Reset();
+        Assert.Equal(0, s.Evaluated);
+        Assert.Equal(0, s.Count(RetrofitOutcome.NoRoll));
+    }
 }

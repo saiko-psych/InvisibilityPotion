@@ -26,6 +26,37 @@ namespace InvisibilityPotion.Plants
         public static readonly float[] StageSizes = { 0.45f, 0.7f, 1f };
 
         public static GameObject Sapling { get; private set; }
+        /// <summary>The Plant of every crop sapling prefab (Baldr, Fern), for <see cref="ApplyGrowTime"/>.</summary>
+        private static readonly List<Plant> CropSaplingPlants = new List<Plant>();
+        private static float _appliedGrowSeconds = -1f;
+
+        /// <summary>
+        /// 0.4.1: m_growTime is written into the sapling prefab at startup from the local file, but Jötunn delivers the server's
+        /// [Plants] values only after the join (OnConfigurationSynchronized), so a client planted with its own CultivateMinutes. Called
+        /// from that event (and harmless at any other time): the prefabs and every loaded sprout of ours that still carries the old
+        /// value take the current one. A sprout keeps its own m_growTime per instance (Plant.cs), hence the instances too.
+        /// </summary>
+        public static void ApplyGrowTime()
+        {
+            try
+            {
+                var seconds = Config.PluginConfig.CultivateMinutes * 60f;
+                if (CropSaplingPlants.Count == 0 || Mathf.Abs(seconds - _appliedGrowSeconds) < 0.5f) return;
+                var previous = _appliedGrowSeconds;
+                _appliedGrowSeconds = seconds;
+                var instances = 0;
+                foreach (var plant in CropSaplingPlants) if (plant != null) { plant.m_growTime = seconds; plant.m_growTimeMax = seconds; }
+                foreach (var plant in UnityEngine.Object.FindObjectsByType<Plant>(FindObjectsSortMode.None))
+                {
+                    if (plant == null || !IsOurSapling(plant.name) || Mathf.Abs(plant.m_growTime - seconds) < 0.5f) continue;
+                    plant.m_growTime = seconds;
+                    plant.m_growTimeMax = seconds;
+                    instances++;
+                }
+                Plugin.Log.LogInfo($"cultivation: grow time {previous / 60f:F0} -> {seconds / 60f:F0} min on {CropSaplingPlants.Count} sapling prefabs and {instances} loaded sprouts (server config)");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"cultivation: applying the grow time failed: {e}"); }
+        }
 
         public static void Register()
         {
@@ -140,6 +171,8 @@ namespace InvisibilityPotion.Plants
             plant.m_name = c.Token;
             plant.m_growTime = growSeconds;
             plant.m_growTimeMax = growSeconds;
+            _appliedGrowSeconds = growSeconds;
+            CropSaplingPlants.Add(plant);
             plant.m_grownPrefabs = new[] { grown };
             plant.m_minScale = sMin;
             plant.m_maxScale = sMax;

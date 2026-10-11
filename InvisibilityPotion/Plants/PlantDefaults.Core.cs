@@ -15,11 +15,14 @@ namespace InvisibilityPotion.Plants
         /// 1: zone chances raised (user 2026-10-03): Baldr's Tear 1/6 -> 1/5, Hel's Ember Fern 1/15 -> 1/10.
         /// 2 (0.4.0): both 1/2, the rate of vanilla carrot and turnip seeds (pickable_seedcarrot_blackforest / pickable_seedturnip_swamp:
         /// m_max 0.5, group 1-2 in 5 m; bundle d59cfac, UnityPy) at the user's request.
+        /// 3 (0.4.1): Huldra's Hair on 1 eligible tree in 10 instead of 1 in 40 (user 2026-10-11: "Flechtenrate anheben"). The roll is
+        /// deterministic per tree position and world seed, so the new rate applies to every tree the moment the value changes.
         /// </summary>
-        public const int Revision = 2;
+        public const int Revision = 3;
 
         public const float BaldrZoneChance = 0.5f;
         public const float HelFernZoneChance = 0.5f;
+        public const float LichenTreeChance = 0.1f;
 
         /// <summary>key -> steps (revision that introduced the new default, old default, new default), oldest first.</summary>
         private static readonly Dictionary<string, (int rev, float oldValue, float newValue)[]> Changes =
@@ -27,6 +30,7 @@ namespace InvisibilityPotion.Plants
             {
                 ["BaldrZoneChance"] = new[] { (1, 0.167f, 0.2f), (2, 0.2f, BaldrZoneChance) },
                 ["HelFernZoneChance"] = new[] { (1, 0.0667f, 0.1f), (2, 0.1f, HelFernZoneChance) },
+                ["LichenTreeChance"] = new[] { (3, 0.025f, LichenTreeChance) },
             };
 
         public static IEnumerable<string> Keys => Changes.Keys;

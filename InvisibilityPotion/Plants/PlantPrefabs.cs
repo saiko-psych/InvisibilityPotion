@@ -127,7 +127,7 @@ namespace InvisibilityPotion.Plants
             if (vertical && thinIsY) rot = Quaternion.Euler(90f, 0f, 0f);         // +Y -> +Z
             else if (!vertical && thinIsZ) rot = Quaternion.Euler(-90f, 0f, 0f);  // +Z -> +Y
             stage.transform.localRotation = rot * stage.transform.localRotation;
-            Plugin.Log.LogInfo($"plants: {context}: mesh bounds {s:F3} (thin axis {(thinIsZ ? "z" : thinIsY ? "y" : "x")}), want {(vertical ? "vertical (+Z out)" : "flat (+Y up)")}, " +
+            Plugin.Verbose($"plants: {context}: mesh bounds {s:F3} (thin axis {(thinIsZ ? "z" : thinIsY ? "y" : "x")}), want {(vertical ? "vertical (+Z out)" : "flat (+Y up)")}, " +
                                $"rotation {(rot == Quaternion.identity ? "none" : rot.eulerAngles.ToString("F0"))}");
         }
 

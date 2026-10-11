@@ -97,8 +97,10 @@ Highlights:
 - `[TierN]` `Duration`, `Cooldown`, `RehideDelay`, `AggroLossTime`, `CarryWeightMultiplier`, `DebuffStaminaRegenMultiplier`, `DebuffEitrRegenMultiplier`, `DebuffHealthRegenMultiplier`, `DebuffSpeedModifier`, `DebuffDuration`, `Recipe`.
 - `[General]` the reveal switches above, `DrainStaminaOnAttackReveal`, `AllowPvpInvisibility` (server switch for tier III hiding from players).
 - `[Goggles]` `RecipeT1..3`, `RevealHiddenPlayers`.
-- `[Plants]` lichen chance per tree, zone chances for the ground plants, growth and regrowth times, yields.
-- `[Fog.TierN]`, `[Veil]` the look of the veil (client side).
+- `[Plants]` lichen chance per tree, zone chances for the ground plants, growth and regrowth times, yields, `RetrofitExistingZones` / `RetrofitReportOnly`.
+- `[Fog.TierN]`, `[Veil]` the look of the veil (client side); `[Logging] Verbose` for the startup dumps.
+
+Console (F5) for admins, the host or a local game: `ip_plants [radius]` lists the hidden plants, lichen trees and sprouts around you; `ip_retrofit` shows what the zone retrofit did, `ip_retrofit here` runs it for your zone. Both also write to `BepInEx/LogOutput.log`.
 
 With [ConfigurationManager](https://thunderstore.io/c/valheim/p/shudnal/ConfigurationManager/) installed (F1 by default) you can edit the values in game.
 

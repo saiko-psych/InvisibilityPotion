@@ -95,7 +95,7 @@ namespace InvisibilityPotion.Items
             if (!Mathf.Approximately(ratio, 1f)) go.AddComponent<DroppedItemScale>().m_ratio = ratio;
 
             AssetBundles.Track(go);
-            Plugin.Log.LogInfo($"assets: item {itemName} <- {bundlePrefab} (template {template.name}: {ComponentList(template)}); " +
+            Plugin.Verbose($"assets: item {itemName} <- {bundlePrefab} (template {template.name}: {ComponentList(template)}); " +
                                $"scale world x{attachFactor * ratio:0.##} / attach x{attachFactor:0.##}, durability {shared.m_useDurability}, layer {LayerMask.LayerToName(go.layer)}, rigidbody mass {rb.mass} damping {rb.linearDamping}/{rb.angularDamping}, " +
                                $"box {bounds.size:F3} at {bounds.center:F3}, persistent {nv.m_persistent}");
             return go;
@@ -113,7 +113,7 @@ namespace InvisibilityPotion.Items
             if (nv == null) nv = go.AddComponent<ZNetView>();   // no ?? on Unity objects (fake null)
             nv.m_persistent = false;
             var scale = ApplyScale(go, bundlePrefab, ModelScale.WorldFactor(bundlePrefab));
-            Plugin.Log.LogInfo($"assets: prop {bundlePrefab}: scale x{scale:0.##}, bounds {LocalMeshBounds(go).size:F3}");
+            Plugin.Verbose($"assets: prop {bundlePrefab}: scale x{scale:0.##}, bounds {LocalMeshBounds(go).size:F3}");
             AssetBundles.Track(go);
             return go;
         }
@@ -240,7 +240,7 @@ namespace InvisibilityPotion.Items
                 ConfigureMist(go, mat);
                 n++;
             }
-            Plugin.Log.LogInfo($"assets: T{tier} cork wisp on {n} anchor(s) at {top:F3} (item space): color {color}, alpha {WispAlpha}, rate {WispRate}/s, " +
+            Plugin.Verbose($"assets: T{tier} cork wisp on {n} anchor(s) at {top:F3} (item space): color {color}, alpha {WispAlpha}, rate {WispRate}/s, " +
                                $"size {WispSizeMin}..{WispSizeMax} m, lifetime {WispLifetime} s, material {source.name} (shader {source.shader?.name})");
             return n;
         }

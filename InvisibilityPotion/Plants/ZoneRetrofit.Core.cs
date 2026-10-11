@@ -51,6 +51,46 @@ namespace InvisibilityPotion.Plants
         }
     }
 
+    /// <summary>
+    /// 0.4.1: counts per outcome for the log and ip_retrofit, no game types. The server log only showed zones that got plants, so a
+    /// zone that was evaluated and rejected looked the same as one never visited; <see cref="Summary"/> is logged every
+    /// <see cref="LogEvery"/> evaluated zones and on demand.
+    /// </summary>
+    public sealed class RetrofitStats
+    {
+        public const int LogEvery = 25;
+        private readonly Dictionary<RetrofitOutcome, int> _counts = new Dictionary<RetrofitOutcome, int>();
+
+        /// <summary>Zones whose check produced a verdict (everything but Skipped and TerrainNotReady).</summary>
+        public int Evaluated { get; private set; }
+        public int PlacedZones { get; private set; }
+        public int PlacedPlants { get; private set; }
+
+        public int Count(RetrofitOutcome outcome) => _counts.TryGetValue(outcome, out var n) ? n : 0;
+
+        public void Reset()
+        {
+            _counts.Clear();
+            Evaluated = PlacedZones = PlacedPlants = 0;
+        }
+
+        /// <summary>Records one check; returns true when a summary line is due (every <see cref="LogEvery"/> evaluated zones).</summary>
+        public bool Add(RetrofitOutcome outcome, int placed)
+        {
+            _counts[outcome] = Count(outcome) + 1;
+            if (outcome == RetrofitOutcome.Skipped || outcome == RetrofitOutcome.TerrainNotReady) return false;
+            Evaluated++;
+            if (outcome == RetrofitOutcome.Placed) { PlacedZones++; PlacedPlants += placed; }
+            return Evaluated % LogEvery == 0;
+        }
+
+        /// <summary>"N zones evaluated: P got plants (Q plants), H already had plants, R roll missed or wrong biome, S roll hit but no valid spot".</summary>
+        public string Summary(bool reportOnly) =>
+            $"{Evaluated} zones evaluated: {PlacedZones} {(reportOnly ? "would get" : "got")} plants ({PlacedPlants} plants), " +
+            $"{Count(RetrofitOutcome.HasPlants)} already had plants, {Count(RetrofitOutcome.NoRoll)} roll missed or wrong biome, " +
+            $"{Count(RetrofitOutcome.NoSpot)} roll hit but no valid spot";
+    }
+
     /// <summary>Outcome of one zone check, for the log and ip_retrofit.</summary>
     public enum RetrofitOutcome
     {

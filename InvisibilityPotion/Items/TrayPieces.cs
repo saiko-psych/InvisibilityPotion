@@ -77,7 +77,7 @@ namespace InvisibilityPotion.Items
                 },
             };
             if (!Prepared.Contains(item)) Prepared.Add(item);
-            Plugin.Log.LogInfo($"tray: {item.name} prepared as piece '{piece.m_name}', category {piece.m_category}, usage {piece.m_usage}, " +
+            Plugin.Verbose($"tray: {item.name} prepared as piece '{piece.m_name}', category {piece.m_category}, usage {piece.m_usage}, " +
                                $"resources {drop.name} x1 recover {piece.m_resources[0].m_recover} (template {template.name}: " +
                                $"{string.Join("+", tPiece.m_resources?.Select(r => $"{(r.m_resItem != null ? r.m_resItem.name : "null")} x{r.m_amount} recover {r.m_recover}") ?? Enumerable.Empty<string>())}); " +
                                $"fields copied: Piece {pieceCopied}, WearNTear {wntCopied}; components {ModelPrefabs.ComponentList(item)}");
@@ -172,7 +172,7 @@ namespace InvisibilityPotion.Items
                 }
             }
             if (skipped.Count > 0)
-                Plugin.Log.LogInfo($"tray: {src.GetType().Name} fields left at default (template children): {string.Join(", ", skipped)}");
+                Plugin.Verbose($"tray: {src.GetType().Name} fields left at default (template children): {string.Join(", ", skipped)}");
             return copied;
         }
 
