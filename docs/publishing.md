@@ -13,11 +13,12 @@ Where to publish, what each site needs, and ready-to-paste descriptions. Screens
 
 Order: Thunderstore first (dependency handling), then Nexus with the same zip, then the release tag; post the Discord announcement last with both links.
 
-## Live listings (0.4.0 since 2026-10-04)
+## Live listings (0.4.1 since 2026-10-11; 0.4.0 since 2026-10-04)
 
 - Thunderstore: https://thunderstore.io/c/valheim/p/EdgeExploxers/InvisibilityPotion/ (wiki with seven pages from `docs/wiki/`; a new version is a new zip uploaded to the same team and package)
 - Nexus Mods: https://www.nexusmods.com/valheim/mods/4179 ("Invisibility Potion - Veil Meads", because the plain name was taken; description is BBCode, requirements are external links to the Thunderstore pages of BepInExPack and Jötunn; new versions go to the Files step of the mod editor: "Update existing file", archive the old one, set display name and version, tick "Update mod version")
 - Source: https://github.com/saiko-psych/InvisibilityPotion
+- 0.4.1 (2026-10-11): Thunderstore zip uploaded through the new UI (`/package/create/`, same team, same nine categories, read back from `/api/cyberstorm/listing/valheim/EdgeExploxers/InvisibilityPotion/`); Nexus through the Files step as "Update existing file" of the 0.4.0 main file with "Archive existing file", display name set by hand ("InvisibilityPotion 0.4.1", the form resets it), "Update mod version" ticked, changelog typed into the file's changelog box; wiki pages Installation, Plants and Goggles, Configuration, Multiplayer and Server replaced from `docs/wiki/` on old.thunderstore.io (`.../wiki/<id>-<slug>/edit/`, ids 6058, 6060, 6061, 6062). Released without an in-game run at the user's request; see `docs/testing.md` 0.4.1.
 
 ## Short description (≤ 250 characters, Thunderstore manifest / Nexus summary)
 
