@@ -8,8 +8,9 @@ Valheim mod (BepInEx 5.4.23.5 from BepInExPack_Valheim 5.4.2350 + Jötunn 2.30.0
 - `make log` – follow `BepInEx/LogOutput.log`
 - Release console commands (admin-gated on a dedicated server, `Commands/AdminCommands.cs`): `ip_plants [radius|nearest|unpin]`, `ip_retrofit [here|reset]`
 - Dev console commands (Debug only, all log through `Plugin.Log`): `ip_state`, `ip_give <1|2|3>`, `ip_end` (removes every InvisibilityPotion status effect from yourself), `ip_give goggles <1|2|3>`, `ip_give ingredient <1|2|3> [amount]`, `ip_spawn <prefab> [count] [level]` (any prefab, e.g. `Plant_T2`, `VeilGoggles_T3`, `VeilIngredient_T2`), `ip_reload_config`, `ip_prefabs <substring>`, `ip_veil`, `ip_fog`, `ip_fogui`, `ip_components <prefab>`, `ip_shaderdump <prefab>`, `ip_bundle`, `ip_tray [all]` (Serving Tray piece table and its mead entries), `ip_exportmesh <prefab|head>` (OBJ to `BepInEx/export/`), `ip_matdump <prefab> | clutter [substring]` (material shader properties), `ip_goggles <0..3|off>`, `ip_grow [stage]`, `ip_lichen <force|off|clear|roll>`, `ip_veg` (`Dev/DevCommands.cs` has the exact syntax in each `Help`)
-- `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0)
-- `make compat-check` – compiles against the newest Jötunn (`JOTUNN_LATEST`, default 2.30.2) into `build/compat/` to prove the pinned 2.30.0 build also runs on newer releases; run it before every release
+- `make test` – xunit tests (pure logic only, `InvisibilityPotion.Tests`, net8.0; `ReleaseVersionTests` also checks that Plugin.cs, csproj, manifest and the newest CHANGELOG heading agree)
+- `make syntax` – Roslyn parse of the mod code with Debug and Release symbols (`tools/syntax-check`, no game DLLs; syntax and `#if` mistakes only, not missing members). `make ci` = test + syntax + `check-scripts` (bash -n, shellcheck); GitHub Actions runs the same on every pull request (`.github/workflows/ci.yml`)
+- `make compat-check` – compiles against the newest Jötunn (`JOTUNN_LATEST`, default 2.30.2) into `build/compat/` to prove the pinned 2.30.0 build also runs on newer releases; run it before every release. It passes `IP_SKIP_PUBLISH=1`, so it neither deploys nor rebuilds the package zip
 - `make decompile` – regenerate `tools/decompiled/` from the installed game; rerun after game updates
 - `make package` – Release build + Thunderstore zip (`InvisibilityPotion/InvisibilityPotion.zip`); package files in `InvisibilityPotion/Package/` (manifest, README, CHANGELOG, icon from `blender -b --python tools/blender/make_bottle.py -- --icon`). Bump the version in `Plugin.cs`, the csproj and `manifest.json` together
 - `scripts/server-setup.sh <ssh-host> <server-path>` (one time: BepInExPack + Jötunn + DLL on a Linux dedicated server) and `scripts/deploy-server.sh <ssh-host> [server-path]` (DLL updates); both have `--dry-run`, see `docs/server.md`. Mod compatibility notes: `docs/compatibility.md`
@@ -31,7 +32,7 @@ Valheim mod (BepInEx 5.4.23.5 from BepInExPack_Valheim 5.4.2350 + Jötunn 2.30.0
 - `sudo` commands are run by the user; print them and wait.
 
 ## Layout
-See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans live in `docs/superpowers/plans/`. In-game checklist: `docs/testing.md`.
+See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans live in `docs/superpowers/plans/`. In-game checklist: `docs/testing.md`. Release steps in order: `docs/release.md`.
 
 ## Environment
 - Game: `~/.local/share/Steam/steamapps/common/Valheim` (BepInEx installed directly, no mod manager profile)

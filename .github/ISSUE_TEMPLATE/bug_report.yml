@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in InvisibilityPotion does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The BepInEx log answers most questions: `BepInEx/LogOutput.log` in the Valheim (or server) folder,
+        or "View logs" in your mod manager.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce if you can (tier of the mead, what you did, what the enemies or other players did).
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Where did it happen?
+      options:
+        - Single player
+        - Hosting a game (I am the host)
+        - Joined someone's hosted game
+        - Dedicated server
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: InvisibilityPotion, Jötunn and Valheim version (the log shows `Loading [InvisibilityPotion x.y.z]`, `Loading [Jotunn x.y.z]` and `Valheim version`).
+      placeholder: "InvisibilityPotion 0.4.2, Jotunn 2.30.0, Valheim 1.0.21"
+    validations:
+      required: true
+  - type: input
+    id: patchhealth
+    attributes:
+      label: Patch health line
+      description: "Copy the line `Patch health: N targets patched, M missing` from the log (and any `Patch missing:` lines)."
+    validations:
+      required: true
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: The list of other mods you run (a mod manager profile export or the `Loading [...]` lines of the log).
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The relevant part of `BepInEx/LogOutput.log` (errors and the lines around them). Attach the whole file if unsure.
+      render: text

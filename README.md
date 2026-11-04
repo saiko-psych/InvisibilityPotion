@@ -12,6 +12,7 @@ Three potions that hide the player from enemies. Attacking reveals the player an
 - [Decision records](docs/decisions/)
 - [Mod compatibility](docs/compatibility.md) – patches, prefab changes, known interactions
 - [Dedicated server](docs/server.md) – BepInEx + Jötunn setup and deploy scripts
+- [Release checklist](docs/release.md) – version bump to Thunderstore/Nexus upload, in order
 - Player-facing description: [Package/README.md](InvisibilityPotion/Package/README.md), Thunderstore wiki pages: [docs/wiki/](docs/wiki/)
 
 ## Targets
@@ -20,4 +21,4 @@ Valheim 1.0.17 (1.0.20 and 1.0.21 are out and not checked yet, see [testing](doc
 
 ## Development
 
-Linux, CLI only. Install `dotnet-sdk-8.0`, then `make help`. `make run` starts the game through Steam, which needs a one-time launch option on Valheim: `./start_game_bepinex.sh %command%`. See `CLAUDE.md` for the workflow and `docs/testing.md` for the in-game checklist.
+Linux, CLI only. Install `dotnet-sdk-8.0`, then `make help`. `make ci` runs the checks that need no game (unit tests, a syntax parse of the mod code, the shell scripts); GitHub Actions runs them on every pull request. `make run` starts the game through Steam, which needs a one-time launch option on Valheim: `./start_game_bepinex.sh %command%`. See `CLAUDE.md` for the workflow and `docs/testing.md` for the in-game checklist.
