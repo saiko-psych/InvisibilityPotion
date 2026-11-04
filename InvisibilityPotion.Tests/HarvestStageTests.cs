@@ -57,4 +57,21 @@ public class HarvestStageTests
 
     [Fact]
     public void Elapsed_minutes_from_ticks() => Assert.Equal(90, HarvestStage.ElapsedMinutes(System.TimeSpan.TicksPerMinute * 100, System.TimeSpan.TicksPerMinute * 10), 6);
+
+    // Branches without a test before the 2026-11-04 review.
+    [Fact]
+    public void At_MaxStageBelowOne_IsTreatedAsOne()
+    {
+        Assert.Equal(1, HarvestStage.At(0, 0, 120, 0));
+        Assert.Equal(1, HarvestStage.At(1, 500, 120, -3));
+    }
+
+    [Fact]
+    public void MinutesToNext_InvalidInput()
+    {
+        Assert.Equal(0, HarvestStage.MinutesToNext(1, 10, 0, 3));            // instant regrowth: ripe, nothing to wait for
+        Assert.Equal(0, HarvestStage.MinutesToNext(1, 10, double.NaN, 3));
+        Assert.Equal(120, HarvestStage.MinutesToNext(1, double.NaN, 120, 3), 6);   // clock trouble: counted from the base stage
+        Assert.Equal(120, HarvestStage.MinutesToNext(1, -30, 120, 3), 6);
+    }
 }
