@@ -1,6 +1,8 @@
 # Shared helpers for server-setup.sh, deploy-server.sh and deploy-proxmox.sh (sourced by bash, not run).
+# shellcheck shell=bash
 # No secrets here: the SSH host is whatever `ssh <host>` resolves (use ~/.ssh/config for user, port and key).
 
+# shellcheck disable=SC2034  # used by the scripts that source this file
 RELEASE_DLL_DEFAULT="InvisibilityPotion/Package/plugins/InvisibilityPotion.dll"   # written by `make package`
 SERVER_BINARY="valheim_server.x86_64"
 

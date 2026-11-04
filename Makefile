@@ -6,7 +6,7 @@ MANAGED := $(VALHEIM_INSTALL)/valheim_Data/Managed
 DECOMPILE_DIR := tools/decompiled
 ILSPY := $(HOME)/.dotnet/tools/ilspycmd
 
-.PHONY: help decompile build package test run play log bundle unity-setup models compat-check
+.PHONY: help decompile build package test syntax check-scripts ci run play log bundle unity-setup models compat-check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -45,6 +45,15 @@ compat-check: ## Compile Release against JOTUNN_LATEST into build/compat (no dep
 
 test: ## Run unit tests (pure logic, no game DLLs)
 	dotnet test InvisibilityPotion.Tests -nologo -v quiet
+
+syntax: ## Parse the mod code with Roslyn, Debug and Release symbols (no game DLLs; catches syntax and #if mistakes only)
+	dotnet run --project tools/syntax-check -- InvisibilityPotion
+
+check-scripts: ## bash -n and shellcheck (warnings) on scripts/*.sh
+	@for f in scripts/*.sh; do bash -n "$$f" || exit 1; done
+	shellcheck -S warning -x scripts/*.sh
+
+ci: test syntax check-scripts ## What GitHub Actions runs (.github/workflows/ci.yml)
 
 GAME_ARGS ?= -console -screen-fullscreen 0 -screen-width 1600 -screen-height 900
 STEAM_APPID := 892970
