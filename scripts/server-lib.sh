@@ -25,7 +25,9 @@ check_release_dll() {
   local dll="$1"
   [ -f "$dll" ] || die "$dll not found. Build it first: make package (Release; refuses while the game runs, the build itself never touches the game)"
   # grep -c reads everything: grep -q would SIGPIPE strings, and pipefail turns that into "no match".
-  if command -v strings > /dev/null && [ "$(strings -a -e l "$dll" | grep -c '^ip_give$' || true)" != "0" ]; then
+  # Without strings the check used to be skipped silently, so a Debug DLL could reach a server.
+  command -v strings > /dev/null || die "strings (binutils) is needed to check that $dll is a Release build"
+  if [ "$(strings -a -e l "$dll" | grep -c '^ip_give$' || true)" != "0" ]; then
     die "$dll is a Debug build (contains the ip_give dev command). Use the Release DLL from make package"
   fi
 }

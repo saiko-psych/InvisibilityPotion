@@ -12,9 +12,11 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
 decompile: ## Decompile assembly_valheim.dll into tools/decompiled (rerun after game updates)
-	@rm -rf $(DECOMPILE_DIR)/assembly_valheim
-	@mkdir -p $(DECOMPILE_DIR)
-	$(ILSPY) -p -o $(DECOMPILE_DIR)/assembly_valheim --nested-directories $(MANAGED)/assembly_valheim.dll
+	@test -x "$(ILSPY)" || { echo "ilspycmd not found at $(ILSPY) (dotnet tool install -g ilspycmd)"; exit 1; }
+	@test -f "$(MANAGED)/assembly_valheim.dll" || { echo "$(MANAGED)/assembly_valheim.dll not found (VALHEIM_INSTALL?)"; exit 1; }
+	@rm -rf "$(DECOMPILE_DIR)/assembly_valheim.new" && mkdir -p "$(DECOMPILE_DIR)"
+	"$(ILSPY)" -p -o "$(DECOMPILE_DIR)/assembly_valheim.new" --nested-directories "$(MANAGED)/assembly_valheim.dll"
+	@rm -rf "$(DECOMPILE_DIR)/assembly_valheim" && mv "$(DECOMPILE_DIR)/assembly_valheim.new" "$(DECOMPILE_DIR)/assembly_valheim"   # the old decompile stays if ilspycmd fails
 	@echo "Game version: $$(grep -oE 'l-[0-9]+\.[0-9]+\.[0-9]+' $(HOME)/.config/unity3d/IronGate/Valheim/Player.log | tail -1)" > $(DECOMPILE_DIR)/VERSION
 	@ls $(DECOMPILE_DIR)/assembly_valheim | wc -l | xargs echo "Decompiled files:"
 
@@ -33,10 +35,11 @@ package: ## Build Release and zip the Thunderstore package (refuses while Valhei
 	$(guard_game)
 	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal
 
-# Proves the code compiles against the newest Jötunn (API superset of the pinned 2.30.0); nothing is deployed.
+# Proves the code compiles against the newest Jötunn (API superset of the pinned 2.30.0); nothing is deployed or packaged
+# (IP_SKIP_PUBLISH: the Release publish step used to copy this build into Package/ and rebuild the Thunderstore zip).
 JOTUNN_LATEST ?= 2.30.2
 compat-check: ## Compile Release against JOTUNN_LATEST into build/compat (no deploy)
-	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal -p:JotunnVersion=$(JOTUNN_LATEST) -p:MOD_DEPLOYPATH=$(CURDIR)/build/compat/deploy -p:OutDir=$(CURDIR)/build/compat/bin/
+	dotnet build InvisibilityPotion/InvisibilityPotion.csproj -c Release -nologo -v minimal -p:JotunnVersion=$(JOTUNN_LATEST) -p:IP_SKIP_PUBLISH=1 -p:OutDir=$(CURDIR)/build/compat/bin/
 	@dotnet restore InvisibilityPotion/InvisibilityPotion.csproj -v quiet > /dev/null   # back to the pinned version for the next normal build
 	@echo "Compiled against Jotunn $(JOTUNN_LATEST): OK"
 
@@ -52,10 +55,12 @@ IP_DEV_CHARACTER ?=
 AUTOJOIN_FILE := $(VALHEIM_INSTALL)/BepInEx/config/InvisibilityPotion.autojoin
 BEPINEX_LOG := $(VALHEIM_INSTALL)/BepInEx/LogOutput.log
 
-run: build play ## Build, then `make play`
+run: build ## Build, then `make play` (sequential even under -j: play must not start the game during the build)
+	@$(MAKE) --no-print-directory play
 
 # Launch without building: use this while the working tree is mid-edit so the deployed DLL stays the last finished build.
 play: ## Launch Valheim through Steam (needs launch option "./start_game_bepinex.sh %command%") with auto-join, then follow the BepInEx log
+	$(guard_game)
 	@pgrep -x steam > /dev/null || { echo "Steam is not running. Start Steam first."; exit 1; }
 	@mkdir -p "$(dir $(AUTOJOIN_FILE))"
 	@printf 'world=%s\ncharacter=%s\n' "$(IP_DEV_WORLD)" "$(IP_DEV_CHARACTER)" > "$(AUTOJOIN_FILE)"

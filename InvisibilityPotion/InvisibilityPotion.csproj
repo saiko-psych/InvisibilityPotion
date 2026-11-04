@@ -45,7 +45,8 @@
     <None Include="Package\**" />
   </ItemGroup>
 
-  <Target Name="PublishToGame" AfterTargets="Build" Condition=" '$(OS)' == 'Unix' ">
+  <!-- IP_SKIP_PUBLISH=1 (make compat-check): a build against another Jötunn must not overwrite the package zip or the deployed DLL -->
+  <Target Name="PublishToGame" AfterTargets="Build" Condition=" '$(OS)' == 'Unix' and '$(IP_SKIP_PUBLISH)' != '1' ">
     <Exec Command="sh &quot;$(SolutionDir)scripts/publish.sh&quot; --target &quot;$(Configuration)&quot; --target-path &quot;$(TargetDir)&quot; --target-assembly &quot;$(TargetFileName)&quot; --valheim-path &quot;$(VALHEIM_INSTALL)&quot; --deploy-path &quot;$(MOD_DEPLOYPATH)&quot; --project-path &quot;$(ProjectDir)&quot;" />
   </Target>
 </Project>

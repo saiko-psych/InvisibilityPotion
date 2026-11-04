@@ -7,7 +7,7 @@
 # Builds nothing: run `make package` first (Release). Refuses a Debug DLL.
 #
 # Usage: scripts/deploy-proxmox.sh [--dry-run] [--logs]
-#   (no option)  stop the valheim unit, scp the DLL to the Proxmox host, `pct push` it into the overlay, start valheim-gate
+#   (no option)  scp the DLL to the Proxmox host, stop the valheim unit, `pct push` it into the overlay, start valheim-gate
 #                (CT 132 runs on demand: the gate wakes the server on the first connection and run-server.sh mirrors the
 #                overlay via apply-mods.sh; NEVER `systemctl start valheim` directly, it bypasses the gate)
 #   --logs       show the last 5 minutes of the valheim unit's journal (server must be running: connect first)
@@ -60,10 +60,15 @@ need ssh scp
 check_release_dll "$DLL"
 tmp="/tmp/$NAME"
 note "deploying $DLL ($(stat -c %s "$DLL") bytes) to $HOST CT $CT:$TARGET/$NAME"
-run_ssh "pct exec $CT -- systemctl stop valheim"
+# Copy to the Proxmox host before stopping anything: a failed scp leaves the server as it was.
 run scp "$DLL" "root@$HOST:$tmp"
+run_ssh "pct exec $CT -- systemctl stop valheim"
+# From here a failure (pct push) would leave the server stopped with the gate off (Conflicts=valheim.service): re-arm it on exit.
+[ "$DRY_RUN" = "1" ] || trap 'echo "error: deploy failed after the stop; re-arming valheim-gate" >&2; ssh "root@$HOST" "pct exec $CT -- systemctl start valheim-gate" || true' EXIT
 run_ssh "pct push $CT $(q "$tmp") $(q "$TARGET/$NAME")"
 run_ssh "pct exec $CT -- systemctl start valheim-gate"
+trap - EXIT
+run_ssh "rm -f $(q "$tmp")"
 [ "$DRY_RUN" = "1" ] && { note "dry run: nothing changed"; exit 0; }
 note "done. The gate is armed: connect in game to wake the server (apply-mods.sh mirrors the overlay); then: scripts/deploy-proxmox.sh --logs"
 note "if an old InvisibilityPotion.dll exists, remove it from BOTH $TARGET and /opt/valheim/server/BepInEx/plugins (the mirror never deletes)"
