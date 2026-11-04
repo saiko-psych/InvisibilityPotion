@@ -50,6 +50,36 @@ namespace InvisibilityPotion.Config
                 throw new ArgumentOutOfRangeException(nameof(CarryWeightMultiplier), CarryWeightMultiplier, "carry weight multiplier must be 0..1");
         }
 
+        /// <summary>
+        /// A copy in which every field <see cref="Validate"/> rejects takes the value of <paramref name="defaults"/>, in Validate's
+        /// order; <paramref name="replaced"/> names them. Review 2026-11-04: one invalid value used to replace the whole tier
+        /// (recipe, cooldown and debuffs included). Throws when the defaults do not fix it (an invalid tier number or defaults).
+        /// </summary>
+        public TierConfig WithDefaultsForInvalid(TierConfig defaults, out List<string> replaced)
+        {
+            if (defaults == null) throw new ArgumentNullException(nameof(defaults));
+            replaced = new List<string>();
+            var copy = (TierConfig)MemberwiseClone();
+            var fields = typeof(TierConfig).GetFields().Length;
+            for (var i = 0; i <= fields; i++)
+            {
+                try
+                {
+                    copy.Validate();
+                    return copy;
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    var field = ex.ParamName == null || ex.ParamName == nameof(Tier) ? null : typeof(TierConfig).GetField(ex.ParamName);
+                    if (field == null || replaced.Contains(ex.ParamName)) throw;   // the default for this field is invalid too
+                    field.SetValue(copy, field.GetValue(defaults));
+                    replaced.Add(ex.ParamName);
+                }
+            }
+            copy.Validate();
+            return copy;
+        }
+
         private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
 
         private static void CheckFiniteNonNegative(string name, float value)

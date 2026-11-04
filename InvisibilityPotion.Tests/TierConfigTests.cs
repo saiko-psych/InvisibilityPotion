@@ -128,6 +128,54 @@ public class TierConfigTests
         new TierConfig { Tier = 1, Duration = 60f, RehideDelay = 0f, Cooldown = 0f }.Validate();
     }
 
+    // Review 2026-11-04: one invalid value used to replace the whole tier with its defaults (recipe, cooldown and debuffs included).
+    private static TierConfig Defaults2() => new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, RehideDelay = 12f, DebuffDuration = 15f,
+        Cooldown = 60f, CarryWeightMultiplier = 0.6f, Recipe = "Honey:10", DebuffSpeedModifier = -0.5f };
+
+    [Fact]
+    public void WithDefaultsForInvalid_ReplacesOnlyTheInvalidField()
+    {
+        var custom = new TierConfig { Tier = 2, Duration = float.NaN, AggroLossTime = 3f, RehideDelay = 20f, DebuffDuration = 15f,
+            Cooldown = 10f, CarryWeightMultiplier = 0.9f, Recipe = "Honey:1", DebuffSpeedModifier = -0.1f };
+        var fixedCfg = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Equal(new[] { "Duration" }, replaced);
+        Assert.Equal(120f, fixedCfg.Duration);
+        Assert.Equal(20f, fixedCfg.RehideDelay);
+        Assert.Equal(10f, fixedCfg.Cooldown);
+        Assert.Equal("Honey:1", fixedCfg.Recipe);
+        Assert.True(float.IsNaN(custom.Duration));   // the input is not changed
+        fixedCfg.Validate();
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_ReplacesEveryInvalidField()
+    {
+        var custom = Defaults2();
+        custom.Duration = -5f;
+        custom.CarryWeightMultiplier = 3f;
+        custom.StealthModifier = float.PositiveInfinity;
+        var fixedCfg = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Equal(new[] { "Duration", "StealthModifier", "CarryWeightMultiplier" }, replaced);
+        fixedCfg.Validate();
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_ValidConfigIsReturnedUnchanged()
+    {
+        var custom = Defaults2();
+        var same = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Empty(replaced);
+        Assert.Equal(custom.Recipe, same.Recipe);
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_InvalidDefaultsThrow()
+    {
+        var broken = Defaults2();
+        broken.Duration = 0f;
+        Assert.Throws<ArgumentOutOfRangeException>(() => broken.WithDefaultsForInvalid(broken, out _));
+    }
+
     [Fact]
     public void Validate_AcceptsValidConfig()
     {

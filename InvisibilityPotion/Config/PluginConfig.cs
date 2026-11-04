@@ -154,9 +154,11 @@ namespace InvisibilityPotion.Config
         }
 
         /// <summary>
-        /// Drops every orphaned key (left over from older layouts: [Fog] FogRate/Anchor.*, [TierN] FogEnabled/FogDensity,
-        /// [Veil] Distortion*, [General] FogRate*/BodyVeilMode) so the file only holds bound keys. A file from before the
-        /// per-tier fog (it still has [Tier2] FogDensity) gets the new tier II default body mode when it kept the old default Ghost.
+        /// Drops the orphaned keys of older layouts (<see cref="ConfigCleanup.IsObsolete"/>: [Fog] FogRate/Anchor.*, [TierN]
+        /// FogEnabled/FogDensity, [Veil] Distortion*, [General] FogRate*/BodyVeilMode, old [Fog.TierN] outer factors). Other unknown
+        /// keys stay: a newer version's keys after a downgrade, the Debug-only [Dev] keys in a Release build (review 2026-11-04).
+        /// A file from before the per-tier fog (it still has [Tier2] FogDensity) gets the new tier II default body mode when it
+        /// kept the old default Ghost.
         /// </summary>
         private static void MigrateAndDropOrphans()
         {
@@ -168,11 +170,26 @@ namespace InvisibilityPotion.Config
                 t2Mode.Value = "Distortion";
                 Plugin.Log?.LogInfo("Config migration: [Tier2] BodyVeilMode Ghost (old default) -> Distortion (new default)");
             }
-            var names = new List<string>();
-            foreach (var kv in orphans) names.Add($"[{kv.Key.Section}] {kv.Key.Key} = {kv.Value}");
-            orphans.Clear();
-            _file.Save();
-            Plugin.Log?.LogInfo($"Config: removed {names.Count} obsolete keys: {string.Join(", ", names)}");
+            var removed = new List<string>();
+            var kept = new List<string>();
+            var drop = new List<ConfigDefinition>();
+            foreach (var kv in orphans)
+            {
+                if (ConfigCleanup.IsObsolete(kv.Key.Section, kv.Key.Key))
+                {
+                    drop.Add(kv.Key);
+                    removed.Add($"[{kv.Key.Section}] {kv.Key.Key} = {kv.Value}");
+                }
+                else kept.Add($"[{kv.Key.Section}] {kv.Key.Key}");
+            }
+            foreach (var key in drop) orphans.Remove(key);
+            if (removed.Count > 0)
+            {
+                _file.Save();
+                Plugin.Log?.LogInfo($"Config: removed {removed.Count} obsolete keys: {string.Join(", ", removed)}");
+            }
+            if (kept.Count > 0)
+                Plugin.Log?.LogInfo($"Config: kept {kept.Count} keys this build does not use (a newer version or a Debug build may): {string.Join(", ", kept)}");
         }
 
         /// <summary>Keys in the file that no bound entry claims (BepInEx's private ConfigFile.OrphanedEntries); null when unreadable.</summary>
@@ -383,7 +400,8 @@ namespace InvisibilityPotion.Config
             };
         }
 
-        /// <summary>Rebuilds the snapshots from the bound entries and raises Changed. Never throws: an invalid tier falls back to its defaults with a warning.</summary>
+        /// <summary>Rebuilds the snapshots from the bound entries and raises Changed. Never throws: an invalid value falls back to its
+        /// default with a warning, the tier's other values stay (review 2026-11-04; the whole tier used to fall back).</summary>
         public static void Refresh()
         {
             var tiers = new TierConfig[4];
@@ -392,7 +410,10 @@ namespace InvisibilityPotion.Config
                 var tc = BuildTier(t, false);
                 try
                 {
-                    tc.Validate();
+                    var fixedTier = tc.WithDefaultsForInvalid(BuildTier(t, true), out var replaced);
+                    foreach (var key in replaced)
+                        Plugin.Log?.LogWarning($"Invalid config in [Tier{t}] {key} = {typeof(TierConfig).GetField(key).GetValue(tc)}; using the default {typeof(TierConfig).GetField(key).GetValue(fixedTier)} for this key.");
+                    tc = fixedTier;
                 }
                 catch (ArgumentOutOfRangeException ex)
                 {

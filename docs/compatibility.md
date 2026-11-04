@@ -103,8 +103,8 @@ All namespaced `IP_*` (no collision with vanilla or other mods expected):
     the next tick. Fall and drowning damage reveal like any other hit taken (user: fall damage reveals).
   - On the host or in single player, tier values changed in ConfigurationManager reach clients through the sync but the host's
     own cached values only refresh on sync (no `SettingChanged` handler); suspected, not verified in game.
-  - The orphan cleanup on startup removes every config key the running build does not bind: after a downgrade, keys of the newer
-    version are gone (with their customised values) when you upgrade again.
+  - Fixed after the review: the startup cleanup removes only keys of older layouts (`ConfigCleanup.IsObsolete`); a newer
+    version's keys survive a downgrade, and a Release build keeps the Debug-only `[Dev]` keys.
   - `LichenTreeChance` is evaluated per tree when the tree loads; a value that arrives with the server sync or is changed live
     applies to trees loaded afterwards, not to the ones already standing around you.
 - **Jötunn itself is version-checked too, to the patch level.** Jötunn's own plugin class carries
