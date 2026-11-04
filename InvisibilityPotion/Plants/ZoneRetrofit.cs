@@ -28,6 +28,7 @@ namespace InvisibilityPotion.Plants
     {
         public static readonly ZoneRetrofitPlanner Planner = new ZoneRetrofitPlanner();
         private static ZoneSystem _plannedFor;   // the planner is per world: a new ZoneSystem resets it
+        private static bool _lastReportOnly;
         private static readonly HashSet<int> WildHashes = new HashSet<int> { PlantPrefabs.BaldrName.GetStableHashCode(), PlantPrefabs.FernName.GetStableHashCode() };
         public static readonly RetrofitStats Stats = new RetrofitStats();
         private static int _loggedErrors;
@@ -51,13 +52,17 @@ namespace InvisibilityPotion.Plants
                 if (zs == null || !Config.PluginConfig.RetrofitExistingZones || !Available) return;
                 if (ZNet.instance == null || !ZNet.instance.IsServer() || PlantVegetation.Registered.Count == 0 || WorldGenerator.instance == null) return;
                 if (_plannedFor != zs) { Planner.Reset(); Stats.Reset(); _plannedFor = zs; }
+                var reportOnly = Config.PluginConfig.RetrofitReportOnly;
+                // Review 2026-11-04: zones checked in a dry run kept their "checked" mark, so switching RetrofitReportOnly off placed
+                // nothing there until a restart. Leaving report-only mode starts the planner over (real checks are deterministic).
+                if (_lastReportOnly && !reportOnly) { Planner.Reset(); Plugin.Log.LogInfo("plants: retrofit report-only mode off, checking zones again"); }
+                _lastReportOnly = reportOnly;
                 var centre = ZoneSystem.GetZone(refPoint);
                 var simObj = SimulationDistanceField.GetValue(zs);
                 var radius = simObj is SimulationDistance sim ? sim.NearSimulationDistance : 2;   // struct, boxed by reflection
                 if (!Planner.Next(centre.x, centre.y, radius, (x, y) => IsGenerated(zs, x, y), out var zx, out var zy)) return;
-                var reportOnly = Config.PluginConfig.RetrofitReportOnly;
                 var outcome = Check(zs, zx, zy, reportOnly, out var placed);
-                if (outcome == RetrofitOutcome.TerrainNotReady) Planner.Unmark(zx, zy);
+                if (outcome == RetrofitOutcome.TerrainNotReady) Planner.Defer(zx, zy);
                 if (outcome == RetrofitOutcome.Placed)
                     Plugin.Log.LogInfo($"plants: retrofit zone ({zx},{zy}): {placed} {(reportOnly ? "would be placed (report only)" : "placed")}");
                 else if (outcome == RetrofitOutcome.NoSpot)   // common and harmless (the other plant's roll, lava, water): debug level only
