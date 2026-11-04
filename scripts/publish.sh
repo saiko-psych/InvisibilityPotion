@@ -36,6 +36,11 @@ fi
 name=$(echo "$targetAssembly" | sed 's/\.dll$//')
 
 if [ "$target" = "Debug" ]; then
+  # Same guard as the Makefile, here so IDE and plain dotnet builds are covered too: a DLL/pdb swap under a running game crashes it.
+  if [ "${FORCE:-}" != "1" ] && command -v pgrep > /dev/null && pgrep -f '[v]alheim\.x86_64' > /dev/null; then
+    echo "Valheim is running: not deploying $targetAssembly (close the game, or set FORCE=1)" >&2
+    exit 1
+  fi
   plug="$deployPath/$name"
   echo "Deploying $targetAssembly to $plug"
   mkdir -p "$plug"
@@ -47,11 +52,12 @@ if [ "$target" = "Release" ]; then
   packagePath="$projectPath/Package"
   mkdir -p "$packagePath/plugins"
   cp "$targetPath/$targetAssembly" "$packagePath/plugins/"
-  if command -v zip > /dev/null; then
-    [ -e "$projectPath/$name.zip" ] && rm "$projectPath/$name.zip"
-    (cd "$packagePath" && zip -r "../$name.zip" . -x '*.zip' > /dev/null)
-    echo "Package ready: $(realpath "$projectPath/$name.zip")"
-  else
-    echo "zip not installed, skipping package"
+  # Remove the old zip first: without zip installed it used to survive and look like the new package.
+  rm -f "$projectPath/$name.zip"
+  if ! command -v zip > /dev/null; then
+    echo "zip is not installed: no package built (sudo apt install zip)" >&2
+    exit 1
   fi
+  (cd "$packagePath" && zip -r "../$name.zip" . -x '*.zip' > /dev/null)
+  echo "Package ready: $(realpath "$projectPath/$name.zip")"
 fi

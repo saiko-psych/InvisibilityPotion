@@ -35,7 +35,7 @@ Valheim/
 
 **Dedicated server:** same three steps in the server folder (BepInExPack's `start_server_bepinex.sh` / `.bat` starts it); the server's config file is the one that counts for all players. Linux users: Steam launch option `./start_game_bepinex.sh %command%`.
 
-**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 25 targets patched, 0 missing` when everything loaded.
+**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 23 targets patched, 0 missing` when everything loaded.
 
 ## The meads
 
@@ -53,12 +53,12 @@ Valheim/
 
 ### What reveals you
 
-- Dealing damage, taking damage, blocking or parrying, drawing a bow, casting with a staff.
+- Dealing damage, taking damage (fall damage too), blocking or parrying, drawing a bow, casting with a staff. Poison and burning ticks do not reveal you again; only the hit that applied them does.
 - Tool use: swinging an axe or pickaxe (at anything, even air), building with the hammer, using the hoe or the cultivator. Picking plants by hand does not reveal you.
 - A reveal gives the **Veil Broken** debuff until the veil returns (tier II/III: `RehideDelay`, tier I: 20 s, restarted on every reveal): stamina regeneration 10 %, eitr regeneration 15 %, health regeneration 35 %, movement 50 % slower (tier I 35 %), and no sprinting. The veil is for sneaking past, not for fighting.
 - Breaking your own veil by acting (hitting, drawing a bow, casting, using a tool) also empties your stamina bar (`DrainStaminaOnAttackReveal`). Taking damage or blocking does not.
 
-Each trigger can be switched off in the config (`RevealOnDamage`, `RevealOnBlock`, `RevealOnBowDraw`, `RevealOnToolUse`).
+Each trigger can be switched off in the config (`RevealOnDamage`, `RevealOnBlock`, `RevealOnBowDraw`, `RevealOnToolUse`); `RevealOnBlock` works independently of `RevealOnDamage`.
 
 ## Veil plants and goggles
 

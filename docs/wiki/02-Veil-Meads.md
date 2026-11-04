@@ -16,11 +16,12 @@ Default recipes: I `Honey:10, Thistle:5`; II adds `Bloodbag:3`; III adds `YmirRe
 
 ## What reveals you
 
-- Dealing damage, taking damage, blocking or parrying, drawing a bow, casting with a staff.
+- Dealing damage, taking damage (fall damage too), blocking or parrying, drawing a bow, casting with a staff.
 - Tool use: swinging an axe or pickaxe (at anything, even air), building with the hammer, using the hoe or the cultivator.
 - Picking plants by hand does **not** reveal you.
+- Poison and burning ticks do **not** reveal you again: only the hit that poisoned or lit you does (since 0.4.2).
 
-Each trigger can be switched off in the [config](04-Configuration).
+Each trigger can be switched off in the [config](04-Configuration). `RevealOnBlock` and `RevealOnDamage` are independent (since 0.4.2): with block reveals off, a hit you block or parry keeps you hidden even when taking damage reveals you.
 
 ## Veil Broken
 
@@ -57,6 +58,6 @@ Veil meads and mead bases can be placed with the **Serving Tray** (tab "Mead"), 
 - **Tier I:** enemies see and hear you at a fraction of the usual range, even when you stand still.
 - **Tier II and III:** enemies cannot see or hear you at all.
 - A chasing enemy gives up after a short while once it loses you (`AggroLossTime`, 1 s by default for tier II and III, 5 s for tier I; vanilla's own cap is 30 s).
-- **Sleeping monsters stay asleep** while you are hidden (tier II/III; tier I: not tested (?)).
-- **Raids** do not pick you as a target while you are hidden (tier II/III).
+- **Sleeping monsters stay asleep** while you are hidden (tier II/III; tier I: not tested (?)). A visible teammate who comes close still wakes them.
+- **Raids** do not pick you as a target while you are hidden (tier II/III); they go for the closest player they can target instead (since 0.4.2; before, a hidden player standing closest made them idle).
 - Revealed means visible again: the veil only works while you are hidden.

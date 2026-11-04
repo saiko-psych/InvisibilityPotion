@@ -211,6 +211,18 @@ public class FogSettingsTests
         }
     }
 
+    // Review 2026-11-04: OuterBurst above int.MaxValue overflowed to a negative burst and silently turned the burst off.
+    [Fact]
+    public void OuterBurst_HugeValueStillBursts()
+    {
+        var s = FogSettings.Defaults(1);
+        Assert.True(s.TrySet("OuterBurst", "10000000000"));
+        Assert.Equal(FogSettings.MaxOuterBurst, s.OuterBurst);
+        Assert.Equal(s.OuterMaxParticles, s.OuterBurstCount);   // a huge burst fills the emitter instead of turning off
+        s.OuterBurst = 1e10f;   // set directly, bypassing TrySet
+        Assert.Equal(s.OuterMaxParticles, s.OuterBurstCount);
+    }
+
     [Fact]
     public void GroundKeys_ClampOnSet()
     {

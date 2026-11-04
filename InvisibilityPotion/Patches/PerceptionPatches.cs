@@ -32,13 +32,22 @@ namespace InvisibilityPotion.Patches
             return false;
         }
 
-        /// <summary>HuntPlayer monsters (raids, events) pick the closest player without any perception check (BaseAI.cs:1419).</summary>
+        /// <summary>
+        /// HuntPlayer monsters (raids, events) pick the closest player without any perception check (BaseAI.cs:1419). A hidden result is
+        /// replaced by the closest player they may target within the same 200 m (review 2026-11-04: returning null let a hidden player
+        /// near the base stop a raid from hunting the visible teammates).
+        /// </summary>
         [HarmonyPatch(typeof(BaseAI), "FindEnemy")]
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Low)]
-        private static void FindEnemy_Postfix(ref Character __result)
+        private static void FindEnemy_Postfix(BaseAI __instance, ref Character __result)
         {
-            if (__result != null && HiddenState.IsIgnoredByEnemies(__result)) __result = null;
+            if (__result == null || !HiddenState.IsIgnoredByEnemies(__result)) return;
+            __result = __instance != null && __instance.HuntPlayer()
+                ? HiddenState.ClosestTargetablePlayer(__instance.transform.position, HuntRange)
+                : null;
         }
+
+        private const float HuntRange = 200f;   // vanilla's FindEnemy fallback radius, BaseAI.cs:1419
     }
 }

@@ -5,7 +5,7 @@ machine; no secrets are stored in the repository. Set up user, port and key for 
 `Host` alias as `<ssh-host>`; the scripts use `ssh -o BatchMode=yes`, so key-based login must work without a prompt.
 
 Why the server needs the mod: `[NetworkCompatibility(EveryoneMustHaveMod, Minor)]` makes Jötunn refuse connections unless
-server and clients run the same 0.3.x, the server hides tier III positions (`ZDOMan.SendZDOs`) and map pins
+server and clients run the same 0.4.x, the server hides tier III positions (`ZDOMan.SendZDOs`) and map pins
 (`ZNet.UpdatePlayerList`), and the server's config values are pushed to every client (see `docs/compatibility.md` §4).
 
 **Jötunn version: server and clients must match exactly.** The mod is built against Jötunn 2.30.0 and BepInExPack_Valheim
@@ -91,9 +91,9 @@ ssh <ssh-host> "grep -E 'BepInEx|Jotunn|InvisibilityPotion|Patch health' <server
 
 Expected lines:
 
-- `Loading [Jotunn 2.30.0]` and `Loading [InvisibilityPotion 0.3.x]`
+- `Loading [Jotunn 2.30.0]` and `Loading [InvisibilityPotion 0.4.x]`
 - `Patch health: N targets patched, 0 missing` (Release builds list no Debug-only targets)
-- `InvisibilityPotion 0.3.x loaded`
+- `InvisibilityPotion 0.4.x loaded`
 - No `SendZDOs transpiler: pattern not found` (that line means the tier III position spoof is off; patch health does not report
   it, see `docs/compatibility.md`).
 
@@ -155,7 +155,7 @@ ssh root@proxymoxy "pct exec 132 -- journalctl -u valheim --no-pager --since '-5
   when equal).
 - **File name**: BepInEx's chainloader loads every `*.dll` under `BepInEx/plugins/` regardless of its file name and identifies
   plugins by their `[BepInPlugin]` GUID (`TypeLoader`: `Directory.GetFiles(dir, "*.dll", AllDirectories)`), so `InvisibleMod.dll`
-  works and the log still says `Loading [InvisibilityPotion 0.3.x]` and `[Info   :InvisibilityPotion]`. Do not leave a second
+  works and the log still says `Loading [InvisibilityPotion 0.4.x]` and `[Info   :InvisibilityPotion]`. Do not leave a second
   copy of the mod (for example an old `InvisibilityPotion.dll`) in the plugin directories: per GUID the chainloader keeps only
   the highest version and logs `Skipping [InvisibilityPotion ...] because a newer version exists`; with equal versions the
   winner is arbitrary, so an old build can silently win.

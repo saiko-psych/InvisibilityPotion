@@ -8,11 +8,21 @@ namespace InvisibilityPotion.Patches
     [HarmonyPatch(typeof(VisEquipment), "UpdateLodgroup")]
     internal static class UpdateLodgroupPatch
     {
+        private static bool _loggedError;
+
         [HarmonyPostfix]
         private static void Postfix(VisEquipment __instance)
         {
-            var p = __instance.GetComponent<Player>();
-            if (p != null) VeilController.ForceRefresh(p);
+            // Exception guard (review 2026-11-04): a veil failure must not abort vanilla's equipment update, as for BodyWrite below.
+            try
+            {
+                var p = __instance.GetComponent<Player>();
+                if (p != null) VeilController.ForceRefresh(p);
+            }
+            catch (Exception e)
+            {
+                if (!_loggedError) { _loggedError = true; Plugin.Log.LogError($"veil: refresh after an equipment change failed: {e}"); }
+            }
         }
     }
 

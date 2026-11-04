@@ -34,3 +34,6 @@ Package/*.zip
 .superpowers/
 InvisibilityPotion/Package/plugins/
 .worktrees/
+
+# Python bytecode (tools/blender, tools/icons)
+__pycache__/

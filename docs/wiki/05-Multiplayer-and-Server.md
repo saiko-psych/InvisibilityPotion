@@ -2,7 +2,7 @@
 
 ## Who needs the mod
 
-InvisibilityPotion is set to **EveryoneMustHaveMod**. The server and every client need it, with the same major.minor version (0.3.x with 0.3.y works, 0.2 with 0.3 is refused). A vanilla client cannot join a server running the mod, and a client with the mod cannot join a server without it.
+InvisibilityPotion is set to **EveryoneMustHaveMod**. The server and every client need it, with the same major.minor version (0.4.x with 0.4.y works, 0.3 with 0.4 is refused). A vanilla client cannot join a server running the mod, and a client with the mod cannot join a server without it.
 
 ## Jötunn version rule
 

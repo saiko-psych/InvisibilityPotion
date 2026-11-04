@@ -118,4 +118,29 @@ public class InvisibilityStateMachineTests
         Assert.False(r.ApplyDebuff || r.EnterHidden || r.EnterRevealed);
         Assert.True(r.End);
     }
+
+    // Review 2026-11-04: rehide and the end of the effect in the same tick report both; the game side ends the effect.
+    [Fact]
+    public void RehideAndEndInTheSameTick_ReportBoth()
+    {
+        var sm = new InvisibilityStateMachine(Tier2());
+        sm.MarkRevealed();
+        sm.Tick(110f);                 // revealed at 110 s, rehide timer 12 s
+        var r = sm.Tick(12f);          // 122 s: timer runs out and the 120 s duration is over
+        Assert.True(r.EnterHidden);
+        Assert.True(r.End);
+        Assert.Equal(InvisibilityStateMachine.InvisibilityPhase.Ended, sm.Phase);
+    }
+
+    [Fact]
+    public void MarkRevealed_AfterTheEnd_IsIgnored()
+    {
+        var sm = new InvisibilityStateMachine(Tier2());
+        sm.Tick(121f);
+        sm.MarkRevealed(RevealReason.DamageDealt);
+        Assert.False(sm.PendingReveal);
+        var r = sm.Tick(0.1f);
+        Assert.True(r.End);
+        Assert.False(r.ApplyDebuff);
+    }
 }

@@ -222,6 +222,8 @@ namespace InvisibilityPotion.Visuals
         public const int InnerParticleCap = 24;   // round M: 10 starved the enveloping cloud (rate 14 x 2.5 s = 35 wanted); brightness is handled by alpha, not by starving
         /// <summary>Round Q ruling 1c: 120 (was 80), shared by the follow and the trail system of one outer anchor in the ratio of OuterFollowShare; round R: 140; round T: 200 (wider, longer-lived fog).</summary>
         public const int OuterVolumeParticleCap = 200;
+        /// <summary>Upper bound for OuterBurst: far above every emitter cap (no visible change), low enough that the int cast in OuterBurstTotal cannot overflow (review 2026-11-04: 1e10 became int.MinValue and silently disabled the burst).</summary>
+        public const float MaxOuterBurst = 1000000f;
         /// <summary>
         /// Round Q ruling 1a: burst particles are created already aged: their remaining lifetime is random in [min, max] x their
         /// start lifetime, so they are past the fade-in (<see cref="OuterVolumeFadeIn"/>) and at full alpha in the first frame,
@@ -670,7 +672,7 @@ namespace InvisibilityPotion.Visuals
 
         /// <summary>OuterBurst rounded; 0 for the Ring shape and when the outer layer is inactive.</summary>
         private int OuterBurstTotal => OuterActive && OuterShape == FogOuterShape.Volume
-            ? (int)Math.Round(Math.Max(0f, OuterBurst), MidpointRounding.AwayFromZero)
+            ? (int)Math.Round(Math.Min(MaxOuterBurst, Math.Max(0f, OuterBurst)), MidpointRounding.AwayFromZero)
             : 0;
 
         /// <summary>
@@ -987,7 +989,7 @@ namespace InvisibilityPotion.Visuals
                 case "OuterRate": OuterRate = Math.Max(0f, v); return true;
                 case "OuterRateDistance": OuterRateDistance = Math.Max(0f, v); return true;
                 case "OuterSize": OuterSize = Math.Max(0.01f, v); return true;
-                case "OuterBurst": OuterBurst = Math.Max(0f, v); return true;
+                case "OuterBurst": OuterBurst = v < 0f ? 0f : v > MaxOuterBurst ? MaxOuterBurst : v; return true;
                 case "OuterFollowShare": OuterFollowShare = Clamp01(v); return true;
                 case "Emission": Emission = Clamp01(v); return true;
                 case "DistortionStrength": DistortionStrength = Math.Max(0f, v); return true;

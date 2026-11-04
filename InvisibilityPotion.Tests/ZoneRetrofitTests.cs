@@ -87,4 +87,50 @@ public class ZoneRetrofitTests
         Assert.Equal(0, s.Evaluated);
         Assert.Equal(0, s.Count(RetrofitOutcome.NoRoll));
     }
+
+    // Review 2026-11-04: a zone whose terrain was not ready came straight back as the nearest one every 0.1 s and blocked the
+    // other zones of the window. Deferred zones wait until nothing else is left.
+    [Fact]
+    public void A_deferred_zone_waits_until_the_rest_of_the_window_is_done()
+    {
+        var p = new ZoneRetrofitPlanner();
+        Assert.True(p.Next(0, 0, 1, (x, y) => true, out var x0, out var y0));
+        Assert.Equal((0, 0), (x0, y0));
+        p.Defer(0, 0);
+        Assert.False(p.IsChecked(0, 0));
+        var seen = new System.Collections.Generic.List<(int, int)>();
+        for (var i = 0; i < 8; i++)
+        {
+            Assert.True(p.Next(0, 0, 1, (x, y) => true, out var zx, out var zy));
+            seen.Add((zx, zy));
+        }
+        Assert.DoesNotContain((0, 0), seen);                 // the ring first
+        Assert.True(p.Next(0, 0, 1, (x, y) => true, out var lx, out var ly));
+        Assert.Equal((0, 0), (lx, ly));                      // then the deferred zone again
+        Assert.True(p.IsChecked(0, 0));
+        Assert.False(p.Next(0, 0, 1, (x, y) => true, out _, out _));
+    }
+
+    [Fact]
+    public void A_deferred_zone_that_stays_not_ready_keeps_being_retried_last()
+    {
+        var p = new ZoneRetrofitPlanner();
+        p.Next(0, 0, 0, (x, y) => true, out _, out _);
+        p.Defer(0, 0);
+        Assert.True(p.Next(0, 0, 0, (x, y) => true, out var zx, out var zy));   // nothing else in a radius-0 window
+        Assert.Equal((0, 0), (zx, zy));
+        p.Defer(0, 0);
+        Assert.True(p.Next(0, 0, 0, (x, y) => true, out _, out _));
+    }
+
+    [Fact]
+    public void Reset_also_forgets_deferred_zones()
+    {
+        var p = new ZoneRetrofitPlanner();
+        p.Next(0, 0, 0, (x, y) => true, out _, out _);
+        p.Defer(0, 0);
+        p.Reset();
+        Assert.Equal(0, p.DeferredCount);
+        Assert.Equal(0, p.CheckedCount);
+    }
 }

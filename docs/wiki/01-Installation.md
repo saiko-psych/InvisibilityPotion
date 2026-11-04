@@ -29,7 +29,7 @@ Linux players start Valheim with the Steam launch option `./start_game_bepinex.s
 
 - The mod must run on the server. See [Multiplayer and Server](05-Multiplayer-and-Server) for a dedicated server.
 - Server and clients need the **same Jötunn version, down to the patch number**. The mod is built against Jötunn 2.30.0. A client with 2.30.2 cannot join a server with 2.30.0, and the other way round.
-- Server and clients also need the same InvisibilityPotion major.minor version (0.3.x with 0.3.y is fine).
+- Server and clients also need the same InvisibilityPotion major.minor version (0.4.x with 0.4.y is fine).
 
 ## Check that it loaded
 

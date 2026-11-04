@@ -93,6 +93,89 @@ public class TierConfigTests
         Assert.False(new TierConfig().HiddenFromPlayers);
     }
 
+    // Review 2026-11-04: NaN/Infinity passed the "<= 0" / "< 0" checks, so an admin-set Duration = NaN made the veil permanent.
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void Validate_RejectsNonFiniteDuration(float v) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TierConfig { Tier = 1, Duration = v }.Validate());
+
+    [Theory]
+    [InlineData("AggroLossTime", float.NaN)]
+    [InlineData("AggroLossTime", float.PositiveInfinity)]
+    [InlineData("DebuffDuration", float.NaN)]
+    [InlineData("DebuffDuration", float.PositiveInfinity)]
+    [InlineData("RehideDelay", float.NaN)]
+    [InlineData("RehideDelay", float.PositiveInfinity)]
+    [InlineData("StealthModifier", float.NaN)]
+    [InlineData("StealthModifier", -0.5f)]
+    [InlineData("NoiseModifier", float.NaN)]
+    [InlineData("NoiseModifier", -0.5f)]
+    [InlineData("Cooldown", float.NaN)]
+    [InlineData("CarryWeightMultiplier", float.NaN)]
+    public void Validate_RejectsNonFiniteOrNegativeValues(string field, float v)
+    {
+        var c = new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, DebuffDuration = 20f, RehideDelay = 12f };
+        typeof(TierConfig).GetField(field).SetValue(c, v);
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => c.Validate());
+        Assert.Equal(field, ex.ParamName);
+    }
+
+    [Fact]
+    public void Validate_KeepsZeroRehideDelayAndCooldown()
+    {
+        // 0 means "an attack ends the effect" / "no cooldown"; both stay valid.
+        new TierConfig { Tier = 1, Duration = 60f, RehideDelay = 0f, Cooldown = 0f }.Validate();
+    }
+
+    // Review 2026-11-04: one invalid value used to replace the whole tier with its defaults (recipe, cooldown and debuffs included).
+    private static TierConfig Defaults2() => new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, RehideDelay = 12f, DebuffDuration = 15f,
+        Cooldown = 60f, CarryWeightMultiplier = 0.6f, Recipe = "Honey:10", DebuffSpeedModifier = -0.5f };
+
+    [Fact]
+    public void WithDefaultsForInvalid_ReplacesOnlyTheInvalidField()
+    {
+        var custom = new TierConfig { Tier = 2, Duration = float.NaN, AggroLossTime = 3f, RehideDelay = 20f, DebuffDuration = 15f,
+            Cooldown = 10f, CarryWeightMultiplier = 0.9f, Recipe = "Honey:1", DebuffSpeedModifier = -0.1f };
+        var fixedCfg = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Equal(new[] { "Duration" }, replaced);
+        Assert.Equal(120f, fixedCfg.Duration);
+        Assert.Equal(20f, fixedCfg.RehideDelay);
+        Assert.Equal(10f, fixedCfg.Cooldown);
+        Assert.Equal("Honey:1", fixedCfg.Recipe);
+        Assert.True(float.IsNaN(custom.Duration));   // the input is not changed
+        fixedCfg.Validate();
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_ReplacesEveryInvalidField()
+    {
+        var custom = Defaults2();
+        custom.Duration = -5f;
+        custom.CarryWeightMultiplier = 3f;
+        custom.StealthModifier = float.PositiveInfinity;
+        var fixedCfg = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Equal(new[] { "Duration", "StealthModifier", "CarryWeightMultiplier" }, replaced);
+        fixedCfg.Validate();
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_ValidConfigIsReturnedUnchanged()
+    {
+        var custom = Defaults2();
+        var same = custom.WithDefaultsForInvalid(Defaults2(), out var replaced);
+        Assert.Empty(replaced);
+        Assert.Equal(custom.Recipe, same.Recipe);
+    }
+
+    [Fact]
+    public void WithDefaultsForInvalid_InvalidDefaultsThrow()
+    {
+        var broken = Defaults2();
+        broken.Duration = 0f;
+        Assert.Throws<ArgumentOutOfRangeException>(() => broken.WithDefaultsForInvalid(broken, out _));
+    }
+
     [Fact]
     public void Validate_AcceptsValidConfig()
     {

@@ -14,11 +14,14 @@ namespace InvisibilityPotion.Plants
         /// <summary>Size ranges per tier: Huldra's Hair has none (1-1), Baldr's Tear 0.8-1.3, Hel's Ember Fern 0.7-1.6.</summary>
         public static readonly (float min, float max)[] ScaleRanges = { (1f, 1f), (1f, 1f), (0.8f, 1.3f), (0.7f, 1.6f) };
 
+        /// <summary>Upper bound for both ends of [Plants] YieldTN (admin-set, server-synced): one pick spawns drops in stacks, so a huge value froze the picking client.</summary>
+        public const int MaxYield = 999;
+
         public static string DefaultYieldText(int tier) => $"{DefaultYields[CheckTier(tier)].min}-{DefaultYields[CheckTier(tier)].max}";
 
         /// <summary>
         /// Parses "min-max" or a single "n" (= n-n). Whitespace allowed; min and max are swapped when reversed; values below 1 are
-        /// raised to 1. Returns false on anything else (the caller falls back to the default).
+        /// raised to 1, values above MaxYield lowered to it. Returns false on anything else (the caller falls back to the default).
         /// </summary>
         public static bool TryParseRange(string text, out int min, out int max)
         {
@@ -32,6 +35,8 @@ namespace InvisibilityPotion.Plants
             if (min > max) { var t = min; min = max; max = t; }
             if (min < 1) min = 1;
             if (max < 1) max = 1;
+            if (min > MaxYield) min = MaxYield;
+            if (max > MaxYield) max = MaxYield;
             return true;
         }
 

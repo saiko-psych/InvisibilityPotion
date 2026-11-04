@@ -32,9 +32,14 @@ namespace InvisibilityPotion.Config
         public void Validate()
         {
             if (Tier < 1 || Tier > 3) throw new ArgumentOutOfRangeException(nameof(Tier), Tier, "tier must be 1..3");
-            if (Duration <= 0f) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be > 0");
-            if (AggroLossTime < 0f) throw new ArgumentOutOfRangeException(nameof(AggroLossTime));
-            if (DebuffDuration < 0f) throw new ArgumentOutOfRangeException(nameof(DebuffDuration));
+            // Written as !(x ok) so NaN fails too: "NaN <= 0" is false, and a NaN or infinite Duration made the veil permanent.
+            if (!(Duration > 0f && IsFinite(Duration))) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be a finite number > 0");
+            CheckFiniteNonNegative(nameof(AggroLossTime), AggroLossTime);
+            CheckFiniteNonNegative(nameof(DebuffDuration), DebuffDuration);
+            if (!IsFinite(RehideDelay)) throw new ArgumentOutOfRangeException(nameof(RehideDelay), RehideDelay, "rehide delay must be a finite number (<= 0: an attack ends the effect)");
+            CheckFiniteNonNegative(nameof(StealthModifier), StealthModifier);
+            CheckFiniteNonNegative(nameof(NoiseModifier), NoiseModifier);
+            if (!IsFinite(Cooldown)) throw new ArgumentOutOfRangeException(nameof(Cooldown), Cooldown, "cooldown must be a finite number (0 = off)");
             CheckMultiplier(nameof(DebuffStaminaRegenMultiplier), DebuffStaminaRegenMultiplier);
             CheckMultiplier(nameof(DebuffEitrRegenMultiplier), DebuffEitrRegenMultiplier);
             CheckMultiplier(nameof(DebuffHealthRegenMultiplier), DebuffHealthRegenMultiplier);
@@ -43,6 +48,44 @@ namespace InvisibilityPotion.Config
                     $"speed modifier must be {GameplayDefaults.DebuffSpeedMin}..{GameplayDefaults.DebuffSpeedMax}");
             if (!(CarryWeightMultiplier >= 0f && CarryWeightMultiplier <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(CarryWeightMultiplier), CarryWeightMultiplier, "carry weight multiplier must be 0..1");
+        }
+
+        /// <summary>
+        /// A copy in which every field <see cref="Validate"/> rejects takes the value of <paramref name="defaults"/>, in Validate's
+        /// order; <paramref name="replaced"/> names them. Review 2026-11-04: one invalid value used to replace the whole tier
+        /// (recipe, cooldown and debuffs included). Throws when the defaults do not fix it (an invalid tier number or defaults).
+        /// </summary>
+        public TierConfig WithDefaultsForInvalid(TierConfig defaults, out List<string> replaced)
+        {
+            if (defaults == null) throw new ArgumentNullException(nameof(defaults));
+            replaced = new List<string>();
+            var copy = (TierConfig)MemberwiseClone();
+            var fields = typeof(TierConfig).GetFields().Length;
+            for (var i = 0; i <= fields; i++)
+            {
+                try
+                {
+                    copy.Validate();
+                    return copy;
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    var field = ex.ParamName == null || ex.ParamName == nameof(Tier) ? null : typeof(TierConfig).GetField(ex.ParamName);
+                    if (field == null || replaced.Contains(ex.ParamName)) throw;   // the default for this field is invalid too
+                    field.SetValue(copy, field.GetValue(defaults));
+                    replaced.Add(ex.ParamName);
+                }
+            }
+            copy.Validate();
+            return copy;
+        }
+
+        private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+
+        private static void CheckFiniteNonNegative(string name, float value)
+        {
+            if (!(value >= 0f && IsFinite(value)))
+                throw new ArgumentOutOfRangeException(name, value, "must be a finite number >= 0");
         }
 
         private static void CheckMultiplier(string name, float value)

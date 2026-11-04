@@ -71,6 +71,9 @@ with zipfile.ZipFile(bep) as z:
         rel = name[len(PREFIX):]
         if rel in SKIP: continue
         out = os.path.join(stage, rel)
+        # A crafted entry such as "BepInExPack_Valheim/../../x" must not write outside the stage.
+        if os.path.commonpath([os.path.realpath(out), os.path.realpath(stage)]) != os.path.realpath(stage):
+            sys.exit(f"unsafe path in {bep}: {info.filename}")
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with z.open(info) as src, open(out, "wb") as dst: dst.write(src.read())
         need.discard(rel)

@@ -85,6 +85,10 @@ namespace InvisibilityPotion.Patches
         /// so the ZDO already on the stack (GetPosition's receiver) and the peer become the helper's arguments and a Vector3
         /// is left for Write, exactly as before. Anything other than exactly one match leaves the IL untouched.
         /// </summary>
+        /// <summary>False until the transpiler found its pattern. Harmony still counts the method as patched when the transpiler falls
+        /// back to the original IL, so Plugin passes this to the patch health report (review 2026-11-04).</summary>
+        internal static bool SpoofActive;
+
         [HarmonyPatch(typeof(ZDOMan), "SendZDOs")]
         [HarmonyTranspiler]
         private static IEnumerable<CodeInstruction> SendZDOs_Transpiler(IEnumerable<CodeInstruction> instructions)
@@ -107,7 +111,8 @@ namespace InvisibilityPotion.Patches
                 }
                 codes.Add(ins);
             }
-            if (replaced != 1)
+            SpoofActive = replaced == 1;
+            if (!SpoofActive)
             {
                 Plugin.Log.LogError("SendZDOs transpiler: pattern not found, position spoof disabled");
                 return original;

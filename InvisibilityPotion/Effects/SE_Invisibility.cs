@@ -52,10 +52,15 @@ namespace InvisibilityPotion.Effects
             Plugin.Log.LogInfo($"T{Tier} reveal marked: {reason}");
         }
 
-        /// <summary>Runs inside SEMan.OnDamaged's foreach: flag only.</summary>
+        /// <summary>Runs inside SEMan.OnDamaged's foreach: flag only. Damage-over-time ticks on the hidden player (poison, burning) do
+        /// not reveal again (review 2026-11-04: each tick restarted the rehide timer for the whole poison duration).</summary>
         public override void OnDamaged(HitData hit, Character attacker)
         {
-            if (PluginConfig.Global.RevealOnDamage) MarkRevealed(RevealReason.DamageTaken);
+            if (hit != null && Patches.Reveal.IsDamageOverTime(hit)) return;
+            // Always reported: a blocked hit reports Block right after this (BlockAttack), and the machine applies RevealOnDamage /
+            // RevealOnBlock to the pair on the next tick, so the two switches work independently (user decision 2026-11-04).
+            // Fall and drowning damage count as damage taken (user: fall damage reveals).
+            MarkRevealed(RevealReason.DamageTaken);
         }
 
         public override void UpdateStatusEffect(float dt)
@@ -73,6 +78,8 @@ namespace InvisibilityPotion.Effects
                     Owner.GetSEMan().AddStatusEffect(StatusEffects.CooldownHash, resetTime: true);   // add is safe inside SEMan.Update
                 }
             }
+            Machine.RevealOnDamage = PluginConfig.Global.RevealOnDamage;
+            Machine.RevealOnBlock = PluginConfig.Global.RevealOnBlock;
             var r = Machine.Tick(dt);
             if (r.DrainStamina && PluginConfig.Global.DrainStaminaOnAttackReveal)
             {

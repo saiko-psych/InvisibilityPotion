@@ -1,6 +1,8 @@
 # Shared helpers for server-setup.sh, deploy-server.sh and deploy-proxmox.sh (sourced by bash, not run).
+# shellcheck shell=bash
 # No secrets here: the SSH host is whatever `ssh <host>` resolves (use ~/.ssh/config for user, port and key).
 
+# shellcheck disable=SC2034  # used by the scripts that source this file
 RELEASE_DLL_DEFAULT="InvisibilityPotion/Package/plugins/InvisibilityPotion.dll"   # written by `make package`
 SERVER_BINARY="valheim_server.x86_64"
 
@@ -25,7 +27,9 @@ check_release_dll() {
   local dll="$1"
   [ -f "$dll" ] || die "$dll not found. Build it first: make package (Release; refuses while the game runs, the build itself never touches the game)"
   # grep -c reads everything: grep -q would SIGPIPE strings, and pipefail turns that into "no match".
-  if command -v strings > /dev/null && [ "$(strings -a -e l "$dll" | grep -c '^ip_give$' || true)" != "0" ]; then
+  # Without strings the check used to be skipped silently, so a Debug DLL could reach a server.
+  command -v strings > /dev/null || die "strings (binutils) is needed to check that $dll is a Release build"
+  if [ "$(strings -a -e l "$dll" | grep -c '^ip_give$' || true)" != "0" ]; then
     die "$dll is a Debug build (contains the ip_give dev command). Use the Release DLL from make package"
   fi
 }

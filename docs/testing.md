@@ -709,10 +709,67 @@ Released without an in-game run at the user's request ("ich will nicht noch mehr
 
 ## 0.4.2 – smaller download (2026-10-11, not released yet)
 
+Valheim 1.0.20 (2026-10-15) and 1.0.21 (2026-10-28) came out after 0.4.1 was checked against 1.0.17; Steam updates players automatically, so 0.4.2 will run on 1.0.21. Do these first (a third-party page claims 1.0.21 changed four methods that mods hook, which names were not checked):
+
+- [ ] Game updated to 1.0.21, `make decompile`, then diff the 23 Release patch targets in `tools/decompiled/` against the notes in `docs/decompile-notes.md` (signatures, the `SendZDOs` IL pattern, `CreateGhostZones`); record the result there
+- [ ] `make build` and `make package` compile against 1.0.21; `make compat-check` passes
+- [ ] In game on 1.0.21: `Patch health: 25 targets patched, 0 missing` (Debug) and no `SendZDOs transpiler: pattern not found`; dedicated server updated to 1.0.21 shows `23 targets patched, 0 missing`
+- [ ] BepInExPack_Valheim 5.4.2360 is out (2026-10-28, BepInEx 5.4.23.6, Doorstop 4.6.0 with a Windows security fix; see `docs/compatibility.md` §7). Decide whether the servers move to it; the manifest stays at 5.4.2350 until a client and the server have loaded the mod on 5.4.2360 (`Patch health ... 0 missing`)
+
 Setup: `make build` (game closed), `make run` into `testing`. The geometry data changed (no tangents, mesh compression High, five shared meshes, one bundle for every platform), so this time look at the models once.
 
 - [ ] Log: `assets: loaded 'ip_assets' (... 37 prefabs, 86 materials)`, `assets: shader check at ...: 0 material(s) still had a JVLmock_ shader`, no `assets:` error
 - [ ] Bottles (held, on the item stand), bowls, goggles (worn, `ip_give goggles 3`), ingredients: same look as 0.4.1, smooth shading on the glass (no visible banding; if there is, lower `meshCompression` to Medium in `AssetSetup.cs` and rebuild)
 - [ ] Plants: `ip_spawn Plant_T1`, `Plant_T1_S3`, `Plant_T1_Flat`, `Plant_T2`, `Plant_T3` (the five shared-mesh prefabs) and one of each variant look as before; wind sway still on the foliage
 - [ ] Windows client (any player): `assets: shader check ... 0 material(s) still had a JVLmock_ shader` and no pink models. Until then the Windows path is unverified
+- [ ] Dedicated server (CT 132) after `make package` + `scripts/deploy-proxmox.sh`: `Loading [InvisibilityPotion 0.4.2]`, `Patch health: 23 targets patched, 0 missing`, no `assets:` error in the server log (the CHANGELOG says nothing changed for the server; this proves it)
+- [ ] A 0.4.1 client joins the 0.4.2 server and the other way round (CHANGELOG claims Jötunn accepts the mix because `VersionStrictness.Minor` only compares major.minor); a 0.4.2 client sees the 0.4.1 client's meads and goggles with the same models
 
+
+## Code review fixes (2026-11-04, not verified in game)
+
+Made without the game DLLs: the pure-logic part has xunit tests, everything below was only syntax-checked. First `make build` and `make package` (both must compile), then:
+
+- [ ] Compile: `make build` and `make package` succeed (the game-code changes were syntax-checked only). While `tools/decompiled/` is fresh: confirm `Player.InDebugFlyMode()`, `Player.InGhostMode()`, `ZNetScene.m_prefabs`, `Piece.m_vegetationGroundOnly` and `Plant.m_name` and record them in `docs/decompile-notes.md`
+- [ ] Startup log still `Patch health: 25 targets patched, 0 missing` (Debug). If the SendZDOs pattern is ever not found, the line now counts `ZDOMan.SendZDOs` as missing next to the `SendZDOs transpiler: pattern not found` error
+- [ ] Poison or burning on a hidden T2 player (`ip_give 2`, let a Blob or a Greydwarf with fire hit you once, re-hide): the ticks do not re-reveal you (`T2 reveal marked: DamageTaken` only for the hit itself, not per tick)
+- [ ] Raid (`event army_eikthyr` with `devcommands`) with two players: the hidden T2/T3 player stands closest, the raid monsters go for the visible player instead of idling; with only the hidden player around they still ignore it
+- [ ] Sleeping monster (Draugr in a burial chamber): hidden player next to it does not wake it; a visible player within its wake range does, while the hidden one stands closer
+- [ ] Equipment change while veiled (draw/sheathe a weapon, swap the helmet): no `veil: refresh after an equipment change failed` error; the veil is still there
+- [ ] Config: `[Tier2] Duration = NaN` in the server's file logs `Invalid config in [Tier2] Duration = NaN; using the default 120 for this key.`, the mead ends after the default 120 s; `[Plants] YieldT1 = 1000000000` gives at most 999 per pick, no freeze
+- [ ] Per-key fallback: `[Tier2] Duration = NaN` together with a custom `[Tier2] Cooldown = 10`: only Duration falls back (log line above), the cooldown stays 10 s. Config cleanup: put `[Plants] FutureKey = 1` and `[Fog] FogRate = 3` into the file, start: the log says `removed 1 obsolete keys: [Fog] FogRate = 3` and `kept 1 keys this build does not use ... [Plants] FutureKey`, and `FutureKey` is still in the file afterwards
+- [ ] `[Tier1] Recipe =` (empty) logs `Tier 1 recipe is empty; using default ...` and the base keeps its default cost
+- [ ] `[Goggles] RecipeT2` with `VeilIngredient_T2:2` added is accepted (no "unknown item(s)" warning) now that ingredients register first; the default goggle recipes are unchanged
+- [ ] Dedicated server, retrofit (suspected issue, not fixed): an old Mountains/Ashlands zone with a base or levelled ground that the retrofit has not checked yet (`ip_retrofit reset`, walk in with goggles II/III): no Baldr's Tear / fern inside buildings, floating over dug ground or buried under raised ground. If there are, switch `[Plants] RetrofitExistingZones` off on the server until it is fixed
+- [ ] Two clients, `LichenTreeChance` different in the client's file and the server's: a lichen patch that only one of them sees cannot be picked (suspected; trees decide once when they load)
+- [ ] RevealOnBlock independent (`ip_give 2`, shield up, let a Greydwarf hit you): server `RevealOnBlock = false`, `RevealOnDamage = true`: the blocked hit leaves you hidden (`ip_state` phase=Hidden), an unblocked hit reveals; `RevealOnBlock = true`, `RevealOnDamage = false`: the blocked hit reveals, an unblocked one does not; both on: as before. Fall damage (jump from a cliff) reveals with `RevealOnDamage = true`
+- [ ] Retrofit planner (server): with `RetrofitReportOnly = true` walk through old Mountains zones (`would be placed (report only)` lines), then set it to `false` on the server: log `plants: retrofit report-only mode off, checking zones again`, and the same zones now get their plants without a restart. A zone whose terrain is not ready no longer stalls the others (the 25-zone summary keeps counting while you stand still)
+
+## Soak test (memory and long sessions)
+
+Run once per release that touches `Visuals/`, `Net/` or `Plants/`, and whenever a leak is suspected. Adapted from the soak-test
+protocol of Claude Code Game Studios (MIT, (c) 2026 Donchitos, https://github.com/Donchitos/Claude-Code-Game-Studios). What it
+looks for comes from the 2026-11-04 code review: the full fog rebuild on every equipment change, material instances in the
+Cutoff/Tint body modes, remote players joining and leaving while veiled, caches that grow over a long server session.
+
+Measure with the game's resident memory in KB from a second terminal, and `ip_fog strays` (Debug build) for veil particle systems
+that outlived their veil:
+
+```bash
+ps -o rss= -p "$(pgrep -f '[v]alheim\.x86_64')"
+```
+
+A **leak suspect** is a number that climbs from checkpoint to checkpoint and does not come back down after the veil ends; one
+high reading is not. Write every reading into the table of the run.
+
+| Step | What to do | Checkpoints |
+|---|---|---|
+| Baseline | `make run` into `testing`, stand still 2 min | RSS |
+| A. Veil cycles | 30 times: `ip_give 2`, walk 10 s, `ip_end` | RSS after 10, 20, 30; `ip_fog strays` lists nothing at the end |
+| B. Equipment churn | `ip_give 2`, then 50 times draw and sheathe a weapon, 10 helmet swaps; repeat with `ip_give 1` | RSS before and after each tier; the trail and ground fog stay (a visible fog pop on each swap is the known full rebuild) |
+| C. Cutoff / Tint | local `[Tier2] BodyVeilMode = Tint` (then `Cutoff`), `ip_reload_config`, repeat B | RSS; compare with B |
+| D. Remote players | second client: veils with T2/T3 and logs out/in 10 times next to you | RSS on your client; `ip_fog strays` after the last logout lists nothing |
+| E. Long session | 60 min normal play with goggles on (plants, lichen trees, a fight with reveals) | RSS every 15 min; any `Error` or `Exception` line in `BepInEx/LogOutput.log` |
+| F. Server | dedicated server, one or two players walking through old Mountains/Ashlands zones for 60 min | server process RSS every 15 min (`ps -o rss= -p "$(pgrep -f '[v]alheim_server')"`), the `plants: retrofit N zones evaluated` summaries |
+
+- [ ] Run recorded (date, build, table above filled in); verdict PASS (no leak suspect), CONCERNS (a suspect with its step) or FAIL (the game slows down, errors repeat or memory keeps climbing)

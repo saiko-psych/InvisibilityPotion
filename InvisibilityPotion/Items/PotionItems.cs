@@ -90,6 +90,12 @@ namespace InvisibilityPotion.Items
                 Plugin.Log.LogError($"Tier {t} recipe '{cfg.Recipe}' is malformed ({e.Message}); using default '{DefaultRecipes[t - 1]}'");
                 parsed = new List<(string, int)>(RecipeParser.Parse(DefaultRecipes[t - 1]));
             }
+            if (parsed.Count == 0)
+            {
+                // Review 2026-11-04: an empty recipe registered a mead base that costs nothing (GoggleItems already refuses one).
+                Plugin.Log.LogError($"Tier {t} recipe is empty; using default '{DefaultRecipes[t - 1]}'");
+                parsed = new List<(string, int)>(RecipeParser.Parse(DefaultRecipes[t - 1]));
+            }
             if (!AssetBundles.Loaded && parsed.Any(e => e.Item1.StartsWith("VeilIngredient_", System.StringComparison.Ordinal)))
             {
                 // Without the bundle the ingredients do not exist; keeping them would make the mead uncraftable (spec §5).

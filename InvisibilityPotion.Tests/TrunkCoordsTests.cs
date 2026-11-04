@@ -47,4 +47,25 @@ public class TrunkCoordsTests
         Assert.False(TrunkCoords.IsStored(1.0f, float.NaN));
         Assert.False(TrunkCoords.IsStored(3f, 45f));
     }
+
+    // Branches without a test before the 2026-11-04 review.
+    [Fact]
+    public void IsStored_ToleranceEdgesAndInfiniteAngle()
+    {
+        Assert.True(TrunkCoords.IsStored(TrunkCoords.MinHeight - 0.0005f, 0f));
+        Assert.True(TrunkCoords.IsStored(TrunkCoords.MaxHeight + 0.0005f, 0f));
+        Assert.False(TrunkCoords.IsStored(TrunkCoords.MinHeight - 0.01f, 0f));
+        Assert.False(TrunkCoords.IsStored(TrunkCoords.MaxHeight + 0.01f, 0f));
+        Assert.False(TrunkCoords.IsStored(1f, float.PositiveInfinity));
+        Assert.False(TrunkCoords.IsStored(float.NaN, 0f));
+    }
+
+    [Theory]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [InlineData(float.NaN)]
+    public void Normalize_NonFiniteGivesZero(float input) => Assert.Equal(0f, TrunkCoords.Normalize(input));
+
+    [Fact]
+    public void ClampHeight_NaNGivesMinimum() => Assert.Equal(TrunkCoords.MinHeight, TrunkCoords.ClampHeight(float.NaN));
 }
