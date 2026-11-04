@@ -16,10 +16,18 @@ namespace InvisibilityPotion
                 .ToList();
         }
 
-        /// <summary>Logs one error per expected target that did not get patched. Returns the missing list.</summary>
-        public static IReadOnlyList<string> Report(Harmony harmony, IEnumerable<string> expectedTargets)
+        /// <summary>
+        /// Logs one error per expected target that did not get patched. Returns the missing list. <paramref name="notEffective"/>: targets
+        /// Harmony reports as patched although the patch does nothing (a transpiler that fell back to the original IL); they count as missing.
+        /// </summary>
+        public static IReadOnlyList<string> Report(Harmony harmony, IEnumerable<string> expectedTargets, IEnumerable<string> notEffective = null)
         {
             var patched = PatchedTargets(harmony);
+            if (notEffective != null)
+            {
+                var drop = new HashSet<string>(notEffective);
+                patched = patched.Where(t => !drop.Contains(t)).ToList();
+            }
             var missing = MissingTargets(expectedTargets, patched);
             foreach (var target in missing)
             {

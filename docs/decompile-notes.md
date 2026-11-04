@@ -39,6 +39,12 @@ Tip for future greps: `tools/decompiled/` is gitignored, and the shell's `grep` 
       return closestPlayer;
   ```
   Raid and event creatures (`HuntPlayer()` true) therefore find a hidden player even when both static checks say "not sensed". This needs its own patch (postfix on `FindEnemy`: if `__result` is a hidden player, return null).
+  Review 2026-11-04 (not re-verified in `tools/decompiled/`, which was not available; taken from the quote above): the postfix now
+  replaces a hidden result of a `HuntPlayer()` monster with `HiddenState.ClosestTargetablePlayer(pos, 200f)` instead of null, so a
+  hidden player no longer stops a raid from hunting visible teammates. It skips players with `InDebugFlyMode()` / `InGhostMode()`
+  (the two calls in the quote, on `Player`) and players ignored by enemies, and iterates `Player.GetAllPlayers()` (Player.cs:5531).
+  `MonsterAI.UpdateSleep` prefix: when the closest player is hidden, a targetable player within `m_wakeupRange` lets vanilla run.
+  Verify both signatures on the next `make decompile`.
 - `BaseAI.FindClosestCreature(Transform me, Vector3 eyePoint, float hearRange, float viewRange, float viewAngle, bool alerted, bool mistVision, bool passiveAggresive, bool includePlayers = true, bool includeTamed = true, bool includeEnemies = true, List<Character> onlyTargets = null)` – `public static Character`, BaseAI.cs:1429. Used by turrets. Covered once the static checks are patched.
 - `BaseAI.IsEnemy(Character other)` – `public bool`, BaseAI.cs:1188; `BaseAI.IsEnemy(Character a, Character b)` – `public static bool`, BaseAI.cs:1193. Faction/group/tame/aggravated logic only. Does **not** consult ghost mode or stealth. Do not patch it for invisibility: `UpdateTarget` drops a non-enemy target immediately (MonsterAI.cs:300), and the result is also used for HUD colouring and PvP-like logic.
 - `BaseAI.SetAlerted(bool alert)` – `protected virtual void`, BaseAI.cs:1554. Writes `ZDOVars.s_alert` only on the owner (BaseAI.cs:1562). `MonsterAI.SetAlerted(bool alert)` – `protected override void`, MonsterAI.cs:919, resets `m_timeSinceSensedTargetCreature = 0f` when `alert` is true, then calls base.

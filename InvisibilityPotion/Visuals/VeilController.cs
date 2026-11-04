@@ -20,6 +20,11 @@ namespace InvisibilityPotion.Visuals
         private readonly HashSet<Player> _seen = new HashSet<Player>();
         private readonly HashSet<Player> _veiled = new HashSet<Player>();
         private readonly HashSet<string> _loggedErrors = new HashSet<string>();
+        /// <summary>Review 2026-11-04: a failed Apply was retried (spawn, throw, remove) on every 0.25 s refresh. It is now retried after
+        /// <see cref="ApplyRetrySeconds"/>; not dropped for good, because the veil also carries forceHide for tier III players.</summary>
+        private readonly Dictionary<Player, float> _retryAt = new Dictionary<Player, float>();
+        private readonly List<Player> _retryGone = new List<Player>();
+        private const float ApplyRetrySeconds = 5f;
         private System.Predicate<Player> _removeUnseen;
         private float _timer;
 
@@ -170,6 +175,7 @@ namespace InvisibilityPotion.Visuals
                 {
                     // Keyed on the veil's own record, not on _veiled: a veil can never outlive its effect, whatever path built it.
                     _veiled.Remove(p);
+                    _retryAt.Remove(p);
                     if (_veil.HasVeil(p)) _veil.Remove(p);
                     _veil.SweepStrayFog(p);
                     continue;
@@ -178,20 +184,29 @@ namespace InvisibilityPotion.Visuals
                 // A remote player hidden from players must not be drawn here either (the listen host gets the real position,
                 // the position spoof only applies to forwarded packets). Level III goggles (plan 5) show the tier's veil look instead.
                 var forceHide = !isLocal && HiddenState.IsHiddenFromPlayers(p) && !Goggles.GogglesLevel.LocalSeesHiddenPlayers;
+                if (_retryAt.TryGetValue(p, out var retryAt) && Time.time < retryAt) continue;
                 try
                 {
                     _veil.Apply(p, tier, isLocal, forceHide);
                     _veiled.Add(p);
+                    _retryAt.Remove(p);
                 }
                 catch (Exception e)
                 {
-                    // A half-built veil is removed at once instead of being retried (and leaking fog) every refresh.
+                    // A half-built veil is removed at once and retried after ApplyRetrySeconds, not on every refresh.
                     if (_loggedErrors.Add(e.GetType().Name + e.Message)) Plugin.Log.LogError($"veil apply T{tier} on {p.GetPlayerName()} failed: {e}");
                     _veil.Remove(p);
                     _veiled.Remove(p);
+                    _retryAt[p] = Time.time + ApplyRetrySeconds;
                 }
             }
             _veiled.RemoveWhere(_removeUnseen);
+            if (_retryAt.Count > 0)
+            {
+                _retryGone.Clear();
+                foreach (var kv in _retryAt) if (kv.Key == null || !seen.Contains(kv.Key)) _retryGone.Add(kv.Key);
+                foreach (var gone in _retryGone) _retryAt.Remove(gone);
+            }
             _veil.PruneDead();
         }
     }

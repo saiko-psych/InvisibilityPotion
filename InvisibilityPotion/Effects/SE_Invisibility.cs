@@ -52,9 +52,11 @@ namespace InvisibilityPotion.Effects
             Plugin.Log.LogInfo($"T{Tier} reveal marked: {reason}");
         }
 
-        /// <summary>Runs inside SEMan.OnDamaged's foreach: flag only.</summary>
+        /// <summary>Runs inside SEMan.OnDamaged's foreach: flag only. Damage-over-time ticks on the hidden player (poison, burning) do
+        /// not reveal again (review 2026-11-04: each tick restarted the rehide timer for the whole poison duration).</summary>
         public override void OnDamaged(HitData hit, Character attacker)
         {
+            if (hit != null && Patches.Reveal.IsDamageOverTime(hit)) return;
             if (PluginConfig.Global.RevealOnDamage) MarkRevealed(RevealReason.DamageTaken);
         }
 

@@ -8,10 +8,11 @@ namespace InvisibilityPotion.Items
         /// <summary>Call from PrefabManager.OnVanillaPrefabsAvailable after PotionItems.Register.</summary>
         public static void Register()
         {
-            try { GoggleItems.Register(); }
-            catch (System.Exception e) { Plugin.Log.LogError($"Goggle registration failed: {e}"); }
+            // Ingredients first (review 2026-11-04): a [Goggles] RecipeTN naming a veil ingredient is checked with ItemManager.GetItem.
             try { IngredientItems.Register(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Ingredient registration failed: {e}"); }
+            try { GoggleItems.Register(); }
+            catch (System.Exception e) { Plugin.Log.LogError($"Goggle registration failed: {e}"); }
             try { ModelPrefabs.RegisterPlants(); }
             catch (System.Exception e) { Plugin.Log.LogError($"Plant registration failed: {e}"); }
             try { Plants.PlantPrefabs.Register(); }   // plan 5: needs the scaled plant models, before Unload

@@ -725,3 +725,17 @@ Setup: `make build` (game closed), `make run` into `testing`. The geometry data 
 - [ ] Dedicated server (CT 132) after `make package` + `scripts/deploy-proxmox.sh`: `Loading [InvisibilityPotion 0.4.2]`, `Patch health: 23 targets patched, 0 missing`, no `assets:` error in the server log (the CHANGELOG says nothing changed for the server; this proves it)
 - [ ] A 0.4.1 client joins the 0.4.2 server and the other way round (CHANGELOG claims Jötunn accepts the mix because `VersionStrictness.Minor` only compares major.minor); a 0.4.2 client sees the 0.4.1 client's meads and goggles with the same models
 
+
+## Code review fixes (2026-11-04, not verified in game)
+
+Made without the game DLLs: the pure-logic part has xunit tests, everything below was only syntax-checked. First `make build` and `make package` (both must compile), then:
+
+- [ ] Compile: `make build` and `make package` succeed (the game-code changes were syntax-checked only). While `tools/decompiled/` is fresh: confirm `Player.InDebugFlyMode()`, `Player.InGhostMode()`, `ZNetScene.m_prefabs`, `Piece.m_vegetationGroundOnly` and `Plant.m_name` and record them in `docs/decompile-notes.md`
+- [ ] Startup log still `Patch health: 25 targets patched, 0 missing` (Debug). If the SendZDOs pattern is ever not found, the line now counts `ZDOMan.SendZDOs` as missing next to the `SendZDOs transpiler: pattern not found` error
+- [ ] Poison or burning on a hidden T2 player (`ip_give 2`, let a Blob or a Greydwarf with fire hit you once, re-hide): the ticks do not re-reveal you (`T2 reveal marked: DamageTaken` only for the hit itself, not per tick)
+- [ ] Raid (`event army_eikthyr` with `devcommands`) with two players: the hidden T2/T3 player stands closest, the raid monsters go for the visible player instead of idling; with only the hidden player around they still ignore it
+- [ ] Sleeping monster (Draugr in a burial chamber): hidden player next to it does not wake it; a visible player within its wake range does, while the hidden one stands closer
+- [ ] Equipment change while veiled (draw/sheathe a weapon, swap the helmet): no `veil: refresh after an equipment change failed` error; the veil is still there
+- [ ] Config: `[Tier2] Duration = NaN` in the server's file logs `Invalid config in [Tier2] Duration = NaN ... Using defaults for this tier.` and the mead ends after the default 120 s; `[Plants] YieldT1 = 1000000000` gives at most 999 per pick, no freeze
+- [ ] `[Tier1] Recipe =` (empty) logs `Tier 1 recipe is empty; using default ...` and the base keeps its default cost
+- [ ] `[Goggles] RecipeT2` with `VeilIngredient_T2:2` added is accepted (no "unknown item(s)" warning) now that ingredients register first; the default goggle recipes are unchanged

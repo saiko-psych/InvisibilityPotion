@@ -103,8 +103,11 @@ namespace InvisibilityPotion
             // Server-synced values arrive after join; rebuild the snapshots so they take effect.
             Jotunn.Managers.SynchronizationManager.OnConfigurationSynchronized += (s, e) =>
             {
-                Cfg.PluginConfig.Refresh();
-                Plants.Cultivation.ApplyGrowTime();   // 0.4.1: the server's CultivateMinutes reaches the sapling prefabs of every client
+                // Each step guarded on its own (review 2026-11-04): an exception in one must not skip the other or reach Jötunn.
+                try { Cfg.PluginConfig.Refresh(); }
+                catch (Exception ex) { Log.LogError($"Config refresh after sync failed: {ex}"); }
+                try { Plants.Cultivation.ApplyGrowTime(); }   // 0.4.1: the server's CultivateMinutes reaches the sapling prefabs of every client
+                catch (Exception ex) { Log.LogError($"Grow time after sync failed: {ex}"); }
             };
             Jotunn.Managers.PrefabManager.OnVanillaPrefabsAvailable += RegisterItemsOnce;
             HarmonyInstance = new Harmony(PluginGuid);
@@ -120,7 +123,8 @@ namespace InvisibilityPotion
                     Log.LogError($"Failed to apply patches in {type.FullName}: {e.Message}");
                 }
             }
-            MissingPatches = PatchHealth.Report(HarmonyInstance, ExpectedPatchTargets);
+            MissingPatches = PatchHealth.Report(HarmonyInstance, ExpectedPatchTargets,
+                Patches.PlayerHidePatches.SpoofActive ? null : new[] { PatchHealth.TargetKey("ZDOMan", "SendZDOs") });
             try
             {
                 gameObject.AddComponent<Visuals.VeilController>();

@@ -11,6 +11,7 @@ namespace InvisibilityPotion.Net
         public static readonly int HashHidden = "IP_Hidden".GetStableHashCode();
 
         private const float CacheSeconds = 0.2f;
+        private const int MaxCacheEntries = 256;
         private struct Entry { public float Time; public int Tier; public bool Hidden; }
         private static readonly Dictionary<ZDOID, Entry> _cache = new Dictionary<ZDOID, Entry>();
 
@@ -23,6 +24,7 @@ namespace InvisibilityPotion.Net
             var id = zdo.m_uid;
             var now = Time.time;
             if (_cache.TryGetValue(id, out var e) && now - e.Time < CacheSeconds) return (e.Tier, e.Hidden);
+            if (_cache.Count >= MaxCacheEntries) _cache.Clear();   // every player spawn is a new ZDOID; keep a long server session bounded
             var tier = zdo.GetInt(HashTier, 0);
             var hidden = zdo.GetBool(HashHidden, false);
             _cache[id] = new Entry { Time = now, Tier = tier, Hidden = hidden };
@@ -69,5 +71,22 @@ namespace InvisibilityPotion.Net
         }
 
         public static void Invalidate(ZDOID id) => _cache.Remove(id);
+
+        /// <summary>
+        /// Closest player within <paramref name="range"/> that enemies may target: not ignored by enemies, not in debug fly or ghost mode
+        /// (the two exclusions vanilla's FindEnemy fallback applies, BaseAI.cs:1419). Null when there is none. No allocation.
+        /// </summary>
+        public static Player ClosestTargetablePlayer(Vector3 position, float range)
+        {
+            Player best = null;
+            var bestSq = range * range;
+            foreach (var p in Player.GetAllPlayers())
+            {
+                if (p == null || p.InDebugFlyMode() || p.InGhostMode() || IsIgnoredByEnemies(p)) continue;
+                var d = (p.transform.position - position).sqrMagnitude;
+                if (d <= bestSq) { bestSq = d; best = p; }
+            }
+            return best;
+        }
     }
 }

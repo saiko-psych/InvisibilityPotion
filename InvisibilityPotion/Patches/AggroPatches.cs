@@ -37,6 +37,8 @@ namespace InvisibilityPotion.Patches
             if (range <= 0f) return true;
             var closest = Player.GetClosestPlayer(__instance.transform.position, range);
             if (closest == null || !HiddenState.IsIgnoredByEnemies(closest)) return true;
+            // Review 2026-11-04: a visible player close enough to wake the monster on its own still does (vanilla decides).
+            if (__instance.m_wakeupRange > 0f && HiddenState.ClosestTargetablePlayer(__instance.transform.position, __instance.m_wakeupRange) != null) return true;
             // Closest player is hidden: skip this tick's wake-up checks but keep the sleep timer running like vanilla.
             __instance.m_sleepTimer += dt;
             return false;

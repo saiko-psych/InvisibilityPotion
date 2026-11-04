@@ -12,6 +12,21 @@ namespace InvisibilityPotion.Patches
             if (p == null || p != Player.m_localPlayer) return;
             SE_Invisibility.ActiveOn(p)?.MarkRevealed(reason);
         }
+
+        /// <summary>Damage-over-time ticks (SE_Burning.cs:45, SE_Poison.cs:37; Freezing for safety) never reveal: the hit that applied
+        /// them already did. Used by the attacker side (DamagePatch) and the victim side (SE_Invisibility.OnDamaged).</summary>
+        internal static bool IsDamageOverTime(HitData hit)
+        {
+            switch (hit.m_hitType)
+            {
+                case HitData.HitType.Burning:
+                case HitData.HitType.Freezing:
+                case HitData.HitType.Poisoned:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
     /// <summary>Damaging a creature. Character.Damage runs on the attacker's machine before the RPC (Character.cs:2232).</summary>
@@ -22,14 +37,8 @@ namespace InvisibilityPotion.Patches
         private static void Prefix(Character __instance, HitData hit)
         {
             if (__instance == null || hit == null) return;
-            // Damage-over-time ticks (SE_Burning.cs:45, SE_Poison.cs:37) must not re-reveal a re-hidden player.
-            switch (hit.m_hitType)
-            {
-                case HitData.HitType.Burning:
-                case HitData.HitType.Freezing:
-                case HitData.HitType.Poisoned:
-                    return;
-            }
+            // Damage-over-time ticks must not re-reveal a re-hidden player.
+            if (Reveal.IsDamageOverTime(hit)) return;
             var attacker = hit.GetAttacker() as Player;
             if (attacker == null || attacker == __instance) return;
             Reveal.Mark(attacker, RevealReason.DamageDealt);
