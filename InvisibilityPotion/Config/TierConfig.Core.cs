@@ -32,9 +32,14 @@ namespace InvisibilityPotion.Config
         public void Validate()
         {
             if (Tier < 1 || Tier > 3) throw new ArgumentOutOfRangeException(nameof(Tier), Tier, "tier must be 1..3");
-            if (Duration <= 0f) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be > 0");
-            if (AggroLossTime < 0f) throw new ArgumentOutOfRangeException(nameof(AggroLossTime));
-            if (DebuffDuration < 0f) throw new ArgumentOutOfRangeException(nameof(DebuffDuration));
+            // Written as !(x ok) so NaN fails too: "NaN <= 0" is false, and a NaN or infinite Duration made the veil permanent.
+            if (!(Duration > 0f && IsFinite(Duration))) throw new ArgumentOutOfRangeException(nameof(Duration), Duration, "duration must be a finite number > 0");
+            CheckFiniteNonNegative(nameof(AggroLossTime), AggroLossTime);
+            CheckFiniteNonNegative(nameof(DebuffDuration), DebuffDuration);
+            if (!IsFinite(RehideDelay)) throw new ArgumentOutOfRangeException(nameof(RehideDelay), RehideDelay, "rehide delay must be a finite number (<= 0: an attack ends the effect)");
+            CheckFiniteNonNegative(nameof(StealthModifier), StealthModifier);
+            CheckFiniteNonNegative(nameof(NoiseModifier), NoiseModifier);
+            if (!IsFinite(Cooldown)) throw new ArgumentOutOfRangeException(nameof(Cooldown), Cooldown, "cooldown must be a finite number (0 = off)");
             CheckMultiplier(nameof(DebuffStaminaRegenMultiplier), DebuffStaminaRegenMultiplier);
             CheckMultiplier(nameof(DebuffEitrRegenMultiplier), DebuffEitrRegenMultiplier);
             CheckMultiplier(nameof(DebuffHealthRegenMultiplier), DebuffHealthRegenMultiplier);
@@ -43,6 +48,14 @@ namespace InvisibilityPotion.Config
                     $"speed modifier must be {GameplayDefaults.DebuffSpeedMin}..{GameplayDefaults.DebuffSpeedMax}");
             if (!(CarryWeightMultiplier >= 0f && CarryWeightMultiplier <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(CarryWeightMultiplier), CarryWeightMultiplier, "carry weight multiplier must be 0..1");
+        }
+
+        private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+
+        private static void CheckFiniteNonNegative(string name, float value)
+        {
+            if (!(value >= 0f && IsFinite(value)))
+                throw new ArgumentOutOfRangeException(name, value, "must be a finite number >= 0");
         }
 
         private static void CheckMultiplier(string name, float value)

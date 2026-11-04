@@ -23,6 +23,29 @@ public class PlantYieldTests
     [InlineData("1.5-2")]
     public void Rejects_malformed(string text) => Assert.False(PlantYield.TryParseRange(text, out _, out _));
 
+    // Review 2026-11-04: YieldTN had no upper bound; "1000000000" made one pick spawn ~20 million drops and froze the client.
+    [Theory]
+    [InlineData("1000000000", 999, 999)]
+    [InlineData("5-1000000000", 5, 999)]
+    [InlineData("2000000000-3", 3, 999)]
+    public void Caps_huge_yields(string text, int min, int max)
+    {
+        Assert.True(PlantYield.TryParseRange(text, out var a, out var b));
+        Assert.Equal((min, max), (a, b));
+        Assert.Equal(999, PlantYield.MaxYield);
+    }
+
+    [Theory]
+    [InlineData(1, 3, double.NaN, 1)]
+    [InlineData(3, 1, 0.99, 3)]
+    [InlineData(1, 3, -1.0, 1)]
+    public void Roll_handles_swapped_ranges_and_bad_random(int min, int max, double r, int expected) =>
+        Assert.Equal(expected, PlantYield.Roll(min, max, r));
+
+    [Fact]
+    public void Tier_outside_one_to_three_throws() =>
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => PlantYield.DefaultYieldText(0));
+
     [Fact]
     public void Defaults_are_the_user_decisions()
     {

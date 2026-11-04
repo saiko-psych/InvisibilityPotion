@@ -93,6 +93,41 @@ public class TierConfigTests
         Assert.False(new TierConfig().HiddenFromPlayers);
     }
 
+    // Review 2026-11-04: NaN/Infinity passed the "<= 0" / "< 0" checks, so an admin-set Duration = NaN made the veil permanent.
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void Validate_RejectsNonFiniteDuration(float v) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TierConfig { Tier = 1, Duration = v }.Validate());
+
+    [Theory]
+    [InlineData("AggroLossTime", float.NaN)]
+    [InlineData("AggroLossTime", float.PositiveInfinity)]
+    [InlineData("DebuffDuration", float.NaN)]
+    [InlineData("DebuffDuration", float.PositiveInfinity)]
+    [InlineData("RehideDelay", float.NaN)]
+    [InlineData("RehideDelay", float.PositiveInfinity)]
+    [InlineData("StealthModifier", float.NaN)]
+    [InlineData("StealthModifier", -0.5f)]
+    [InlineData("NoiseModifier", float.NaN)]
+    [InlineData("NoiseModifier", -0.5f)]
+    [InlineData("Cooldown", float.NaN)]
+    [InlineData("CarryWeightMultiplier", float.NaN)]
+    public void Validate_RejectsNonFiniteOrNegativeValues(string field, float v)
+    {
+        var c = new TierConfig { Tier = 2, Duration = 120f, AggroLossTime = 1f, DebuffDuration = 20f, RehideDelay = 12f };
+        typeof(TierConfig).GetField(field).SetValue(c, v);
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => c.Validate());
+        Assert.Equal(field, ex.ParamName);
+    }
+
+    [Fact]
+    public void Validate_KeepsZeroRehideDelayAndCooldown()
+    {
+        // 0 means "an attack ends the effect" / "no cooldown"; both stay valid.
+        new TierConfig { Tier = 1, Duration = 60f, RehideDelay = 0f, Cooldown = 0f }.Validate();
+    }
+
     [Fact]
     public void Validate_AcceptsValidConfig()
     {
