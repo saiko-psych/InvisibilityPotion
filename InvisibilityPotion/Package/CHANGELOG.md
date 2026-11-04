@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.4.2 (unreleased)
+## 0.4.2
 
-- Download is a third of the size (DLL 2.3 MB -> 0.8 MB). No gameplay change. The models lost data nothing ever read (tangents, which only normal-mapped materials use), use Unity's mesh compression, five duplicate meshes are shared, and the separate Windows copy of the asset bundle is gone: meshes and materials are platform-neutral and the placeholder shaders are swapped for Valheim's own shaders by Jötunn on every platform. If a Windows client ever showed pink models, please report the `assets: shader check` line of its `BepInEx/LogOutput.log`.
+- Smaller download: the DLL shrinks from 2.3 MB to 0.8 MB. No gameplay or config change, same 23 patch targets, nothing to migrate. Jötunn accepts 0.4.1 and 0.4.2 together on a server and its clients (only major.minor has to match).
+- How: the models no longer carry tangents (only normal-mapped materials read them, and none of this mod's materials has a normal map), use Unity's mesh compression, and share five duplicate meshes. The separate Windows copy of the asset bundle is gone: meshes and materials are platform-neutral, and Jötunn swaps the placeholder shaders for Valheim's own on every platform.
+- Windows players: if a model from this mod shows up pink, please report the `assets: shader check` line from `BepInEx/LogOutput.log`.
 
 ## 0.4.1 (2026-10-11)
 

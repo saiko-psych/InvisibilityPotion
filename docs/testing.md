@@ -709,10 +709,19 @@ Released without an in-game run at the user's request ("ich will nicht noch mehr
 
 ## 0.4.2 – smaller download (2026-10-11, not released yet)
 
+Valheim 1.0.20 (2026-10-15) and 1.0.21 (2026-10-28) came out after 0.4.1 was checked against 1.0.17; Steam updates players automatically, so 0.4.2 will run on 1.0.21. Do these first (a third-party page claims 1.0.21 changed four methods that mods hook, which names were not checked):
+
+- [ ] Game updated to 1.0.21, `make decompile`, then diff the 23 Release patch targets in `tools/decompiled/` against the notes in `docs/decompile-notes.md` (signatures, the `SendZDOs` IL pattern, `CreateGhostZones`); record the result there
+- [ ] `make build` and `make package` compile against 1.0.21; `make compat-check` passes
+- [ ] In game on 1.0.21: `Patch health: 25 targets patched, 0 missing` (Debug) and no `SendZDOs transpiler: pattern not found`; dedicated server updated to 1.0.21 shows `23 targets patched, 0 missing`
+- [ ] Thunderstore: check whether BepInExPack_Valheim has a release after 5.4.2351 and whether the servers need it (manifest stays at 5.4.2350 otherwise)
+
 Setup: `make build` (game closed), `make run` into `testing`. The geometry data changed (no tangents, mesh compression High, five shared meshes, one bundle for every platform), so this time look at the models once.
 
 - [ ] Log: `assets: loaded 'ip_assets' (... 37 prefabs, 86 materials)`, `assets: shader check at ...: 0 material(s) still had a JVLmock_ shader`, no `assets:` error
 - [ ] Bottles (held, on the item stand), bowls, goggles (worn, `ip_give goggles 3`), ingredients: same look as 0.4.1, smooth shading on the glass (no visible banding; if there is, lower `meshCompression` to Medium in `AssetSetup.cs` and rebuild)
 - [ ] Plants: `ip_spawn Plant_T1`, `Plant_T1_S3`, `Plant_T1_Flat`, `Plant_T2`, `Plant_T3` (the five shared-mesh prefabs) and one of each variant look as before; wind sway still on the foliage
 - [ ] Windows client (any player): `assets: shader check ... 0 material(s) still had a JVLmock_ shader` and no pink models. Until then the Windows path is unverified
+- [ ] Dedicated server (CT 132) after `make package` + `scripts/deploy-proxmox.sh`: `Loading [InvisibilityPotion 0.4.2]`, `Patch health: 23 targets patched, 0 missing`, no `assets:` error in the server log (the CHANGELOG says nothing changed for the server; this proves it)
+- [ ] A 0.4.1 client joins the 0.4.2 server and the other way round (CHANGELOG claims Jötunn accepts the mix because `VersionStrictness.Minor` only compares major.minor); a 0.4.2 client sees the 0.4.1 client's meads and goggles with the same models
 

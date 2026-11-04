@@ -35,7 +35,7 @@ Valheim/
 
 **Dedicated server:** same three steps in the server folder (BepInExPack's `start_server_bepinex.sh` / `.bat` starts it); the server's config file is the one that counts for all players. Linux users: Steam launch option `./start_game_bepinex.sh %command%`.
 
-**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 25 targets patched, 0 missing` when everything loaded.
+**Use:** brew a mead base at the Mead Ketill, ferment it, drink. Find the plants with veil goggles (Forge). `BepInEx/LogOutput.log` shows `Patch health: 23 targets patched, 0 missing` when everything loaded.
 
 ## The meads
 

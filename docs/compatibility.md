@@ -1,7 +1,7 @@
-# Mod compatibility (0.3.0)
+# Mod compatibility
 
 Assessment of where InvisibilityPotion touches the game and where other mods can collide with it. Written for the first public
-release (2026-10-02). Game hooks are documented in `docs/decompile-notes.md`; this file covers what other mods see.
+release (0.3.0, 2026-10-02); the patch list in §1 is current as of 0.4.2. Game hooks are documented in `docs/decompile-notes.md`; this file covers what other mods see.
 
 Harmony behaviour that matters below: BepInEx ships **HarmonyX**, which runs every prefix even after one returned false
 ("cancelling running a prefix will not cancel running the subsequent prefixes", HarmonyX wiki, *Difference between Harmony and
@@ -33,6 +33,8 @@ All Release patches are listed in `Plugin.ExpectedPatchTargets`; startup logs `P
 | `ZDOMan.SendZDOs` | **transpiler** | no | Normal | Server: replaces the one `ZDO.GetPosition()` call that feeds `ZPackage.Write(Vector3)` in the ZDO header with `HeaderPosition` (spoofed height for hidden players). **Most fragile patch**, see below. |
 | `Player.UpdatePlacementGhost` | postfix | no | Normal | Huldra's Hair sprout: trunk check and ghost snap. |
 | `Player.GetMaxCarryWeight` | postfix | no | Normal | Multiplies the final value by `CarryWeightMultiplier`. A later postfix of another mod that adds a flat bonus is not reduced; candidate for `Priority.Low` (`Patches/CarryWeightPatches.cs`, not changed here). |
+| `Player.CheckRun` | prefix | **yes**, while Veil Broken (`SE_Revealed`) is on the player | Normal | No sprinting during Veil Broken: returns false and skips the run stamina drain and Run skill gain (`Patches/SprintPatches.cs`). Another mod's `CheckRun` prefix still runs (HarmonyX), but the original does not. |
+| `Plant.Grow` | postfix | no | Normal | Marks a ground plant grown from our saplings as cultivated (ZDO `IP_Cultivated`) and logs the growth; ignores every plant without `VeilHarvest` (`Patches/CultivationPatches.cs`). |
 | `ZoneSystem.CreateGhostZones` | postfix | no | Normal | Server: after vanilla looked for ungenerated zones around a peer, checks one already generated zone for missing wild plants and places them with vanilla's own `PlaceVegetation` (our two entries only, Ghost mode). Mods that replace zone generation or `m_vegetation` wholesale (custom world generators) may stop the retrofit; it then logs nothing and places nothing. |
 | Debug only: `FejdStartup.Start`, `PlayerController.TakeInput` | postfix | no | Normal | Not in Release builds. |
 
@@ -76,7 +78,7 @@ All namespaced `IP_*` (no collision with vanilla or other mods expected):
 ## 4. Network and config sync
 
 - `[NetworkCompatibility(EveryoneMustHaveMod, VersionStrictness.Minor)]`: Jötunn compares the mod lists at connect. Server and
-  every client need InvisibilityPotion with the **same major.minor** (0.3.x with 0.3.y is fine, 0.2 with 0.3 is refused). A
+  every client need InvisibilityPotion with the **same major.minor** (0.4.x with 0.4.y is fine, 0.3 with 0.4 is refused). A
   vanilla client cannot join a server running the mod, and a client with the mod cannot join a server without it.
 - Gameplay config (`[TierN]`, `[General]`, `[Plants]`, `[Goggles]`) is bound with `ConfigurationManagerAttributes.IsAdminOnly`:
   Jötunn's `SynchronizationManager` pushes the server values to clients on join and on change, and only admins (server
@@ -126,7 +128,9 @@ and declared against exactly those (`JotunnLib` 2.30.0 in the csproj; manifest d
 |---|---|---|---|
 | Jötunn | NuGet `JotunnLib` 2.30.0 (`Jotunn.dll` from the package) | `ValheimModding-Jotunn-2.30.0` | 2.30.0, 2.30.1, 2.30.2 (no API used here was added after 2.30.0, none was removed or changed later) |
 | BepInEx core | `BepInEx.dll` **5.4.23.5** (`+ef506e0`, sha256 `f09821b2...`) from `$(VALHEIM_INSTALL)/BepInEx/core/`: JotunnLib's `JotunnLibRefsCorlib.props` references `$(BEPINEX_PATH)/core/BepInEx.dll`, it is not a NuGet package | `denikson-BepInExPack_Valheim-5.4.2350` | Pack 5.4.2350 and 5.4.2351: both ship BepInEx 5.4.23.5 (assembly version identical; 2351 is commit `fd72254`, logging changes and Doorstop 4.5.0) |
-| Game | Valheim 1.0.16 (`$(VALHEIM_INSTALL)`) | – | 1.0.16 |
+| Game | Valheim 1.0.17 since 0.4.1, 1.0.16 before (`$(VALHEIM_INSTALL)`) | – | 1.0.17; 1.0.20 (2026-10-15) and 1.0.21 (2026-10-28) are released but not decompiled or tested yet (`docs/testing.md` 0.4.2) |
+
+Checked on 2026-11-04 (Jötunn `CHANGELOG.md` on the `prod` branch on GitHub): no Jötunn release after 2.30.2, so the pin and `make compat-check` stay as they are. BepInExPack_Valheim releases after 5.4.2351 were not checked (Thunderstore not reachable from that session).
 
 Checked on 2026-10-03: the dev machine's installed pack is 5.4.2350 (`changelog.txt` "Bump Thunderstore version to 5.4.2350",
 the core `BepInEx.dll` is byte-identical to the one in the Thunderstore 5.4.2350 zip). Thunderstore lists
@@ -169,8 +173,8 @@ mismatch when major and minor are equal and the patch differs. So a **client wit
 refused**: the server logs `Mod version mismatch Jotunn: Server 2.30.0, Client 2.30.2` and `Disconnecting modded client with
 incompatible version message`, sends `Error` (incompatible version), and the client shows Jötunn's compatibility window. The
 same happens the other way round. Every player who joins the author's server needs Jötunn **2.30.0** exactly; players who
-already have 2.30.2 (installed by hand, by a mod manager or as another mod's dependency) must replace it with 2.30.0. InvisibilityPotion's own check is `Minor`, so 0.3.x
-clients join a 0.3.y server; only Jötunn's patch check is strict.
+already have 2.30.2 (installed by hand, by a mod manager or as another mod's dependency) must replace it with 2.30.0. InvisibilityPotion's own check is `Minor`, so 0.4.x
+clients join a 0.4.y server; only Jötunn's patch check is strict.
 
 Rebuilding against a newer Jötunn later: change `JotunnLib` in the csproj and the manifest dependency together, and rerun
 `scripts/server-setup.sh --jotunn <version>` on servers we manage.
