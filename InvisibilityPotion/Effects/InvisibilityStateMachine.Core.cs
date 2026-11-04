@@ -71,14 +71,50 @@ namespace InvisibilityPotion.Effects
         /// <summary>At least one of the pending reveals was the player's own action (<see cref="RevealPenalty.IsOwnAttack"/>).</summary>
         public bool PendingOwnAttack { get; private set; }
 
+        /// <summary>[General] RevealOnDamage, set by the game side before each Tick: unblocked hits taken reveal.</summary>
+        public bool RevealOnDamage { get; set; } = true;
+        /// <summary>[General] RevealOnBlock, set by the game side before each Tick: blocked or parried hits reveal. Independent of
+        /// <see cref="RevealOnDamage"/> (user decision 2026-11-04).</summary>
+        public bool RevealOnBlock { get; set; } = true;
+
+        // A blocked hit reports DamageTaken (SEMan.OnDamaged, Character.cs:2331) and then Block (BlockAttack, same RPC_Damage), so
+        // both are counted and resolved on the next Tick: hits taken minus blocks are the unblocked hits.
+        private int _pendingDamageTaken;
+        private int _pendingBlocks;
+        private bool _pendingOther;
+
         public InvisibilityStateMachine(TierConfig tier) { _tier = tier; }
 
-        /// <summary>Safe to call from any hook, including OnDamaged: only sets a flag.</summary>
+        /// <summary>Safe to call from any hook, including OnDamaged: only records the reason. Whether a hit taken or a block
+        /// reveals is decided on the next <see cref="Tick"/> from <see cref="RevealOnDamage"/> / <see cref="RevealOnBlock"/>.</summary>
         public void MarkRevealed(RevealReason reason = RevealReason.Command)
         {
             if (Phase == InvisibilityPhase.Ended) return;
             PendingReveal = true;
-            if (RevealPenalty.IsOwnAttack(reason)) PendingOwnAttack = true;
+            switch (reason)
+            {
+                case RevealReason.DamageTaken: _pendingDamageTaken++; break;
+                case RevealReason.Block: _pendingBlocks++; break;
+                default:
+                    _pendingOther = true;
+                    if (RevealPenalty.IsOwnAttack(reason)) PendingOwnAttack = true;
+                    break;
+            }
+        }
+
+        /// <summary>Whether the reasons recorded since the last tick reveal, under the current switches. Clears them.</summary>
+        private bool ResolvePending()
+        {
+            var unblocked = _pendingDamageTaken - _pendingBlocks;
+            var reveals = _pendingOther
+                || (RevealOnDamage && unblocked > 0)
+                || (RevealOnBlock && _pendingBlocks > 0);
+            _pendingDamageTaken = 0;
+            _pendingBlocks = 0;
+            _pendingOther = false;
+            PendingReveal = false;
+            if (!reveals) PendingOwnAttack = false;
+            return reveals;
         }
 
         public StepResult Tick(float dt)
@@ -88,9 +124,8 @@ namespace InvisibilityPotion.Effects
 
             Elapsed += dt;
 
-            if (PendingReveal)
+            if (PendingReveal && ResolvePending())
             {
-                PendingReveal = false;
                 r.ApplyDebuff = true;
                 // Only an action that breaks a hidden veil drains; hits while already revealed only restart the rehide timer.
                 r.DrainStamina = PendingOwnAttack && Phase == InvisibilityPhase.Hidden;

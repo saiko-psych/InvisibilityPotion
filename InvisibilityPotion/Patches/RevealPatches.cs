@@ -91,14 +91,15 @@ namespace InvisibilityPotion.Patches
         }
     }
 
-    /// <summary>A blocked hit or parry (Humanoid.cs:1751, runs inside RPC_Damage on the victim's owner).</summary>
+    /// <summary>A blocked hit or parry (Humanoid.cs:1751, runs inside RPC_Damage on the victim's owner, after SEMan.OnDamaged has
+    /// reported the same hit as DamageTaken). Always reported; the state machine applies RevealOnBlock / RevealOnDamage.</summary>
     [HarmonyPatch(typeof(Humanoid), "BlockAttack")]
     internal static class BlockAttackPatch
     {
         [HarmonyPostfix]
         private static void Postfix(Humanoid __instance, bool __result)
         {
-            if (!__result || !PluginConfig.Global.RevealOnBlock) return;
+            if (!__result) return;
             Reveal.Mark(__instance as Player, RevealReason.Block);
         }
     }

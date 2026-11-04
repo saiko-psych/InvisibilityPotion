@@ -14,8 +14,8 @@ The file is `BepInEx/config/saikopsych.InvisibilityPotion.cfg`, created on first
 
 | Key | Meaning |
 |---|---|
-| RevealOnDamage | Taking damage reveals you |
-| RevealOnBlock | A blocked hit or parry reveals you |
+| RevealOnDamage | Taking an unblocked hit reveals you (fall damage too; poison and burning ticks do not) |
+| RevealOnBlock | A blocked hit or parry reveals you, independent of RevealOnDamage |
 | RevealOnBowDraw | Drawing a bow reveals you |
 | RevealOnToolUse | Axe, pickaxe, hammer, hoe, cultivator reveal you (picking by hand does not) |
 | DrainStaminaOnAttackReveal | Your own action that breaks the veil empties your stamina |

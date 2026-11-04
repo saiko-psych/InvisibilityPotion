@@ -48,8 +48,8 @@ namespace InvisibilityPotion.Config
             BindTier(1, 60f, 0.25f, 0.25f, false, false, 5f, 0f, 0.75f, MeadRecipes.NewDefault(1), LookDefaults.BodyVeilModes[1]);
             BindTier(2, 120f, 1f, 1f, true, false, 1f, 12f, 0.6f, MeadRecipes.NewDefault(2), LookDefaults.BodyVeilModes[2]);
             BindTier(3, 180f, 1f, 1f, true, true, 1f, 8f, 0.5f, MeadRecipes.NewDefault(3), LookDefaults.BodyVeilModes[3]);
-            BindGlobal("RevealOnDamage", true, "Taking damage reveals a hidden player");
-            BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player");
+            BindGlobal("RevealOnDamage", true, "Taking an unblocked hit reveals a hidden player (fall damage too; poison and burning ticks do not)");
+            BindGlobal("RevealOnBlock", true, "A blocked hit or parry reveals a hidden player (independent of RevealOnDamage)");
             BindGlobal("RevealOnBowDraw", true, "Drawing a bow reveals a hidden player");
             BindGlobal("RevealOnToolUse", true, "Tool use reveals a hidden player: swinging an axe or pickaxe, building with the hammer, using the hoe or cultivator. Picking plants by hand does not");
             BindGlobal("DrainStaminaOnAttackReveal", true,

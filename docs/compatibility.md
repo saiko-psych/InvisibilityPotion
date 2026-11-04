@@ -98,8 +98,9 @@ All namespaced `IP_*` (no collision with vanilla or other mods expected):
     stands still keeps the spoofed position until that ZDO changes.
   - `[TierN] Recipe` is bound admin-only but read from each machine's own file at startup (see the bullet above): a player can
     lower their own mead recipe. Same for `[Goggles] RecipeTN` and `HuldraCultivable`.
-  - `RevealOnBlock = false` only has an effect together with `RevealOnDamage = false`: `SEMan.OnDamaged` runs before the block
-    check, so a blocked hit is also "damage taken". Fall and drowning damage reveal like any other damage taken.
+  - Fixed after the review (user decision): `RevealOnBlock` and `RevealOnDamage` are independent. `SEMan.OnDamaged` runs before
+    the block check, so a blocked hit reports DamageTaken and then Block; `InvisibilityStateMachine` counts both and decides on
+    the next tick. Fall and drowning damage reveal like any other hit taken (user: fall damage reveals).
   - On the host or in single player, tier values changed in ConfigurationManager reach clients through the sync but the host's
     own cached values only refresh on sync (no `SettingChanged` handler); suspected, not verified in game.
   - The orphan cleanup on startup removes every config key the running build does not bind: after a downgrade, keys of the newer
