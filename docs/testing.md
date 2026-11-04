@@ -714,7 +714,7 @@ Valheim 1.0.20 (2026-10-15) and 1.0.21 (2026-10-28) came out after 0.4.1 was che
 - [ ] Game updated to 1.0.21, `make decompile`, then diff the 23 Release patch targets in `tools/decompiled/` against the notes in `docs/decompile-notes.md` (signatures, the `SendZDOs` IL pattern, `CreateGhostZones`); record the result there
 - [ ] `make build` and `make package` compile against 1.0.21; `make compat-check` passes
 - [ ] In game on 1.0.21: `Patch health: 25 targets patched, 0 missing` (Debug) and no `SendZDOs transpiler: pattern not found`; dedicated server updated to 1.0.21 shows `23 targets patched, 0 missing`
-- [ ] Thunderstore: check whether BepInExPack_Valheim has a release after 5.4.2351 and whether the servers need it (manifest stays at 5.4.2350 otherwise)
+- [ ] BepInExPack_Valheim 5.4.2360 is out (2026-10-28, BepInEx 5.4.23.6, Doorstop 4.6.0 with a Windows security fix; see `docs/compatibility.md` §7). Decide whether the servers move to it; the manifest stays at 5.4.2350 until a client and the server have loaded the mod on 5.4.2360 (`Patch health ... 0 missing`)
 
 Setup: `make build` (game closed), `make run` into `testing`. The geometry data changed (no tangents, mesh compression High, five shared meshes, one bundle for every platform), so this time look at the models once.
 
