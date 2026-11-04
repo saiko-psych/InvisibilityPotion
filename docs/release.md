@@ -1,6 +1,7 @@
 # Release checklist
 
-One page for cutting a version, in order. Details live in the linked files; this list only says when to do what.
+One page for cutting a version, in order. Details live in the linked files; this list only says when to do what. In Claude Code,
+`/release <v>` walks this list with you (`.claude/skills/release/`); `/new-patch` is the checklist for adding a Harmony target.
 `<v>` is the new version (for example `0.4.2`), `<prev>` the last released one.
 
 ## 1. Before the build

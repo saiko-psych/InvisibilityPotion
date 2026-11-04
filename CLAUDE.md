@@ -32,7 +32,7 @@ Valheim mod (BepInEx 5.4.23.5 from BepInExPack_Valheim 5.4.2350 + Jötunn 2.30.0
 - `sudo` commands are run by the user; print them and wait.
 
 ## Layout
-See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans live in `docs/superpowers/plans/`. In-game checklist: `docs/testing.md`. Release steps in order: `docs/release.md`.
+See `docs/superpowers/specs/2026-09-30-invisibility-potion-design.md` §4. Plans live in `docs/superpowers/plans/`. In-game checklist: `docs/testing.md`. Release steps in order: `docs/release.md` (`/release` walks it). Adding or changing a Harmony patch: `/new-patch` (`.claude/skills/new-patch/`).
 
 ## Environment
 - Game: `~/.local/share/Steam/steamapps/common/Valheim` (BepInEx installed directly, no mod manager profile)
