@@ -743,3 +743,32 @@ Made without the game DLLs: the pure-logic part has xunit tests, everything belo
 - [ ] Two clients, `LichenTreeChance` different in the client's file and the server's: a lichen patch that only one of them sees cannot be picked (suspected; trees decide once when they load)
 - [ ] RevealOnBlock independent (`ip_give 2`, shield up, let a Greydwarf hit you): server `RevealOnBlock = false`, `RevealOnDamage = true`: the blocked hit leaves you hidden (`ip_state` phase=Hidden), an unblocked hit reveals; `RevealOnBlock = true`, `RevealOnDamage = false`: the blocked hit reveals, an unblocked one does not; both on: as before. Fall damage (jump from a cliff) reveals with `RevealOnDamage = true`
 - [ ] Retrofit planner (server): with `RetrofitReportOnly = true` walk through old Mountains zones (`would be placed (report only)` lines), then set it to `false` on the server: log `plants: retrofit report-only mode off, checking zones again`, and the same zones now get their plants without a restart. A zone whose terrain is not ready no longer stalls the others (the 25-zone summary keeps counting while you stand still)
+
+## Soak test (memory and long sessions)
+
+Run once per release that touches `Visuals/`, `Net/` or `Plants/`, and whenever a leak is suspected. Adapted from the soak-test
+protocol of Claude Code Game Studios (MIT, (c) 2026 Donchitos, https://github.com/Donchitos/Claude-Code-Game-Studios). What it
+looks for comes from the 2026-11-04 code review: the full fog rebuild on every equipment change, material instances in the
+Cutoff/Tint body modes, remote players joining and leaving while veiled, caches that grow over a long server session.
+
+Measure with the game's resident memory in KB from a second terminal, and `ip_fog strays` (Debug build) for veil particle systems
+that outlived their veil:
+
+```bash
+ps -o rss= -p "$(pgrep -f '[v]alheim\.x86_64')"
+```
+
+A **leak suspect** is a number that climbs from checkpoint to checkpoint and does not come back down after the veil ends; one
+high reading is not. Write every reading into the table of the run.
+
+| Step | What to do | Checkpoints |
+|---|---|---|
+| Baseline | `make run` into `testing`, stand still 2 min | RSS |
+| A. Veil cycles | 30 times: `ip_give 2`, walk 10 s, `ip_end` | RSS after 10, 20, 30; `ip_fog strays` lists nothing at the end |
+| B. Equipment churn | `ip_give 2`, then 50 times draw and sheathe a weapon, 10 helmet swaps; repeat with `ip_give 1` | RSS before and after each tier; the trail and ground fog stay (a visible fog pop on each swap is the known full rebuild) |
+| C. Cutoff / Tint | local `[Tier2] BodyVeilMode = Tint` (then `Cutoff`), `ip_reload_config`, repeat B | RSS; compare with B |
+| D. Remote players | second client: veils with T2/T3 and logs out/in 10 times next to you | RSS on your client; `ip_fog strays` after the last logout lists nothing |
+| E. Long session | 60 min normal play with goggles on (plants, lichen trees, a fight with reveals) | RSS every 15 min; any `Error` or `Exception` line in `BepInEx/LogOutput.log` |
+| F. Server | dedicated server, one or two players walking through old Mountains/Ashlands zones for 60 min | server process RSS every 15 min (`ps -o rss= -p "$(pgrep -f '[v]alheim_server')"`), the `plants: retrofit N zones evaluated` summaries |
+
+- [ ] Run recorded (date, build, table above filled in); verdict PASS (no leak suspect), CONCERNS (a suspect with its step) or FAIL (the game slows down, errors repeat or memory keeps climbing)

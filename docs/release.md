@@ -14,6 +14,8 @@ One page for cutting a version, in order. Details live in the linked files; this
 - [ ] CHANGELOG wording is for players: what changed for them, config keys that are new or migrated, and whether
       server and clients may mix `<prev>` and `<v>` (only major.minor has to match, `docs/compatibility.md` §4).
 - [ ] `make ci` passes (tests, Roslyn syntax check, scripts); the same runs on every pull request (`.github/workflows/ci.yml`).
+- [ ] Changes that multiplayer touches (ZDO keys, RPCs, admin config, the tier III spoof): `/security-audit`. Changed
+      defaults (durations, cooldowns, debuffs, plant rates, yields, recipes): `/balance-check`.
 - [ ] Valheim updated since the last release? `make decompile`, diff the patch targets against `docs/decompile-notes.md`, record
       what changed. Check Jötunn and BepInExPack_Valheim on Thunderstore for new versions (`docs/compatibility.md` §7: the
       servers decide the Jötunn pin, clients must match it to the patch number).
@@ -22,6 +24,7 @@ One page for cutting a version, in order. Details live in the linked files; this
 
 - [ ] `make build`, then `make run`: the version's section in `docs/testing.md` (startup line
       `Patch health: 25 targets patched, 0 missing` in Debug).
+- [ ] Changes in `Visuals/`, `Net/` or `Plants/`: the soak test in `docs/testing.md` ("Soak test").
 - [ ] `make compat-check` (compiles against the newest Jötunn into `build/compat/`; it neither deploys nor packages).
 - [ ] `make package`: Release DLL + `InvisibilityPotion/InvisibilityPotion.zip`. Check the zip:
       `unzip -l InvisibilityPotion/InvisibilityPotion.zip` lists `manifest.json`, `README.md`, `CHANGELOG.md`, `icon.png` and
