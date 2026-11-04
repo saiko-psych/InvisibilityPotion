@@ -49,9 +49,10 @@ test: ## Run unit tests (pure logic, no game DLLs)
 syntax: ## Parse the mod code with Roslyn, Debug and Release symbols (no game DLLs; catches syntax and #if mistakes only)
 	dotnet run --project tools/syntax-check -- InvisibilityPotion
 
-check-scripts: ## bash -n and shellcheck (warnings) on scripts/*.sh
+check-scripts: ## bash -n and shellcheck (warnings) on scripts/*.sh, frontmatter of .claude/skills/*/SKILL.md
 	@for f in scripts/*.sh; do bash -n "$$f" || exit 1; done
 	shellcheck -S warning -x scripts/*.sh
+	python3 -I tools/ci/check_skills.py
 
 ci: test syntax check-scripts ## What GitHub Actions runs (.github/workflows/ci.yml)
 

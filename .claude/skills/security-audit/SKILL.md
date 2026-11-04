@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: Security audit of the mod for multiplayer: client trust, RPCs, admin config, position leaks, Release build contents, supply chain.
+description: "Security audit of the mod for multiplayer: client trust, RPCs, admin config, position leaks, Release build contents, supply chain."
 disable-model-invocation: true
 argument-hint: "[full | network | config | exposure | cheats | supply]"
 ---
