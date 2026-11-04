@@ -2,9 +2,12 @@
 
 ## 0.4.2
 
-- Smaller download: the DLL shrinks from 2.3 MB to 0.8 MB. No gameplay or config change, same 23 patch targets, nothing to migrate. Jötunn accepts 0.4.1 and 0.4.2 together on a server and its clients (only major.minor has to match).
-- How: the models no longer carry tangents (only normal-mapped materials read them, and none of this mod's materials has a normal map), use Unity's mesh compression, and share five duplicate meshes. The separate Windows copy of the asset bundle is gone: meshes and materials are platform-neutral, and Jötunn swaps the placeholder shaders for Valheim's own on every platform.
-- Windows players: if a model from this mod shows up pink, please report the `assets: shader check` line from `BepInEx/LogOutput.log`.
+- Smaller download: the DLL shrinks from 2.3 MB to 0.8 MB. The models no longer carry tangents (only normal-mapped materials read them, and none of this mod's materials has a normal map), use Unity's mesh compression and share five duplicate meshes. The separate Windows copy of the asset bundle is gone: meshes and materials are platform-neutral, and Jötunn swaps the placeholder shaders for Valheim's own on every platform. Windows players: if a model from this mod shows up pink, please report the `assets: shader check` line from `BepInEx/LogOutput.log`.
+- Poison and burning ticks no longer break your veil again and again: only the hit that applied them reveals you (it already worked that way when you are the attacker).
+- Raids: a hidden player standing closest no longer makes raid monsters ignore the whole team; they go for the closest player they can target. Sleeping monsters still wake when a visible player comes close, even with a hidden player nearer.
+- Config safety: a non-finite tier value (`NaN`, `Infinity`) is rejected like any other invalid value (the tier uses its defaults and logs a warning; `Duration = NaN` used to make the veil permanent). `[Plants] YieldTN` is capped at 999 per pick. An empty mead recipe uses the default instead of costing nothing. A `[Goggles] RecipeTN` may now name a veil ingredient.
+- The startup line `Patch health: N targets patched, M missing` now counts the tier III position spoof as missing when its code pattern was not found in the game (it used to say 0 missing while only a separate error line told).
+- Same 23 patch targets, no new config keys. Jötunn accepts 0.4.1 and 0.4.2 together on a server and its clients (only major.minor has to match); in a mixed group each fix works where 0.4.2 runs: monster behaviour on the machine that owns the monsters (usually the nearest client), the poison/burning rule on the hidden player's own client.
 
 ## 0.4.1 (2026-10-11)
 

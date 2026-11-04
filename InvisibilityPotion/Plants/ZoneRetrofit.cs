@@ -21,7 +21,8 @@ namespace InvisibilityPotion.Plants
     /// (HeightmapBuilder.IsTerrainReady, :1327). PlaceVegetation seeds Random from world seed + zone + prefab name (:1397), so a
     /// zone rolls the same way on every load and the same way a fresh zone would have: a zone generated with the mod that missed
     /// its roll misses again, nothing accumulates. Location clear areas are unknown here (empty list): a plant can stand next to a
-    /// location entrance; m_blockCheck still keeps it out of buildings.
+    /// location entrance. m_blockCheck keeps it out of buildings only on a loaded zone root (host); on the throw-away instance
+    /// (dedicated server) pieces and terrain modifications are not there, so it suspectedly does not (docs/decompile-notes.md §0.4.0).
     /// </summary>
     public static class ZoneRetrofit
     {

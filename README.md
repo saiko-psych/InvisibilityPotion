@@ -1,6 +1,6 @@
 # Invisibility Potion (Valheim mod)
 
-Status: 0.4.2 in preparation (smaller download, no gameplay change); 0.4.1 is the current release on Thunderstore and Nexus ([publishing](docs/publishing.md)), see the [changelog](InvisibilityPotion/Package/CHANGELOG.md). Tested in singleplayer; tier III hiding and the goggles passed with two clients on a dedicated server (2026-10-03). 0.4.1 was released without an in-game run and 0.4.2 has not been run in game yet: the open checks are in [docs/testing.md](docs/testing.md). Licence: MIT.
+Status: 0.4.2 in preparation (smaller download, code review fixes); 0.4.1 is the current release on Thunderstore and Nexus ([publishing](docs/publishing.md)), see the [changelog](InvisibilityPotion/Package/CHANGELOG.md). Tested in singleplayer; tier III hiding and the goggles passed with two clients on a dedicated server (2026-10-03). 0.4.1 was released without an in-game run and 0.4.2 has not been run in game yet: the open checks are in [docs/testing.md](docs/testing.md). Licence: MIT.
 
 Three potions that hide the player from enemies. Attacking reveals the player and slows stamina regeneration. Higher tiers re-hide after a short time and also hide the player from other players.
 
